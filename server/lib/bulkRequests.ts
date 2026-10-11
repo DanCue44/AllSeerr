@@ -253,6 +253,11 @@ export const sendBulkRequestNotifications = (
   }
 };
 
+const MONITOR_ATTEMPTS = 5;
+
+/** How long to wait before asking Lidarr about the artist again. */
+export const monitorRetryDelay = { ms: 30 * 1000 };
+
 /**
  * Has Lidarr monitor the new releases of the artist once the albums of the
  * request are added. Returns false when there is no Lidarr server to ask.
@@ -276,27 +281,40 @@ const queueMonitorNewReleases = (
     url: LidarrAPI.buildUrl(lidarrSettings, '/api/v1'),
   });
 
-  // Queued behind the album adds of the request, which add the artist
-  const monitoring = serviceQueue
-    .dispatch(lidarrKey(lidarrSettings.id), () =>
-      lidarr.monitorNewArtistReleases(artistId)
-    )
-    .then((monitored) => {
-      if (!monitored) {
+  // Queued behind the album adds of the request, which add the artist. An
+  // add can still reach the queue after this, so when the artist is not in
+  // Lidarr yet it is asked again a little later.
+  const attempt = (tries: number): void => {
+    const monitoring = serviceQueue
+      .dispatch(lidarrKey(lidarrSettings.id), () =>
+        lidarr.monitorNewArtistReleases(artistId)
+      )
+      .then((monitored) => {
+        if (monitored) {
+          return;
+        }
+
+        if (tries < MONITOR_ATTEMPTS) {
+          setTimeout(() => attempt(tries + 1), monitorRetryDelay.ms).unref();
+          return;
+        }
+
         logger.warn(
           'Artist is not in Lidarr yet, new releases are not monitored',
           { label: 'Media Request', artistId }
         );
-      }
-    })
-    .catch((e) => {
-      logger.error('Failed to monitor new releases of artist in Lidarr', {
-        label: 'Media Request',
-        artistId,
-        errorMessage: getErrorMessage(e),
+      })
+      .catch((e) => {
+        logger.error('Failed to monitor new releases of artist in Lidarr', {
+          label: 'Media Request',
+          artistId,
+          errorMessage: getErrorMessage(e),
+        });
       });
-    });
-  runInBackground(monitoring);
+    runInBackground(monitoring);
+  };
+
+  attempt(1);
 
   return true;
 };

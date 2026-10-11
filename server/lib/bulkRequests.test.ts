@@ -32,6 +32,7 @@ import { initI18n } from '@server/i18n';
 import type { BulkRequestResponse } from '@server/interfaces/api/requestInterfaces';
 import {
   BulkRequestError,
+  monitorRetryDelay,
   requestAuthorCatalog,
   requestDiscography,
 } from '@server/lib/bulkRequests';
@@ -551,10 +552,16 @@ describe('discography requests in Lidarr', () => {
       LidarrAPI.prototype,
       'monitorNewArtistReleases',
       async (artistId: string) => {
+        // Like Lidarr, the artist only exists once an album has added it
+        if (!events.some((event) => event.startsWith('add:'))) {
+          return false;
+        }
         events.push(`monitor:${artistId}`);
         return true;
       }
     );
+    const retryDelay = monitorRetryDelay.ms;
+    monitorRetryDelay.ms = 5;
 
     try {
       const result = await requestDiscography(admin, {
@@ -569,13 +576,18 @@ describe('discography requests in Lidarr', () => {
       await waitFor(() => events.length === 4);
 
       assert.strictEqual(maxInFlight, 1);
-      assert.deepStrictEqual(events, [
-        `add:${albumId(1)}`,
-        `add:${albumId(2)}`,
-        `add:${albumId(3)}`,
-        `monitor:${ARTIST_ID}`,
-      ]);
+      // The albums go one at a time in order; monitoring waits until the
+      // first add has put the artist in Lidarr
+      assert.deepStrictEqual(
+        events.filter((event) => event.startsWith('add:')),
+        [`add:${albumId(1)}`, `add:${albumId(2)}`, `add:${albumId(3)}`]
+      );
+      assert.ok(
+        events.indexOf(`monitor:${ARTIST_ID}`) >
+          events.indexOf(`add:${albumId(1)}`)
+      );
     } finally {
+      monitorRetryDelay.ms = retryDelay;
       addAlbum.mock.restore();
       monitor.mock.restore();
     }
