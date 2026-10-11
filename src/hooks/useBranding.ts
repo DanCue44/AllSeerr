@@ -16,15 +16,25 @@ export const logoUrl = (version?: string): string =>
   version ? `/api/v1/branding/logo?v=${version}` : DEFAULT_LOGO;
 
 /** An icon generated from the uploaded logo, or the bundled icon. */
+/**
+ * Bumped when the bundled icons change, so browsers that cached the old ones
+ * (they keep favicons for a long time) fetch the new files.
+ */
+export const BUNDLED_ICON_VERSION = 'allseerr-1';
+
 export const brandingIconUrl = (
   name: BrandingIconName,
   version?: string
 ): string =>
-  version ? `/api/v1/branding/icon/${name}?v=${version}` : `/${name}`;
+  version
+    ? `/api/v1/branding/icon/${name}?v=${version}`
+    : `/${name}?v=${BUNDLED_ICON_VERSION}`;
 
 /** A launch screen made from the uploaded logo, or the bundled one. */
 export const brandingSplashUrl = (file: string, version?: string): string =>
-  version ? `/api/v1/branding/splash/${file}?v=${version}` : `/${file}`;
+  version
+    ? `/api/v1/branding/splash/${file}?v=${version}`
+    : `/${file}?v=${BUNDLED_ICON_VERSION}`;
 
 interface BrandingResponse {
   applicationTitle: string;
