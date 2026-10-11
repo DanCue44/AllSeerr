@@ -1,6 +1,10 @@
+import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
+import TheMovieDb from '@server/api/themoviedb';
+import { isBookLanguage } from '@server/constants/bookLanguages';
 import {
+  MediaRequestMonitorMode,
   MediaRequestStatus,
   MediaStatus,
   MediaType,
@@ -9,19 +13,39 @@ import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import {
   BlocklistedMediaError,
+  ContentRatingRestrictedError,
   DuplicateMediaRequestError,
+  InvalidBookLanguageError,
   MediaRequest,
   NoSeasonsAvailableError,
   QuotaRestrictedError,
   RequestPermissionError,
+  WatchProviderBlockedError,
 } from '@server/entity/MediaRequest';
 import SeasonRequest from '@server/entity/SeasonRequest';
 import { User } from '@server/entity/User';
 import type {
+  AuthorCatalogRequestBody,
+  BulkRequestResponse,
+  DiscographyRequestBody,
   MediaRequestBody,
   RequestResultsResponse,
 } from '@server/interfaces/api/requestInterfaces';
+import {
+  BulkRequestError,
+  requestAuthorCatalog,
+  requestDiscography,
+} from '@server/lib/bulkRequests';
+import type { RequestedSeason } from '@server/lib/episodeRequests';
+import {
+  buildRequestedSeasons,
+  filterRequestableSeasons,
+  getCurrentSeasonNumber,
+  getFutureSeasonNumbers,
+  getTmdbSeasonInfo,
+} from '@server/lib/episodeRequests';
 import { Permission } from '@server/lib/permissions';
+import { getAvailableSeasonNumbers } from '@server/lib/seasonRollover';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -182,6 +206,16 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
             type: MediaType.TV,
           });
           break;
+        case 'music':
+          query = query.andWhere('request.type = :type', {
+            type: MediaType.MUSIC,
+          });
+          break;
+        case 'book':
+          query = query.andWhere('request.type = :type', {
+            type: MediaType.BOOK,
+          });
+          break;
       }
 
       const [requests, requestCount] = await query
@@ -223,6 +257,21 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
         })
       );
 
+      // get all quality profiles for every configured lidarr server
+      const lidarrServers = await Promise.all(
+        settings.lidarr.map(async (lidarrSetting) => {
+          const lidarr = new LidarrAPI({
+            apiKey: lidarrSetting.apiKey,
+            url: LidarrAPI.buildUrl(lidarrSetting, '/api/v1'),
+          });
+
+          return {
+            id: lidarrSetting.id,
+            profiles: await lidarr.getProfiles().catch(() => undefined),
+          };
+        })
+      );
+
       // add profile names to the media requests, with undefined if not found
       let mappedRequests = requests.map((r) => {
         switch (r.type) {
@@ -243,6 +292,18 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
                 .find((serverr) => serverr.id === r.serverId)
                 ?.profiles?.find((profile) => profile.id === r.profileId)?.name,
             };
+          }
+          case MediaType.MUSIC: {
+            return {
+              ...r,
+              profileName: lidarrServers
+                .find((serverr) => serverr.id === r.serverId)
+                ?.profiles?.find((profile) => profile.id === r.profileId)?.name,
+            };
+          }
+          case MediaType.BOOK: {
+            // LazyLibrarian has no quality profiles
+            return { ...r, profileName: undefined };
           }
         }
       });
@@ -273,6 +334,19 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
                 ),
               };
             }
+            case MediaType.MUSIC: {
+              return {
+                ...r,
+                // check if the lidarr server for this request is configured
+                canRemove: lidarrServers.some(
+                  (server) => server.id === r.media.serviceId
+                ),
+              };
+            }
+            case MediaType.BOOK: {
+              // Books are not removed from LazyLibrarian
+              return { ...r, canRemove: false };
+            }
           }
         });
       }
@@ -301,6 +375,14 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
               name:
                 settings.sonarr.find((r) => r.id === s.id)?.name ||
                 `Sonarr ${s.id}`,
+            })),
+          lidarr: lidarrServers
+            .filter((s) => !s.profiles)
+            .map((s) => ({
+              id: s.id,
+              name:
+                settings.lidarr.find((r) => r.id === s.id)?.name ||
+                `Lidarr ${s.id}`,
             })),
         },
       });
@@ -334,13 +416,84 @@ requestRoutes.post<never, MediaRequest, MediaRequestBody>(
           return next({ status: 403, message: error.message });
         case DuplicateMediaRequestError:
           return next({ status: 409, message: error.message });
+        case InvalidBookLanguageError:
+          return next({ status: 400, message: error.message });
         case NoSeasonsAvailableError:
           return next({ status: 202, message: error.message });
         case BlocklistedMediaError:
+        case WatchProviderBlockedError:
+        case ContentRatingRestrictedError:
           return next({ status: 403, message: error.message });
         default:
           return next({ status: 500, message: error.message });
       }
+    }
+  }
+);
+
+const handleBulkRequestError = (
+  error: unknown,
+  next: (err: { status: number; message: string }) => void
+) => {
+  if (error instanceof BulkRequestError) {
+    return next({ status: error.status, message: error.message });
+  }
+
+  if (
+    error instanceof RequestPermissionError ||
+    error instanceof QuotaRestrictedError
+  ) {
+    return next({ status: 403, message: error.message });
+  }
+
+  return next({
+    status: 500,
+    message: error instanceof Error ? error.message : String(error),
+  });
+};
+
+/**
+ * Requests albums of an artist's discography, one request per album
+ */
+requestRoutes.post<never, BulkRequestResponse, DiscographyRequestBody>(
+  '/discography',
+  async (req, res, next) => {
+    if (!req.user) {
+      return next({
+        status: 401,
+        message: 'You must be logged in to request media.',
+      });
+    }
+
+    try {
+      const result = await requestDiscography(req.user, req.body);
+
+      return res.status(result.created.length > 0 ? 201 : 200).json(result);
+    } catch (error) {
+      return handleBulkRequestError(error, next);
+    }
+  }
+);
+
+/**
+ * Requests works of an author, one request per work and format
+ */
+requestRoutes.post<never, BulkRequestResponse, AuthorCatalogRequestBody>(
+  '/author-catalog',
+  async (req, res, next) => {
+    if (!req.user) {
+      return next({
+        status: 401,
+        message: 'You must be logged in to request media.',
+      });
+    }
+
+    try {
+      const result = await requestAuthorCatalog(req.user, req.body);
+
+      return res.status(result.created.length > 0 ? 201 : 200).json(result);
+    } catch (error) {
+      return handleBulkRequestError(error, next);
     }
   }
 );
@@ -367,6 +520,18 @@ requestRoutes.get('/count', async (_req, res, next) => {
       })
       .getCount();
 
+    const musicCount = await query
+      .where('request.type = :requestType', {
+        requestType: MediaType.MUSIC,
+      })
+      .getCount();
+
+    const bookCount = await query
+      .where('request.type = :requestType', {
+        requestType: MediaType.BOOK,
+      })
+      .getCount();
+
     const pendingCount = await query
       .where('request.status = :requestStatus', {
         requestStatus: MediaRequestStatus.PENDING,
@@ -390,7 +555,7 @@ requestRoutes.get('/count', async (_req, res, next) => {
         requestStatus: MediaRequestStatus.APPROVED,
       })
       .andWhere(
-        '((request.is4k = false AND media.status != :availableStatus) OR (request.is4k = true AND media.status4k != :availableStatus))',
+        '((request.is4k = false AND request.isAudiobook = false AND media.status != :availableStatus) OR (request.is4k = true AND media.status4k != :availableStatus) OR (request.isAudiobook = true AND media.statusAudio != :availableStatus))',
         {
           availableStatus: MediaStatus.AVAILABLE,
         }
@@ -402,7 +567,7 @@ requestRoutes.get('/count', async (_req, res, next) => {
         requestStatus: MediaRequestStatus.APPROVED,
       })
       .andWhere(
-        '((request.is4k = false AND media.status = :availableStatus) OR (request.is4k = true AND media.status4k = :availableStatus))',
+        '((request.is4k = false AND request.isAudiobook = false AND media.status = :availableStatus) OR (request.is4k = true AND media.status4k = :availableStatus) OR (request.isAudiobook = true AND media.statusAudio = :availableStatus))',
         {
           availableStatus: MediaStatus.AVAILABLE,
         }
@@ -419,6 +584,8 @@ requestRoutes.get('/count', async (_req, res, next) => {
       total: totalCount,
       movie: movieCount,
       tv: tvCount,
+      music: musicCount,
+      book: bookCount,
       pending: pendingCount,
       approved: approvedCount,
       declined: declinedCount,
@@ -550,6 +717,56 @@ requestRoutes.put<{ requestId: string }>(
             request.requestedBy = requestUser as User;
 
             await requestRepository.save(request);
+          } else if (req.body.mediaType === MediaType.MUSIC) {
+            if (ownerChanging && !request.ignoreQuota) {
+              const quotas = await requestUser.getQuota();
+
+              if (quotas.music.restricted) {
+                return next({
+                  status: 403,
+                  message: 'Music Quota exceeded.',
+                });
+              }
+            }
+
+            request.serverId = req.body.serverId;
+            request.profileId = req.body.profileId;
+            request.rootFolder = req.body.rootFolder;
+            request.tags = req.body.tags;
+            request.requestedBy = requestUser as User;
+
+            await requestRepository.save(request);
+          } else if (req.body.mediaType === MediaType.BOOK) {
+            if (ownerChanging && !request.ignoreQuota) {
+              const quotas = await requestUser.getQuota();
+
+              if (quotas.book.restricted) {
+                return next({
+                  status: 403,
+                  message: 'Book Quota exceeded.',
+                });
+              }
+            }
+
+            // Only managers choose the language of a book. LazyLibrarian
+            // takes no other request options.
+            if (
+              req.body.language !== undefined &&
+              req.user?.hasPermission(Permission.MANAGE_REQUESTS)
+            ) {
+              if (!isBookLanguage(req.body.language)) {
+                return next({
+                  status: 400,
+                  message: 'Unknown book language.',
+                });
+              }
+
+              request.language = req.body.language;
+            }
+
+            request.requestedBy = requestUser as User;
+
+            await requestRepository.save(request);
           } else if (req.body.mediaType === MediaType.TV) {
             const mediaRepository = getRepository(Media);
             request.serverId = req.body.serverId;
@@ -559,13 +776,77 @@ requestRoutes.put<{ requestId: string }>(
             request.tags = req.body.tags;
             request.requestedBy = requestUser as User;
 
-            const requestedSeasons = req.body.seasons as number[] | undefined;
+            const body = req.body as MediaRequestBody;
+            const monitorMode =
+              body.monitorMode ?? request.monitorMode ?? undefined;
+            const isFutureOnly = monitorMode === MediaRequestMonitorMode.FUTURE;
+            const isCurrentOnly =
+              monitorMode === MediaRequestMonitorMode.CURRENT;
 
-            if (!requestedSeasons || requestedSeasons.length === 0) {
+            if (
+              !getSettings().main.partialRequestsEnabled &&
+              ((body.monitorMode === MediaRequestMonitorMode.FUTURE &&
+                request.monitorMode !== MediaRequestMonitorMode.FUTURE) ||
+                (body.episodes ?? []).length > 0)
+            ) {
+              return next({
+                status: 403,
+                message: 'Partial series requests are disabled.',
+              });
+            }
+
+            // Managers can always request only the current season
+            if (
+              !getSettings().main.allowCurrentSeasonRequests &&
+              !req.user?.hasPermission(Permission.MANAGE_REQUESTS) &&
+              body.monitorMode === MediaRequestMonitorMode.CURRENT &&
+              request.monitorMode !== MediaRequestMonitorMode.CURRENT
+            ) {
+              return next({
+                status: 403,
+                message: 'Current season requests are disabled.',
+              });
+            }
+
+            let requestedSeasons: RequestedSeason[] = [];
+
+            if (isFutureOnly || isCurrentOnly) {
+              const tmdbShow = await new TheMovieDb().getTvShow({
+                tvId: request.media.tmdbId,
+              });
+              const seasonInfo = getTmdbSeasonInfo(tmdbShow);
+              const seasonNumbers = isFutureOnly
+                ? getFutureSeasonNumbers(seasonInfo)
+                : [getCurrentSeasonNumber(seasonInfo)].filter(
+                    (seasonNumber): seasonNumber is number =>
+                      seasonNumber !== null
+                  );
+              requestedSeasons = seasonNumbers.map((seasonNumber) => ({
+                seasonNumber,
+                episodes: null,
+              }));
+            } else if (
+              (Array.isArray(body.seasons) && body.seasons.length > 0) ||
+              (body.episodes ?? []).length > 0
+            ) {
+              requestedSeasons = buildRequestedSeasons(
+                Array.isArray(body.seasons) ? body.seasons : [],
+                body.episodes
+              );
+            } else {
               throw new Error(
                 'Missing seasons. If you want to cancel a series request, use the DELETE method.'
               );
             }
+
+            const wasCurrentOnly =
+              request.monitorMode === MediaRequestMonitorMode.CURRENT;
+
+            request.monitorMode = isFutureOnly
+              ? MediaRequestMonitorMode.FUTURE
+              : isCurrentOnly
+                ? MediaRequestMonitorMode.CURRENT
+                : null;
 
             // Same key as create, so an edit cannot claim a season that a new
             // request is taking at the same moment
@@ -581,53 +862,40 @@ requestRoutes.put<{ requestId: string }>(
                   relations: { requests: true },
                 });
 
-                // Get all requested seasons that are not part of this request we are editing
-                const existingSeasons = media.requests
-                  .filter(
-                    (r) =>
-                      r.is4k === request.is4k &&
-                      r.id !== request.id &&
-                      r.status !== MediaRequestStatus.DECLINED &&
-                      r.status !== MediaRequestStatus.COMPLETED
-                  )
-                  .reduce((seasons, r) => {
-                    const combinedSeasons = r.seasons.map(
-                      (season) => season.seasonNumber
-                    );
-
-                    return [...seasons, ...combinedSeasons];
-                  }, [] as number[]);
+                // A request that becomes current season only remembers what
+                // was already there, as those seasons are kept on a roll off
+                if (!isCurrentOnly) {
+                  request.preexistingSeasons = null;
+                } else if (!wasCurrentOnly) {
+                  request.preexistingSeasons = getAvailableSeasonNumbers(
+                    media.seasons ?? [],
+                    request.is4k
+                  );
+                }
 
                 const currentSeasons = request.seasons.map(
                   (s) => s.seasonNumber
                 );
 
-                // Seasons the media already covers cannot be requested again, while
-                // the ones this request holds stay on it
-                const coveredSeasons = (media.seasons ?? [])
-                  .filter(
-                    (season) =>
-                      season[request.is4k ? 'status4k' : 'status'] !==
-                        MediaStatus.UNKNOWN &&
-                      season[request.is4k ? 'status4k' : 'status'] !==
-                        MediaStatus.DELETED
-                  )
-                  .map((season) => season.seasonNumber)
-                  .filter((sn) => !currentSeasons.includes(sn));
+                // Seasons held by other requests, or already covered by the media,
+                // cannot be requested again, while the ones this request holds stay on it
+                const filteredSeasons = filterRequestableSeasons({
+                  requested: requestedSeasons,
+                  requests: media.requests.filter((r) => r.id !== request.id),
+                  seasons: media.seasons ?? [],
+                  is4k: request.is4k,
+                  keptSeasons: currentSeasons,
+                });
 
-                const filteredSeasons = requestedSeasons.filter(
-                  (rs) => !existingSeasons.includes(rs)
-                );
-
-                const keptSeasons = filteredSeasons.filter((sn) =>
-                  currentSeasons.includes(sn)
+                const keptSeasons = filteredSeasons.filter((season) =>
+                  currentSeasons.includes(season.seasonNumber)
                 );
 
                 const newSeasons = filteredSeasons.filter(
-                  (sn) =>
-                    !currentSeasons.includes(sn) && !coveredSeasons.includes(sn)
+                  (season) => !currentSeasons.includes(season.seasonNumber)
                 );
 
+                // An episode request counts as one season against the quota
                 const resultingSeasonCount =
                   keptSeasons.length + newSeasons.length;
 
@@ -671,9 +939,17 @@ requestRoutes.put<{ requestId: string }>(
                   }
                 }
 
-                request.seasons = request.seasons.filter((rs) =>
-                  keptSeasons.includes(rs.seasonNumber)
-                );
+                request.seasons = request.seasons.filter((rs) => {
+                  const kept = keptSeasons.find(
+                    (season) => season.seasonNumber === rs.seasonNumber
+                  );
+
+                  if (kept) {
+                    rs.episodes = kept.episodes;
+                  }
+
+                  return !!kept;
+                });
 
                 if (newSeasons.length > 0) {
                   logger.debug('Adding new seasons to request', {
@@ -684,7 +960,8 @@ requestRoutes.put<{ requestId: string }>(
                     ...newSeasons.map(
                       (ns) =>
                         new SeasonRequest({
-                          seasonNumber: ns,
+                          seasonNumber: ns.seasonNumber,
+                          episodes: ns.episodes,
                           status: MediaRequestStatus.PENDING,
                         })
                     )
@@ -782,10 +1059,14 @@ requestRoutes.post<{
   }
 );
 
-requestRoutes.post<{
-  requestId: string;
-  status: 'approve' | 'decline';
-}>(
+requestRoutes.post<
+  {
+    requestId: string;
+    status: 'approve' | 'decline';
+  },
+  MediaRequest,
+  { reason?: string }
+>(
   '/:requestId/:status',
   isAuthenticated(Permission.MANAGE_REQUESTS),
   async (req, res, next) => {
@@ -824,6 +1105,10 @@ requestRoutes.post<{
 
         request.status = newStatus;
         request.modifiedBy = req.user;
+        if (newStatus === MediaRequestStatus.DECLINED) {
+          request.declineReason =
+            req.body?.reason?.trim().slice(0, 500) || null;
+        }
         await requestRepository.save(request);
 
         return res.status(200).json(request);

@@ -1,3 +1,4 @@
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { withProperties } from '@app/utils/typeHelpers';
 
 type TBodyProps = {
@@ -5,8 +6,18 @@ type TBodyProps = {
 };
 
 const TBody = ({ children }: TBodyProps) => {
+  const [interfaceStyle] = useInterfaceStyle();
+
   return (
-    <tbody className="divide-y divide-gray-700 bg-gray-800">{children}</tbody>
+    <tbody
+      className={
+        interfaceStyle === 'ambient'
+          ? 'divide-y divide-as-line bg-as-surface'
+          : 'divide-y divide-gray-700 bg-gray-800'
+      }
+    >
+      {children}
+    </tbody>
   );
 };
 
@@ -15,8 +26,11 @@ const TH = ({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<'th'>) => {
+  const [interfaceStyle] = useInterfaceStyle();
   const style = [
-    'px-4 py-3 bg-gray-500 text-left text-xs leading-4 font-medium text-gray-200 uppercase tracking-wider truncate',
+    interfaceStyle === 'ambient'
+      ? 'px-4 py-3 bg-as-raised text-left text-xs leading-4 font-semibold text-as-ink-faint uppercase tracking-wider truncate'
+      : 'px-4 py-3 bg-gray-500 text-left text-xs leading-4 font-medium text-gray-200 uppercase tracking-wider truncate',
   ];
 
   if (className) {
@@ -76,11 +90,19 @@ type TableProps = {
 };
 
 const Table = ({ children }: TableProps) => {
+  const [interfaceStyle] = useInterfaceStyle();
+
   return (
     <div className="flex flex-col">
       <div className="-mx-4 my-2 overflow-x-auto md:mx-0 lg:mx-0">
         <div className="inline-block min-w-full py-2 align-middle">
-          <div className="overflow-hidden rounded-lg shadow md:mx-0 lg:mx-0">
+          <div
+            className={`overflow-hidden md:mx-0 lg:mx-0 ${
+              interfaceStyle === 'ambient'
+                ? 'ring-1 ring-as-line md:rounded-[22px]'
+                : 'rounded-lg shadow'
+            }`}
+          >
             <table className="min-w-full">{children}</table>
           </div>
         </div>

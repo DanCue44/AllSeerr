@@ -1,5 +1,6 @@
 import JellyfinAPI from '@server/api/jellyfin';
 import PlexTvAPI from '@server/api/plextv';
+import { isBookLanguage } from '@server/constants/bookLanguages';
 import { ApiErrorCode } from '@server/constants/error';
 import { MediaServerType } from '@server/constants/server';
 import { UserType } from '@server/constants/user';
@@ -10,12 +11,19 @@ import type {
   UserSettingsGeneralResponse,
   UserSettingsNotificationsResponse,
 } from '@server/interfaces/api/userSettingsInterfaces';
+import {
+  MOVIE_RATINGS,
+  TV_RATINGS,
+  parseRatingLimit,
+} from '@server/lib/contentRatingLimit';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { generateUserApiKey, hashUserApiKey } from '@server/lib/userApiKey';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { quickConnectSecret } from '@server/routes/auth';
 import { ApiError } from '@server/types/error';
+import { normalizeHexColor } from '@server/utils/accentColor';
 import { getHostname } from '@server/utils/getHostname';
 import {
   isOwnProfile,
@@ -53,14 +61,26 @@ userSettingsRoutes.get<{ id: string }, UserSettingsGeneralResponse>(
         discoverRegion: user.settings?.discoverRegion,
         streamingRegion: user.settings?.streamingRegion,
         originalLanguage: user.settings?.originalLanguage,
+        accentColor: user.settings?.accentColor ?? null,
+        bookLanguage: user.settings?.bookLanguage ?? null,
         movieQuotaLimit: user.movieQuotaLimit,
         movieQuotaDays: user.movieQuotaDays,
         tvQuotaLimit: user.tvQuotaLimit,
         tvQuotaDays: user.tvQuotaDays,
+        musicQuotaLimit: user.musicQuotaLimit,
+        musicQuotaDays: user.musicQuotaDays,
+        bookQuotaLimit: user.bookQuotaLimit,
+        bookQuotaDays: user.bookQuotaDays,
+        movieRatingLimit: user.movieRatingLimit,
+        tvRatingLimit: user.tvRatingLimit,
         globalMovieQuotaDays: defaultQuotas.movie.quotaDays,
         globalMovieQuotaLimit: defaultQuotas.movie.quotaLimit,
         globalTvQuotaDays: defaultQuotas.tv.quotaDays,
         globalTvQuotaLimit: defaultQuotas.tv.quotaLimit,
+        globalMusicQuotaDays: defaultQuotas.music?.quotaDays,
+        globalMusicQuotaLimit: defaultQuotas.music?.quotaLimit,
+        globalBookQuotaDays: defaultQuotas.book?.quotaDays,
+        globalBookQuotaLimit: defaultQuotas.book?.quotaLimit,
         watchlistSyncMovies: user.settings?.watchlistSyncMovies,
         watchlistSyncTv: user.settings?.watchlistSyncTv,
       });
@@ -117,12 +137,52 @@ userSettingsRoutes.post<
       user.movieQuotaLimit = req.body.movieQuotaLimit;
       user.tvQuotaDays = req.body.tvQuotaDays;
       user.tvQuotaLimit = req.body.tvQuotaLimit;
+      user.musicQuotaDays = req.body.musicQuotaDays;
+      user.musicQuotaLimit = req.body.musicQuotaLimit;
+      user.bookQuotaDays = req.body.bookQuotaDays;
+      user.bookQuotaLimit = req.body.bookQuotaLimit;
     }
+
+    // Rating limits can only be changed by users with the MANAGE_USERS
+    // permission, which also covers managers limiting their own profile
+    if (
+      req.user?.hasPermission(Permission.MANAGE_USERS) &&
+      req.body.movieRatingLimit !== undefined
+    ) {
+      user.movieRatingLimit = parseRatingLimit(
+        MOVIE_RATINGS,
+        req.body.movieRatingLimit
+      );
+    }
+
+    if (
+      req.user?.hasPermission(Permission.MANAGE_USERS) &&
+      req.body.tvRatingLimit !== undefined
+    ) {
+      user.tvRatingLimit = parseRatingLimit(TV_RATINGS, req.body.tvRatingLimit);
+    }
+
+    // An empty or invalid color falls back to the server accent
+    const accentColor = normalizeHexColor(req.body.accentColor) ?? null;
+
+    if (
+      req.body.bookLanguage !== undefined &&
+      req.body.bookLanguage !== null &&
+      req.body.bookLanguage !== '' &&
+      !isBookLanguage(req.body.bookLanguage)
+    ) {
+      return next({ status: 400, message: 'Unknown book language.' });
+    }
+
+    // An empty language uses the server default
+    const bookLanguage = req.body.bookLanguage || null;
 
     if (!user.settings) {
       user.settings = new UserSettings({
         user: req.user,
         locale: req.body.locale,
+        accentColor,
+        bookLanguage,
         discoverRegion: req.body.discoverRegion,
         streamingRegion: req.body.streamingRegion,
         originalLanguage: req.body.originalLanguage,
@@ -134,6 +194,12 @@ userSettingsRoutes.post<
       user.settings.discoverRegion = req.body.discoverRegion;
       user.settings.streamingRegion = req.body.streamingRegion;
       user.settings.originalLanguage = req.body.originalLanguage;
+      if (req.body.accentColor !== undefined) {
+        user.settings.accentColor = accentColor;
+      }
+      if (req.body.bookLanguage !== undefined) {
+        user.settings.bookLanguage = bookLanguage;
+      }
       user.settings.watchlistSyncMovies = req.body.watchlistSyncMovies;
       user.settings.watchlistSyncTv = req.body.watchlistSyncTv;
     }
@@ -146,8 +212,12 @@ userSettingsRoutes.post<
       discoverRegion: savedUser.settings?.discoverRegion,
       streamingRegion: savedUser.settings?.streamingRegion,
       originalLanguage: savedUser.settings?.originalLanguage,
+      accentColor: savedUser.settings?.accentColor ?? null,
+      bookLanguage: savedUser.settings?.bookLanguage ?? null,
       watchlistSyncMovies: savedUser.settings?.watchlistSyncMovies,
       watchlistSyncTv: savedUser.settings?.watchlistSyncTv,
+      movieRatingLimit: savedUser.movieRatingLimit,
+      tvRatingLimit: savedUser.tvRatingLimit,
       email: savedUser.email,
     });
   } catch (e) {
@@ -160,6 +230,45 @@ userSettingsRoutes.post<
     return next({ status: 500, message: e.message });
   }
 });
+
+// Records the guided tour version a user has seen, so it is offered once
+// per user and not again on every device they sign in from
+userSettingsRoutes.post<{ id: string }, { tourVersion: number }>(
+  '/tour',
+  isOwnProfile(),
+  async (req, res, next) => {
+    const userRepository = getRepository(User);
+    const version = Number(req.body?.version);
+
+    if (!Number.isInteger(version) || version < 0) {
+      return next({ status: 400, message: 'Invalid tour version.' });
+    }
+
+    try {
+      const user = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+      });
+
+      if (!user) {
+        return next({ status: 404, message: 'User not found.' });
+      }
+
+      if (!user.settings) {
+        user.settings = new UserSettings({ user, tourVersion: version });
+      } else {
+        user.settings.tourVersion = version;
+      }
+
+      const savedUser = await userRepository.save(user);
+
+      return res
+        .status(200)
+        .json({ tourVersion: savedUser.settings?.tourVersion ?? version });
+    } catch (e) {
+      return next({ status: 500, message: e.message });
+    }
+  }
+);
 
 userSettingsRoutes.get<{ id: string }, { hasPassword: boolean }>(
   '/password',
@@ -772,6 +881,100 @@ userSettingsRoutes.post<
       await userRepository.save(user);
 
       return res.status(200).json({ permissions: user.permissions });
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+userSettingsRoutes.get<
+  { id: string },
+  { hasApiKey: boolean; createdAt?: Date | null }
+>('/api-key', isOwnProfileOrAdmin(), async (req, res, next) => {
+  const userRepository = getRepository(User);
+
+  try {
+    const user = await userRepository.findOne({
+      where: { id: Number(req.params.id) },
+      select: ['id', 'apiKeyHash', 'apiKeyCreatedAt'],
+    });
+
+    if (!user) {
+      return next({ status: 404, message: 'User not found.' });
+    }
+
+    return res.status(200).json({
+      hasApiKey: !!user.apiKeyHash,
+      createdAt: user.apiKeyHash ? user.apiKeyCreatedAt : null,
+    });
+  } catch (e) {
+    next({ status: 500, message: e.message });
+  }
+});
+
+// Only the owner can create a key, since it is shown once and acts as them
+userSettingsRoutes.post<{ id: string }, { apiKey: string; createdAt: Date }>(
+  '/api-key',
+  isOwnProfile(),
+  async (req, res, next) => {
+    const userRepository = getRepository(User);
+
+    try {
+      const user = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+      });
+
+      if (!user) {
+        return next({ status: 404, message: 'User not found.' });
+      }
+
+      const apiKey = generateUserApiKey();
+      const createdAt = new Date();
+
+      await userRepository.update(user.id, {
+        apiKeyHash: hashUserApiKey(apiKey),
+        apiKeyCreatedAt: createdAt,
+      });
+
+      logger.info('Personal API key generated', {
+        label: 'API',
+        userId: user.id,
+      });
+
+      return res.status(201).json({ apiKey, createdAt });
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+userSettingsRoutes.delete<{ id: string }>(
+  '/api-key',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    const userRepository = getRepository(User);
+
+    try {
+      const user = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+      });
+
+      if (!user) {
+        return next({ status: 404, message: 'User not found.' });
+      }
+
+      await userRepository.update(user.id, {
+        apiKeyHash: null,
+        apiKeyCreatedAt: null,
+      });
+
+      logger.info('Personal API key revoked', {
+        label: 'API',
+        userId: user.id,
+        revokedBy: req.user?.id,
+      });
+
+      return res.status(204).send();
     } catch (e) {
       next({ status: 500, message: e.message });
     }

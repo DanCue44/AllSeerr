@@ -1,0 +1,23 @@
+{
+  "title": "In Cold Blood",
+  "authorTitle": "capote, truman In Cold Blood",
+  "authorId": 1,
+  "foreignBookId": "hc:429559",
+  "localBookId": "2",
+  "foreignEditionId": "hc:edition:18206962-audiobook",
+  "titleSlug": "in-cold-blood_2",
+  "monitored": true,
+  "audiobookMonitored": true,
+  "ebookMonitored": false,
+  "anyEditionOk": true,
+  "statistics": {
+    "bookFileCount": 0,
+    "bookCount": 1,
+    "totalBookCount": 1,
+    "sizeOnDisk": 0,
+    "percentOfBooks": 0
+  },
+  "mediaType": "audiobook",
+  "hasFiles": false,
+  "id": 2
+}

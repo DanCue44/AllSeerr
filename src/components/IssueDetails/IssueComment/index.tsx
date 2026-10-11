@@ -1,6 +1,8 @@
+import UserAvatar from '@app/components/AllSeerr/RequestList/UserAvatar';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import Modal from '@app/components/Common/Modal';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -47,6 +49,8 @@ const IssueComment = ({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const { hasPermission } = useUser();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
 
   const EditCommentSchema = Yup.object().shape({
     newMessage: Yup.string().required(
@@ -93,17 +97,33 @@ const IssueComment = ({
         </Modal>
       </Transition>
       <Link href={isActiveUser ? '/profile' : `/users/${comment.user.id}`}>
-        <CachedImage
-          type="avatar"
-          src={comment.user.avatar}
-          alt=""
-          className="h-10 w-10 scale-100 transform-gpu rounded-full object-cover ring-1 ring-gray-500 transition duration-300 hover:scale-105"
-          width={40}
-          height={40}
-        />
+        {ambient ? (
+          <UserAvatar
+            id={comment.user.id}
+            name={comment.user.displayName}
+            avatar={comment.user.avatar}
+            size={40}
+            className="transition hover:brightness-110"
+          />
+        ) : (
+          <CachedImage
+            type="avatar"
+            src={comment.user.avatar}
+            alt=""
+            className="h-10 w-10 scale-100 transform-gpu rounded-full object-cover ring-1 ring-gray-500 transition duration-300 hover:scale-105"
+            width={40}
+            height={40}
+          />
+        )}
       </Link>
       <div className="relative flex-1">
-        <div className="w-full rounded-md shadow ring-1 ring-gray-500">
+        <div
+          className={
+            ambient
+              ? 'w-full rounded-[18px] bg-as-tile'
+              : 'w-full rounded-md shadow ring-1 ring-gray-500'
+          }
+        >
           {(isActiveUser || hasPermission(Permission.MANAGE_ISSUES)) && (
             <Menu
               as="div"
@@ -133,7 +153,11 @@ const IssueComment = ({
                   >
                     <MenuItems
                       static
-                      className="absolute right-0 mt-2 w-56 origin-top-right rounded-md bg-gray-700 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+                      className={`absolute right-0 mt-2 w-56 origin-top-right shadow-lg focus:outline-none ${
+                        ambient
+                          ? 'overflow-hidden rounded-2xl bg-as-raised ring-1 ring-as-line-strong'
+                          : 'rounded-md bg-gray-700 ring-1 ring-black ring-opacity-5'
+                      }`}
                     >
                       <div className="py-1">
                         {isActiveUser && (
@@ -173,12 +197,20 @@ const IssueComment = ({
               )}
             </Menu>
           )}
+          {!ambient && (
+            <div
+              className={`absolute top-3 z-10 h-3 w-3 rotate-45 bg-gray-800 shadow ring-1 ring-gray-500 ${
+                isReversed ? '-left-1' : '-right-1'
+              }`}
+            />
+          )}
           <div
-            className={`absolute top-3 z-10 h-3 w-3 rotate-45 bg-gray-800 shadow ring-1 ring-gray-500 ${
-              isReversed ? '-left-1' : '-right-1'
-            }`}
-          />
-          <div className="relative z-20 w-full rounded-md bg-gray-800 py-4 pl-4 pr-8">
+            className={
+              ambient
+                ? 'relative z-20 w-full rounded-[18px] bg-as-tile py-4 pl-5 pr-10'
+                : 'relative z-20 w-full rounded-md bg-gray-800 py-4 pl-4 pr-8'
+            }
+          >
             {isEditing ? (
               <Formik
                 initialValues={{ newMessage: comment.message }}
@@ -228,7 +260,7 @@ const IssueComment = ({
                 }}
               </Formik>
             ) : (
-              <div className="prose w-full max-w-full">
+              <div className="prose w-full max-w-full [overflow-wrap:anywhere]">
                 <ReactMarkdown
                   skipHtml
                   allowedElements={['p', 'em', 'strong', 'ul', 'ol', 'li']}

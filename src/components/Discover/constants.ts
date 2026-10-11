@@ -88,6 +88,12 @@ export const sliderTitles = defineMessages('components.Discover', {
   tmdbsearch: 'TMDB Search',
   tmdbmoviestreamingservices: 'TMDB Movie Streaming Services',
   tmdbtvstreamingservices: 'TMDB TV Streaming Services',
+  popularmusic: 'Popular Albums',
+  newmusic: 'New Music Releases',
+  trendingbooks: 'Trending Books',
+  popularbooks: 'Popular Books',
+  comingup: 'Coming Up',
+  booksubject: 'Book Subject',
 });
 
 export const QueryFilterOptions = z.object({

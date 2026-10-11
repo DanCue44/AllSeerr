@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
-import { before, beforeEach, describe, it, mock } from 'node:test';
+import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
+import type { AddSeriesOptions } from '@server/api/servarr/sonarr';
+import SonarrAPI from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
 import type {
   TmdbMovieDetails,
   TmdbTvDetails,
 } from '@server/api/themoviedb/interfaces';
 import {
+  MediaRequestMonitorMode,
   MediaRequestStatus,
   MediaStatus,
   MediaType,
@@ -18,12 +21,13 @@ import OverrideRule from '@server/entity/OverrideRule';
 import Season from '@server/entity/Season';
 import SeasonRequest from '@server/entity/SeasonRequest';
 import { User } from '@server/entity/User';
+import { Notification } from '@server/lib/notifications';
 import { Permission } from '@server/lib/permissions';
 import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { checkUser } from '@server/middleware/auth';
 import { MediaRequestSubscriber } from '@server/subscriber/MediaRequestSubscriber';
-import { setupTestDb } from '@server/test/db';
+import { settleTestBackgroundTasks, setupTestDb } from '@server/test/db';
 import {
   assertNoCredentials,
   seedUserSettings,
@@ -41,7 +45,7 @@ const sendNotificationMock = mock.method(
   async () => undefined
 ).mock;
 
-const getMovieImpl: (args: {
+let getMovieImpl: (args: {
   movieId: number;
   language?: string;
 }) => Promise<TmdbMovieDetails> = async ({ movieId }) => fakeTmdbMovie(movieId);
@@ -55,7 +59,7 @@ Object.defineProperty(TheMovieDb.prototype, 'getMovie', {
   configurable: true,
 });
 
-const getTvShowImpl: (args: {
+let getTvShowImpl: (args: {
   tvId: number;
   language?: string;
 }) => Promise<TmdbTvDetails> = async ({ tvId }) => fakeTmdbShow(tvId);
@@ -365,6 +369,8 @@ async function seedUser(
     movieQuotaLimit?: number;
     tvQuotaLimit?: number;
     tvQuotaDays?: number;
+    musicQuotaLimit?: number;
+    bookQuotaLimit?: number;
   } = {}
 ) {
   const userRepo = getRepository(User);
@@ -741,6 +747,80 @@ describe('PUT /request/:requestId (quota)', () => {
     assert.strictEqual(saved.requestedBy.id, owner.id);
   });
 
+  it('rejects reassignment of music and book requests to a user at their limit', async () => {
+    const requestRepo = getRepository(MediaRequest);
+    const mediaRepo = getRepository(Media);
+
+    const owner = await seedUser('admin@seerr.dev');
+    const target = await seedUser('demo@seerr.dev', {
+      musicQuotaLimit: 1,
+      bookQuotaLimit: 1,
+    });
+
+    const seedPair = async (requestedBy: User, suffix: string) => {
+      const album = await mediaRepo.save(
+        new Media({
+          mediaType: MediaType.MUSIC,
+          mbId: `album-${suffix}`,
+          status: MediaStatus.PENDING,
+        })
+      );
+      const book = await mediaRepo.save(
+        new Media({
+          mediaType: MediaType.BOOK,
+          olId: `OL${suffix}W`,
+          status: MediaStatus.PENDING,
+        })
+      );
+
+      return Promise.all([
+        requestRepo.save(
+          new MediaRequest({
+            type: MediaType.MUSIC,
+            status: MediaRequestStatus.PENDING,
+            media: album,
+            requestedBy,
+            is4k: false,
+          })
+        ),
+        requestRepo.save(
+          new MediaRequest({
+            type: MediaType.BOOK,
+            status: MediaRequestStatus.PENDING,
+            media: book,
+            requestedBy,
+            is4k: false,
+            isAudiobook: false,
+          })
+        ),
+      ]);
+    };
+
+    // Uses up the target's single album and book requests
+    await seedPair(target, '1');
+    const [musicRequest, bookRequest] = await seedPair(owner, '2');
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const musicRes = await agent.put(`/request/${musicRequest.id}`).send({
+      mediaType: MediaType.MUSIC,
+      userId: target.id,
+    });
+    const bookRes = await agent.put(`/request/${bookRequest.id}`).send({
+      mediaType: MediaType.BOOK,
+      userId: target.id,
+    });
+
+    assert.strictEqual(musicRes.status, 403);
+    assert.strictEqual(musicRes.body.message, 'Music Quota exceeded.');
+    assert.strictEqual(bookRes.status, 403);
+    assert.strictEqual(bookRes.body.message, 'Book Quota exceeded.');
+
+    for (const id of [musicRequest.id, bookRequest.id]) {
+      const saved = await requestRepo.findOneOrFail({ where: { id } });
+      assert.strictEqual(saved.requestedBy.id, owner.id);
+    }
+  });
+
   it('allows reassignment to a user who bypasses quotas', async () => {
     const requestRepo = getRepository(MediaRequest);
     const owner = await seedUser('demo@seerr.dev', { tvQuotaLimit: 1 });
@@ -860,6 +940,33 @@ describe('POST /request/:requestId/:status', () => {
       assert.ok(persisted.updatedAt > pending.updatedAt);
     });
   }
+
+  it('stores the reason given when declining', async () => {
+    const repo = getRepository(MediaRequest);
+    const pending = await seedRequest();
+    const admin = await loginAs('admin@seerr.dev', 'test1234');
+
+    const res = await admin
+      .post(`/request/${pending.id}/decline`)
+      .send({ reason: '  Already streaming on Netflix  ' });
+
+    assert.strictEqual(res.status, 200);
+    const persisted = await repo.findOneOrFail({ where: { id: pending.id } });
+    assert.strictEqual(persisted.declineReason, 'Already streaming on Netflix');
+  });
+
+  it('ignores a reason when approving', async () => {
+    const repo = getRepository(MediaRequest);
+    const pending = await seedRequest();
+    const admin = await loginAs('admin@seerr.dev', 'test1234');
+
+    await admin
+      .post(`/request/${pending.id}/approve`)
+      .send({ reason: 'Not used' });
+
+    const persisted = await repo.findOneOrFail({ where: { id: pending.id } });
+    assert.strictEqual(persisted.declineReason ?? null, null);
+  });
 
   it('rejects a status the route does not define', async () => {
     const repo = getRepository(MediaRequest);
@@ -1626,5 +1733,1042 @@ describe('DELETE /request/:requestId, orphaned season status reset', () => {
     const updated = await mediaRepo.findOneOrFail({ where: { id: media.id } });
     assert.strictEqual(updated.seasons[0].status, MediaStatus.UNKNOWN);
     assert.strictEqual(updated.seasons[0].status4k, MediaStatus.PROCESSING);
+  });
+});
+
+describe('POST /request, blocked streaming providers', () => {
+  const netflixMovie = (movieId: number) =>
+    ({
+      ...fakeTmdbMovie(movieId),
+      'watch/providers': {
+        results: {
+          US: {
+            flatrate: [
+              { provider_id: 8, provider_name: 'Netflix' },
+              { provider_id: 538, provider_name: 'Plex' },
+            ],
+          },
+        },
+      },
+    }) as unknown as TmdbMovieDetails;
+
+  beforeEach(() => {
+    configureRadarr([{ id: 0, isDefault: true, is4k: false }]);
+    getSettings().sonarr = [];
+    getSettings().main.streamingRegion = 'US';
+  });
+
+  it('refuses a title streaming on a blocked provider', async (t) => {
+    const priorImpl = getMovieImpl;
+    getMovieImpl = async ({ movieId }) => netflixMovie(movieId);
+    getSettings().main.blockedWatchProviders = '8|1796';
+    t.after(() => {
+      getMovieImpl = priorImpl;
+      getSettings().main.blockedWatchProviders = '';
+    });
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89001,
+    });
+
+    assert.strictEqual(res.status, 403);
+    assert.match(res.body.message, /Netflix/);
+  });
+
+  it('allows a title whose only provider is not blocked', async (t) => {
+    const priorImpl = getMovieImpl;
+    getMovieImpl = async ({ movieId }) => netflixMovie(movieId);
+    getSettings().main.blockedWatchProviders = '337';
+    t.after(() => {
+      getMovieImpl = priorImpl;
+      getSettings().main.blockedWatchProviders = '';
+    });
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89002,
+    });
+
+    assert.strictEqual(res.status, 201);
+  });
+
+  it('lets a manager request a blocked title by hand', async (t) => {
+    const priorImpl = getMovieImpl;
+    getMovieImpl = async ({ movieId }) => netflixMovie(movieId);
+    getSettings().main.blockedWatchProviders = '8';
+    t.after(() => {
+      getMovieImpl = priorImpl;
+      getSettings().main.blockedWatchProviders = '';
+    });
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89003,
+    });
+
+    assert.strictEqual(res.status, 201);
+  });
+});
+
+describe('POST /request, content rating limits', () => {
+  const ratedMovie = (movieId: number, certification: string) =>
+    ({
+      ...fakeTmdbMovie(movieId),
+      release_dates: {
+        results: [
+          {
+            iso_3166_1: 'US',
+            release_dates: [
+              {
+                certification,
+                release_date: '2020-01-01T00:00:00.000Z',
+                type: 3,
+              },
+            ],
+          },
+        ],
+      },
+    }) as unknown as TmdbMovieDetails;
+
+  const ratedShow = (tvId: number, rating: string) =>
+    ({
+      ...fakeTmdbShow(tvId),
+      name: 'Rated Show',
+      seasons: [{ season_number: 1, episode_count: 10 }],
+      content_ratings: { results: [{ iso_3166_1: 'US', rating }] },
+    }) as unknown as TmdbTvDetails;
+
+  const setRatingLimits = async (
+    email: string,
+    limits: Pick<User, 'movieRatingLimit' | 'tvRatingLimit'>
+  ) => {
+    const userRepo = getRepository(User);
+    const user = await userRepo.findOneOrFail({ where: { email } });
+    Object.assign(user, limits);
+    await userRepo.save(user);
+  };
+
+  beforeEach(() => {
+    configureRadarr([{ id: 0, isDefault: true, is4k: false }]);
+    configureSonarr([{ id: 0, isDefault: true, is4k: false }]);
+  });
+
+  it('refuses a movie rated above the user limit', async (t) => {
+    const priorImpl = getMovieImpl;
+    getMovieImpl = async ({ movieId }) => ratedMovie(movieId, 'R');
+    t.after(() => {
+      getMovieImpl = priorImpl;
+    });
+    await setRatingLimits('demo@seerr.dev', { movieRatingLimit: 'PG-13' });
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89101,
+    });
+
+    assert.strictEqual(res.status, 403);
+    assert.match(res.body.message, /rated R/);
+  });
+
+  it('allows a movie at the user limit', async (t) => {
+    const priorImpl = getMovieImpl;
+    getMovieImpl = async ({ movieId }) => ratedMovie(movieId, 'PG-13');
+    t.after(() => {
+      getMovieImpl = priorImpl;
+    });
+    await setRatingLimits('demo@seerr.dev', { movieRatingLimit: 'PG-13' });
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89102,
+    });
+
+    assert.strictEqual(res.status, 201);
+  });
+
+  it('allows a movie without a US rating', async (t) => {
+    const priorImpl = getMovieImpl;
+    getMovieImpl = async ({ movieId }) => ratedMovie(movieId, 'NR');
+    t.after(() => {
+      getMovieImpl = priorImpl;
+    });
+    await setRatingLimits('demo@seerr.dev', { movieRatingLimit: 'G' });
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89103,
+    });
+
+    assert.strictEqual(res.status, 201);
+  });
+
+  it('lets a manager request a title above their limit by hand', async (t) => {
+    const priorImpl = getMovieImpl;
+    getMovieImpl = async ({ movieId }) => ratedMovie(movieId, 'NC-17');
+    t.after(() => {
+      getMovieImpl = priorImpl;
+    });
+    await setRatingLimits('admin@seerr.dev', { movieRatingLimit: 'PG' });
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89104,
+    });
+
+    assert.strictEqual(res.status, 201);
+  });
+
+  it('refuses a series rated above the user limit', async (t) => {
+    const priorImpl = getTvShowImpl;
+    getTvShowImpl = async ({ tvId }) => ratedShow(tvId, 'TV-MA');
+    t.after(() => {
+      getTvShowImpl = priorImpl;
+    });
+    await setRatingLimits('demo@seerr.dev', { tvRatingLimit: 'TV-PG' });
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89105,
+      seasons: [1],
+    });
+
+    assert.strictEqual(res.status, 403);
+    assert.match(res.body.message, /rated TV-MA/);
+  });
+});
+
+describe('POST /request, auto-approve rules', () => {
+  const showWithSeasons = (tvId: number) =>
+    ({
+      ...fakeTmdbShow(tvId),
+      name: 'Multi-Season Show',
+      seasons: [
+        { season_number: 1, episode_count: 10 },
+        { season_number: 2, episode_count: 10 },
+      ],
+    }) as unknown as TmdbTvDetails;
+
+  const getDemoUser = () =>
+    getRepository(User).findOneOrFail({ where: { email: 'demo@seerr.dev' } });
+
+  const waitForNotification = async (type: Notification) => {
+    await settleTestBackgroundTasks();
+    for (let i = 0; i < 50; i++) {
+      if (
+        sendNotificationMock.calls.some((call) => call.arguments[2] === type)
+      ) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    return false;
+  };
+
+  let arrMocks: { mock: { restore: () => void } }[] = [];
+
+  beforeEach(() => {
+    configureRadarr([{ id: 0, isDefault: true, is4k: false }]);
+    configureSonarr([{ id: 0, isDefault: true, is4k: false }]);
+    arrMocks = [
+      mock.method(
+        MediaRequestSubscriber.prototype,
+        'sendToRadarr',
+        async () => undefined
+      ),
+      mock.method(
+        MediaRequestSubscriber.prototype,
+        'sendToSonarr',
+        async () => undefined
+      ),
+    ];
+  });
+
+  afterEach(() => {
+    arrMocks.forEach((arrMock) => arrMock.mock.restore());
+  });
+
+  it('approves a matching request for a user without the permission', async () => {
+    const demo = await getDemoUser();
+    await getRepository(OverrideRule).save(
+      new OverrideRule({
+        radarrServiceId: 0,
+        users: String(demo.id),
+        autoApprove: true,
+      })
+    );
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89201,
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.status, MediaRequestStatus.APPROVED);
+    assert.ok(await waitForNotification(Notification.MEDIA_AUTO_APPROVED));
+  });
+
+  it('leaves a request pending when no rule matches', async () => {
+    const admin = await getRepository(User).findOneOrFail({
+      where: { email: 'admin@seerr.dev' },
+    });
+    await getRepository(OverrideRule).save(
+      new OverrideRule({
+        radarrServiceId: 0,
+        users: String(admin.id),
+        autoApprove: true,
+      })
+    );
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89202,
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.status, MediaRequestStatus.PENDING);
+  });
+
+  it('leaves a request pending when the matching rule does not auto-approve', async () => {
+    const demo = await getDemoUser();
+    await getRepository(OverrideRule).save(
+      new OverrideRule({
+        radarrServiceId: 0,
+        users: String(demo.id),
+        rootFolder: '/rule',
+      })
+    );
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89203,
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.status, MediaRequestStatus.PENDING);
+    assert.strictEqual(res.body.rootFolder, '/rule');
+  });
+
+  it('does not let an auto-approve rule hide the settings of another rule', async () => {
+    const demo = await getDemoUser();
+    await getRepository(OverrideRule).save([
+      new OverrideRule({
+        radarrServiceId: 0,
+        users: String(demo.id),
+        rootFolder: '/rule',
+      }),
+      new OverrideRule({
+        radarrServiceId: 0,
+        users: String(demo.id),
+        language: 'en',
+        autoApprove: true,
+      }),
+    ]);
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89204,
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.status, MediaRequestStatus.APPROVED);
+    assert.strictEqual(res.body.rootFolder, '/rule');
+  });
+
+  it('does not bypass a blocked streaming provider', async (t) => {
+    const priorImpl = getMovieImpl;
+    getMovieImpl = async ({ movieId }) =>
+      ({
+        ...fakeTmdbMovie(movieId),
+        'watch/providers': {
+          results: {
+            US: { flatrate: [{ provider_id: 8, provider_name: 'Netflix' }] },
+          },
+        },
+      }) as unknown as TmdbMovieDetails;
+    getSettings().main.streamingRegion = 'US';
+    getSettings().main.blockedWatchProviders = '8';
+    t.after(() => {
+      getMovieImpl = priorImpl;
+      getSettings().main.blockedWatchProviders = '';
+    });
+
+    const demo = await getDemoUser();
+    await getRepository(OverrideRule).save(
+      new OverrideRule({
+        radarrServiceId: 0,
+        users: String(demo.id),
+        autoApprove: true,
+      })
+    );
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89205,
+    });
+
+    assert.strictEqual(res.status, 403);
+    assert.match(res.body.message, /Netflix/);
+    assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+  });
+
+  it('does not bypass the request quota', async () => {
+    const demo = await getDemoUser();
+    demo.movieQuotaLimit = 1;
+    demo.movieQuotaDays = 7;
+    await getRepository(User).save(demo);
+    await getRepository(OverrideRule).save(
+      new OverrideRule({
+        radarrServiceId: 0,
+        users: String(demo.id),
+        autoApprove: true,
+      })
+    );
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const first = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89206,
+    });
+    const second = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89207,
+    });
+
+    assert.strictEqual(first.status, 201);
+    assert.strictEqual(first.body.status, MediaRequestStatus.APPROVED);
+    assert.strictEqual(second.status, 403);
+    assert.match(second.body.message, /Quota exceeded/);
+  });
+
+  it('approves a series request within the season limit', async (t) => {
+    const priorImpl = getTvShowImpl;
+    getTvShowImpl = async ({ tvId }) => showWithSeasons(tvId);
+    t.after(() => {
+      getTvShowImpl = priorImpl;
+    });
+
+    await getRepository(OverrideRule).save(
+      new OverrideRule({
+        sonarrServiceId: 0,
+        language: 'en',
+        autoApprove: true,
+        maxSeasons: 1,
+      })
+    );
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const single = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89208,
+      seasons: [1],
+    });
+    const multiple = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89209,
+      seasons: [1, 2],
+    });
+
+    assert.strictEqual(single.status, 201);
+    assert.strictEqual(single.body.status, MediaRequestStatus.APPROVED);
+    assert.deepStrictEqual(
+      single.body.seasons.map((season: SeasonRequest) => season.status),
+      [MediaRequestStatus.APPROVED]
+    );
+    assert.strictEqual(multiple.status, 201);
+    assert.strictEqual(multiple.body.status, MediaRequestStatus.PENDING);
+  });
+
+  it('only approves a 4K request through a rule on a 4K service', async () => {
+    configureRadarr([
+      { id: 0, isDefault: true, is4k: false },
+      { id: 1, isDefault: true, is4k: true },
+    ]);
+
+    const demo = await getDemoUser();
+    demo.permissions = Permission.REQUEST | Permission.REQUEST_4K;
+    await getRepository(User).save(demo);
+    await getRepository(OverrideRule).save(
+      new OverrideRule({
+        radarrServiceId: 0,
+        users: String(demo.id),
+        autoApprove: true,
+      })
+    );
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const before = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89210,
+      is4k: true,
+    });
+
+    assert.strictEqual(before.status, 201);
+    assert.strictEqual(before.body.status, MediaRequestStatus.PENDING);
+
+    await getRepository(OverrideRule).save(
+      new OverrideRule({
+        radarrServiceId: 1,
+        users: String(demo.id),
+        autoApprove: true,
+      })
+    );
+
+    const after = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 89211,
+      is4k: true,
+    });
+
+    assert.strictEqual(after.status, 201);
+    assert.strictEqual(after.body.status, MediaRequestStatus.APPROVED);
+  });
+});
+
+describe('POST /request (tv), episode requests', () => {
+  const showWithSeasons = (tvId: number) =>
+    ({
+      ...fakeTmdbShow(tvId),
+      name: 'Episode Show',
+      external_ids: { tvdb_id: 5000 + tvId },
+      seasons: [
+        { season_number: 1, episode_count: 8, air_date: '2020-01-01' },
+        { season_number: 2, episode_count: 8, air_date: '2021-01-01' },
+      ],
+    }) as unknown as TmdbTvDetails;
+
+  let addSeriesCalls: AddSeriesOptions[] = [];
+  let addSeriesMock: { mock: { restore: () => void } };
+
+  beforeEach(() => {
+    getTvShowImpl = async ({ tvId }) => showWithSeasons(tvId);
+    getSettings().radarr = [];
+    configureSonarr([{ id: 0, isDefault: true, is4k: false }]);
+    addSeriesCalls = [];
+    addSeriesMock = mock.method(
+      SonarrAPI.prototype,
+      'addSeries',
+      async (options: AddSeriesOptions) => {
+        addSeriesCalls.push(options);
+        return { id: 9, titleSlug: 'episode-show' };
+      }
+    );
+  });
+
+  afterEach(() => {
+    addSeriesMock.mock.restore();
+    getTvShowImpl = async ({ tvId }) => fakeTmdbShow(tvId);
+    getSettings().main.partialRequestsEnabled = true;
+  });
+
+  it('stores the requested episodes on their season', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89301,
+      seasons: [1],
+      episodes: [{ seasonNumber: 2, episodeNumbers: [5, 3, 3] }],
+    });
+
+    assert.strictEqual(res.status, 201);
+
+    const saved = await getRepository(MediaRequest).findOneOrFail({
+      where: { id: res.body.id },
+    });
+    assert.deepStrictEqual(
+      saved.seasons.map((season) => [season.seasonNumber, season.episodes]),
+      [
+        [1, null],
+        [2, [3, 5]],
+      ]
+    );
+    assert.strictEqual(saved.monitorMode, null);
+  });
+
+  it('sends only the requested episodes to Sonarr', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89302,
+      seasons: [1],
+      episodes: [{ seasonNumber: 2, episodeNumbers: [3, 5] }],
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.status, MediaRequestStatus.APPROVED);
+    assert.strictEqual(addSeriesCalls.length, 1);
+    assert.strictEqual(addSeriesCalls[0].tvdbid, 94302);
+    assert.deepStrictEqual(addSeriesCalls[0].seasons, [1]);
+    assert.deepStrictEqual(addSeriesCalls[0].episodes, [
+      { seasonNumber: 2, episodeNumbers: [3, 5] },
+    ]);
+    assert.strictEqual(addSeriesCalls[0].monitor, undefined);
+    assert.strictEqual(addSeriesCalls[0].searchNow, true);
+  });
+
+  it('lets another request take the episodes that are still free', async () => {
+    const first = await (await loginAs('demo@seerr.dev', 'test1234'))
+      .post('/request')
+      .send({
+        mediaType: MediaType.TV,
+        mediaId: 89303,
+        episodes: [{ seasonNumber: 1, episodeNumbers: [1, 2] }],
+      });
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const second = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89303,
+      episodes: [{ seasonNumber: 1, episodeNumbers: [2, 3] }],
+    });
+    const wholeSeason = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89303,
+      seasons: [1],
+    });
+
+    assert.strictEqual(first.status, 201);
+    assert.strictEqual(second.status, 201);
+    assert.deepStrictEqual(second.body.seasons[0].episodes, [3]);
+    assert.strictEqual(wholeSeason.status, 202);
+  });
+
+  it('allows episodes of a partially available season', async () => {
+    await seedMediaSeasons(89304, [
+      { seasonNumber: 1, status: MediaStatus.PARTIALLY_AVAILABLE },
+      { seasonNumber: 2, status: MediaStatus.AVAILABLE },
+    ]);
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89304,
+      episodes: [
+        { seasonNumber: 1, episodeNumbers: [4] },
+        { seasonNumber: 2, episodeNumbers: [4] },
+      ],
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.deepStrictEqual(
+      res.body.seasons.map((season: SeasonRequest) => season.seasonNumber),
+      [1]
+    );
+  });
+
+  it('counts an episode request as one season against the quota', async () => {
+    await seedUser('demo@seerr.dev', { tvQuotaLimit: 1, tvQuotaDays: 7 });
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const tooMany = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89305,
+      episodes: [
+        { seasonNumber: 1, episodeNumbers: [1] },
+        { seasonNumber: 2, episodeNumbers: [1] },
+      ],
+    });
+    const single = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89305,
+      episodes: [{ seasonNumber: 1, episodeNumbers: [1, 2, 3] }],
+    });
+    const quota = await (
+      await getRepository(User).findOneOrFail({
+        where: { email: 'demo@seerr.dev' },
+      })
+    ).getQuota();
+
+    assert.strictEqual(tooMany.status, 403);
+    assert.match(tooMany.body.message, /Quota exceeded/);
+    assert.strictEqual(single.status, 201);
+    assert.strictEqual(quota.tv.used, 1);
+  });
+
+  it('counts an episode request by its seasons for auto-approve rules', async () => {
+    const demo = await getRepository(User).findOneOrFail({
+      where: { email: 'demo@seerr.dev' },
+    });
+    await getRepository(OverrideRule).save(
+      new OverrideRule({
+        sonarrServiceId: 0,
+        users: String(demo.id),
+        autoApprove: true,
+        maxSeasons: 1,
+      })
+    );
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const single = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89306,
+      episodes: [{ seasonNumber: 1, episodeNumbers: [1, 2, 3, 4] }],
+    });
+    const multiple = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89307,
+      episodes: [
+        { seasonNumber: 1, episodeNumbers: [1] },
+        { seasonNumber: 2, episodeNumbers: [1] },
+      ],
+    });
+
+    assert.strictEqual(single.body.status, MediaRequestStatus.APPROVED);
+    assert.strictEqual(multiple.body.status, MediaRequestStatus.PENDING);
+  });
+
+  it('refuses episodes when partial series requests are disabled', async () => {
+    getSettings().main.partialRequestsEnabled = false;
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89308,
+      episodes: [{ seasonNumber: 1, episodeNumbers: [1] }],
+    });
+
+    assert.strictEqual(res.status, 403);
+    assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+  });
+
+  it('replaces the episodes of a season when a pending request is edited', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const created = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89309,
+      episodes: [{ seasonNumber: 1, episodeNumbers: [1, 2] }],
+    });
+    const edited = await agent.put(`/request/${created.body.id}`).send({
+      mediaType: MediaType.TV,
+      seasons: [2],
+      episodes: [{ seasonNumber: 1, episodeNumbers: [4] }],
+    });
+
+    assert.strictEqual(edited.status, 200);
+
+    const saved = await getRepository(MediaRequest).findOneOrFail({
+      where: { id: created.body.id },
+    });
+    assert.deepStrictEqual(
+      saved.seasons.map((season) => [season.seasonNumber, season.episodes]),
+      [
+        [1, [4]],
+        [2, null],
+      ]
+    );
+  });
+});
+
+describe('POST /request (tv), future seasons only', () => {
+  const airingShow = (tvId: number) =>
+    ({
+      ...fakeTmdbShow(tvId),
+      name: 'Airing Show',
+      external_ids: { tvdb_id: 6000 + tvId },
+      last_episode_to_air: { season_number: 3 },
+      next_episode_to_air: { season_number: 3 },
+      seasons: [
+        { season_number: 0, episode_count: 2, air_date: '2019-01-01' },
+        { season_number: 1, episode_count: 8, air_date: '2020-01-01' },
+        { season_number: 2, episode_count: 8, air_date: '2021-01-01' },
+        { season_number: 3, episode_count: 8, air_date: '2026-01-01' },
+        { season_number: 4, episode_count: 0, air_date: null },
+      ],
+    }) as unknown as TmdbTvDetails;
+
+  let addSeriesCalls: AddSeriesOptions[] = [];
+  let addSeriesMock: { mock: { restore: () => void } };
+
+  beforeEach(() => {
+    getTvShowImpl = async ({ tvId }) => airingShow(tvId);
+    getSettings().radarr = [];
+    configureSonarr([{ id: 0, isDefault: true, is4k: false }]);
+    addSeriesCalls = [];
+    addSeriesMock = mock.method(
+      SonarrAPI.prototype,
+      'addSeries',
+      async (options: AddSeriesOptions) => {
+        addSeriesCalls.push(options);
+        return { id: 9, titleSlug: 'airing-show' };
+      }
+    );
+  });
+
+  afterEach(() => {
+    addSeriesMock.mock.restore();
+    getTvShowImpl = async ({ tvId }) => fakeTmdbShow(tvId);
+  });
+
+  it('requests only the airing and announced seasons', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89401,
+      seasons: [1],
+      monitorMode: MediaRequestMonitorMode.FUTURE,
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.monitorMode, MediaRequestMonitorMode.FUTURE);
+    assert.deepStrictEqual(
+      res.body.seasons.map((season: SeasonRequest) => season.seasonNumber),
+      [3, 4]
+    );
+  });
+
+  it('tells Sonarr to monitor future episodes without a search', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89402,
+      monitorMode: MediaRequestMonitorMode.FUTURE,
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(addSeriesCalls.length, 1);
+    assert.strictEqual(addSeriesCalls[0].monitor, 'future');
+    assert.strictEqual(addSeriesCalls[0].searchNow, false);
+    assert.deepStrictEqual(addSeriesCalls[0].seasons, [3, 4]);
+    assert.strictEqual(addSeriesCalls[0].episodes, undefined);
+  });
+
+  it('returns 202 when the series has nothing left to air', async () => {
+    getTvShowImpl = async ({ tvId }) =>
+      ({
+        ...airingShow(tvId),
+        last_episode_to_air: { season_number: 2 },
+        next_episode_to_air: undefined,
+        seasons: airingShow(tvId).seasons.slice(0, 3),
+      }) as unknown as TmdbTvDetails;
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89403,
+      monitorMode: MediaRequestMonitorMode.FUTURE,
+    });
+
+    assert.strictEqual(res.status, 202);
+  });
+});
+
+describe('POST /request (tv), current season only', () => {
+  const talkShow = (tvId: number) =>
+    ({
+      ...fakeTmdbShow(tvId),
+      name: 'Talk Show',
+      external_ids: { tvdb_id: 7000 + tvId },
+      last_episode_to_air: { season_number: 3 },
+      // The next season is announced, but season 3 is still current
+      next_episode_to_air: { season_number: 4 },
+      seasons: [
+        { season_number: 0, episode_count: 2, air_date: '2019-01-01' },
+        { season_number: 1, episode_count: 8, air_date: '2020-01-01' },
+        { season_number: 2, episode_count: 8, air_date: '2021-01-01' },
+        { season_number: 3, episode_count: 8, air_date: '2026-01-01' },
+        { season_number: 4, episode_count: 0, air_date: '2099-01-01' },
+      ],
+    }) as unknown as TmdbTvDetails;
+
+  let addSeriesCalls: AddSeriesOptions[] = [];
+  let addSeriesMock: { mock: { restore: () => void } };
+
+  beforeEach(() => {
+    getTvShowImpl = async ({ tvId }) => talkShow(tvId);
+    getSettings().radarr = [];
+    getSettings().main.allowCurrentSeasonRequests = true;
+    configureSonarr([{ id: 0, isDefault: true, is4k: false }]);
+    addSeriesCalls = [];
+    addSeriesMock = mock.method(
+      SonarrAPI.prototype,
+      'addSeries',
+      async (options: AddSeriesOptions) => {
+        addSeriesCalls.push(options);
+        return { id: 9, titleSlug: 'talk-show' };
+      }
+    );
+  });
+
+  afterEach(() => {
+    addSeriesMock.mock.restore();
+    getTvShowImpl = async ({ tvId }) => fakeTmdbShow(tvId);
+    getSettings().main.allowCurrentSeasonRequests = false;
+    getSettings().main.partialRequestsEnabled = true;
+  });
+
+  it('requests only the season with the latest aired episode', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89501,
+      seasons: [1, 2],
+      monitorMode: MediaRequestMonitorMode.CURRENT,
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.monitorMode, MediaRequestMonitorMode.CURRENT);
+    assert.deepStrictEqual(
+      res.body.seasons.map((season: SeasonRequest) => [
+        season.seasonNumber,
+        season.episodes,
+      ]),
+      [[3, null]]
+    );
+  });
+
+  it('tells Sonarr to monitor and search the current season and follow new ones', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89502,
+      monitorMode: MediaRequestMonitorMode.CURRENT,
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(addSeriesCalls.length, 1);
+    assert.deepStrictEqual(addSeriesCalls[0].seasons, [3]);
+    assert.strictEqual(addSeriesCalls[0].monitor, undefined);
+    assert.strictEqual(addSeriesCalls[0].monitorNewSeasons, true);
+    assert.strictEqual(addSeriesCalls[0].searchNow, true);
+    assert.strictEqual(addSeriesCalls[0].episodes, undefined);
+  });
+
+  it('works without partial series requests', async () => {
+    getSettings().main.partialRequestsEnabled = false;
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89503,
+      monitorMode: MediaRequestMonitorMode.CURRENT,
+    });
+
+    assert.strictEqual(res.status, 201);
+  });
+
+  it('refuses current season requests from users when they are turned off', async () => {
+    getSettings().main.allowCurrentSeasonRequests = false;
+
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89504,
+      monitorMode: MediaRequestMonitorMode.CURRENT,
+    });
+
+    assert.strictEqual(res.status, 403);
+    assert.strictEqual(addSeriesCalls.length, 0);
+    assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+  });
+
+  it('lets managers request the current season when users cannot', async () => {
+    getSettings().main.allowCurrentSeasonRequests = false;
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89504,
+      monitorMode: MediaRequestMonitorMode.CURRENT,
+    });
+
+    assert.strictEqual(res.status, 201);
+    const request = await getRepository(MediaRequest).findOneOrFail({
+      where: { id: res.body.id },
+    });
+    assert.strictEqual(request.monitorMode, MediaRequestMonitorMode.CURRENT);
+    // Nothing was on the server yet
+    assert.deepStrictEqual(request.preexistingSeasons, []);
+  });
+
+  it('returns 202 when the current season is already requested', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const first = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89505,
+      seasons: [3],
+    });
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89505,
+      monitorMode: MediaRequestMonitorMode.CURRENT,
+    });
+
+    assert.strictEqual(first.status, 201);
+    assert.strictEqual(res.status, 202);
+  });
+
+  it('switches a pending request to the current season on edit', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const created = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89506,
+      seasons: [1],
+    });
+    const edited = await agent.put(`/request/${created.body.id}`).send({
+      mediaType: MediaType.TV,
+      seasons: [],
+      monitorMode: MediaRequestMonitorMode.CURRENT,
+    });
+
+    assert.strictEqual(edited.status, 200);
+
+    const saved = await getRepository(MediaRequest).findOneOrFail({
+      where: { id: created.body.id },
+    });
+    assert.strictEqual(saved.monitorMode, MediaRequestMonitorMode.CURRENT);
+    assert.deepStrictEqual(saved.preexistingSeasons, []);
+    assert.deepStrictEqual(
+      saved.seasons.map((season) => season.seasonNumber),
+      [3]
+    );
+  });
+
+  it('keeps a request on the current season when an edit leaves out the mode', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const created = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89507,
+      monitorMode: MediaRequestMonitorMode.CURRENT,
+    });
+    const edited = await agent.put(`/request/${created.body.id}`).send({
+      mediaType: MediaType.TV,
+      seasons: [],
+    });
+
+    assert.strictEqual(edited.status, 200);
+
+    const saved = await getRepository(MediaRequest).findOneOrFail({
+      where: { id: created.body.id },
+    });
+    assert.strictEqual(saved.monitorMode, MediaRequestMonitorMode.CURRENT);
+  });
+
+  it('refuses switching to the current season when it is turned off', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const created = await agent.post('/request').send({
+      mediaType: MediaType.TV,
+      mediaId: 89508,
+      seasons: [1],
+    });
+    getSettings().main.allowCurrentSeasonRequests = false;
+    const edited = await agent.put(`/request/${created.body.id}`).send({
+      mediaType: MediaType.TV,
+      seasons: [],
+      monitorMode: MediaRequestMonitorMode.CURRENT,
+    });
+
+    assert.strictEqual(edited.status, 403);
   });
 });

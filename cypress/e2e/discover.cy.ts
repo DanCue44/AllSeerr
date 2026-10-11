@@ -30,7 +30,7 @@ describe('Discover', () => {
 
   it('loads popular movies', () => {
     cy.intercept('/api/v1/discover/movies*').as('getPopularMovies');
-    cy.visit('/');
+    cy.visit('/movies');
     cy.wait('@getPopularMovies');
     clickFirstTitleCardInSlider('Popular Movies');
   });
@@ -39,14 +39,14 @@ describe('Discover', () => {
     cy.intercept('/api/v1/discover/movies?page=1&primaryReleaseDateGte*').as(
       'getUpcomingMovies'
     );
-    cy.visit('/');
+    cy.visit('/movies');
     cy.wait('@getUpcomingMovies');
     clickFirstTitleCardInSlider('Upcoming Movies');
   });
 
   it('loads popular series', () => {
     cy.intercept('/api/v1/discover/tv*').as('getPopularTv');
-    cy.visit('/');
+    cy.visit('/series');
     cy.wait('@getPopularTv');
     clickFirstTitleCardInSlider('Popular Series');
   });
@@ -55,7 +55,7 @@ describe('Discover', () => {
     cy.intercept('/api/v1/discover/tv?page=1&firstAirDateGte=*').as(
       'getUpcomingSeries'
     );
-    cy.visit('/');
+    cy.visit('/series');
     cy.wait('@getUpcomingSeries');
     clickFirstTitleCardInSlider('Upcoming Series');
   });

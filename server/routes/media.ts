@@ -1,18 +1,45 @@
-import RadarrAPI from '@server/api/servarr/radarr';
-import SonarrAPI from '@server/api/servarr/sonarr';
 import TautulliAPI from '@server/api/tautulli';
-import TheMovieDb from '@server/api/themoviedb';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import Season from '@server/entity/Season';
 import { User } from '@server/entity/User';
 import type {
+  MediaFilesResponse,
   MediaResultsResponse,
   MediaWatchDataResponse,
 } from '@server/interfaces/api/mediaInterfaces';
+import type {
+  MediaSubtitlesResponse,
+  SubtitleRequestBody,
+} from '@server/interfaces/api/subtitleInterfaces';
+import { getMediaFiles } from '@server/lib/mediaFiles';
+import type {
+  BookFormat,
+  MediaLibrarySort,
+  MusicAlbumType,
+} from '@server/lib/mediaLibrary';
+import {
+  BOOK_FORMATS,
+  MEDIA_LIBRARY_SORTS,
+  MUSIC_ALBUM_TYPES,
+  getBookFormatWhere,
+  getLibraryMetadata,
+  getMediaMetadata,
+  matchesAlbumType,
+  sortLibraryMedia,
+} from '@server/lib/mediaLibrary';
+import {
+  NoRemovalServiceError,
+  removeMediaFromService,
+} from '@server/lib/mediaRemoval';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import {
+  getMediaSubtitles,
+  isBazarrConfigured,
+  searchMediaSubtitles,
+} from '@server/lib/subtitles';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -66,21 +93,113 @@ mediaRoutes.get('/', async (req, res, next) => {
       };
   }
 
+  // Narrows the list to one media type, as on a Discover page showing only
+  // movies, series, music or books
+  const mediaTypeFilter = Object.values(MediaType).includes(
+    req.query.mediaType as MediaType
+  )
+    ? (req.query.mediaType as MediaType)
+    : undefined;
+
   let whereClause: FindOneOptions<Media>['where'];
-  if (statusFilter || req.query.sort === 'mediaAdded') {
+  if (statusFilter || mediaTypeFilter || req.query.sort === 'mediaAdded') {
     whereClause = {};
     if (statusFilter) whereClause.status = statusFilter;
+    if (mediaTypeFilter) whereClause.mediaType = mediaTypeFilter;
     if (req.query.sort === 'mediaAdded')
       whereClause.mediaAddedAt = Not(IsNull());
   }
 
+  // Books are available once either format is, or in the format picked
+  const bookFormat =
+    mediaTypeFilter === MediaType.BOOK &&
+    BOOK_FORMATS.includes(req.query.format as BookFormat)
+      ? (req.query.format as BookFormat)
+      : undefined;
+  let where: FindOneOptions<Media>['where'] = whereClause;
+
+  if (
+    mediaTypeFilter === MediaType.BOOK &&
+    (req.query.filter === 'allavailable' || bookFormat) &&
+    whereClause &&
+    !Array.isArray(whereClause)
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { status, ...rest } = whereClause;
+    where = getBookFormatWhere(bookFormat, rest);
+  }
+
+  // The music and books libraries sort and filter on what Lidarr and
+  // Chaptarr know about each title, which the media table does not hold
+  const isMusicOrBook =
+    mediaTypeFilter === MediaType.MUSIC || mediaTypeFilter === MediaType.BOOK;
+  const librarySort =
+    isMusicOrBook &&
+    MEDIA_LIBRARY_SORTS.includes(req.query.sort as MediaLibrarySort)
+      ? (req.query.sort as MediaLibrarySort)
+      : undefined;
+  const albumType =
+    mediaTypeFilter === MediaType.MUSIC &&
+    MUSIC_ALBUM_TYPES.includes(req.query.albumType as MusicAlbumType)
+      ? (req.query.albumType as MusicAlbumType)
+      : undefined;
+  const sortDirection =
+    req.query.sortDirection === 'asc' || req.query.sortDirection === 'desc'
+      ? req.query.sortDirection
+      : librarySort === 'releaseDate'
+        ? 'desc'
+        : 'asc';
+
   try {
-    const [media, mediaCount] = await mediaRepository.findAndCount({
-      order: sortFilter,
-      where: whereClause,
-      take: pageSize,
-      skip,
-    });
+    let media: Media[];
+    let mediaCount: number;
+
+    if (isMusicOrBook && (librarySort || albumType)) {
+      const index = await getLibraryMetadata(
+        mediaTypeFilter as MediaType.MUSIC | MediaType.BOOK
+      );
+      let matching = await mediaRepository.find({
+        select: { id: true, mbId: true, olId: true, foreignBookId: true },
+        where,
+        order: sortFilter,
+      });
+
+      if (albumType) {
+        matching = matching.filter((item) =>
+          matchesAlbumType(getMediaMetadata(item, index), albumType)
+        );
+      }
+
+      if (librarySort) {
+        matching = sortLibraryMedia(
+          matching,
+          index,
+          librarySort,
+          sortDirection
+        );
+      }
+
+      const pageIds = matching
+        .slice(skip, skip + pageSize)
+        .map((item) => item.id);
+      const rows = pageIds.length
+        ? await mediaRepository.find({ where: { id: In(pageIds) } })
+        : [];
+      const rowsById = new Map(rows.map((row) => [row.id, row]));
+
+      media = pageIds
+        .map((id) => rowsById.get(id))
+        .filter((row): row is Media => !!row);
+      mediaCount = matching.length;
+    } else {
+      [media, mediaCount] = await mediaRepository.findAndCount({
+        order: sortFilter,
+        where,
+        take: pageSize,
+        skip,
+      });
+    }
+
     return res.status(200).json({
       pageInfo: {
         pages: Math.ceil(mediaCount / pageSize),
@@ -117,10 +236,18 @@ mediaRoutes.post<
     }
 
     const is4k = String(req.body.is4k) === 'true';
+    // Books keep their audiobook status in statusAudio
+    const statusKey =
+      media.mediaType === MediaType.BOOK &&
+      String(req.body.isAudiobook) === 'true'
+        ? 'statusAudio'
+        : is4k
+          ? 'status4k'
+          : 'status';
 
     switch (req.params.status) {
       case 'available':
-        media[is4k ? 'status4k' : 'status'] = MediaStatus.AVAILABLE;
+        media[statusKey] = MediaStatus.AVAILABLE;
 
         if (media.mediaType === MediaType.TV) {
           const expectedSeasons = req.body.seasons ?? [];
@@ -143,7 +270,7 @@ mediaRoutes.post<
         }
         break;
       case 'partial':
-        if (media.mediaType === MediaType.MOVIE) {
+        if (media.mediaType !== MediaType.TV) {
           return next({
             status: 400,
             message: 'Only series can be set to be partially available',
@@ -152,13 +279,13 @@ mediaRoutes.post<
         media[is4k ? 'status4k' : 'status'] = MediaStatus.PARTIALLY_AVAILABLE;
         break;
       case 'processing':
-        media[is4k ? 'status4k' : 'status'] = MediaStatus.PROCESSING;
+        media[statusKey] = MediaStatus.PROCESSING;
         break;
       case 'pending':
-        media[is4k ? 'status4k' : 'status'] = MediaStatus.PENDING;
+        media[statusKey] = MediaStatus.PENDING;
         break;
       case 'unknown':
-        media[is4k ? 'status4k' : 'status'] = MediaStatus.UNKNOWN;
+        media[statusKey] = MediaStatus.UNKNOWN;
     }
 
     await mediaRepository.save(media);
@@ -205,90 +332,21 @@ mediaRoutes.delete(
   isAuthenticated(Permission.MANAGE_REQUESTS),
   async (req, res, next) => {
     try {
-      const settings = getSettings();
       const mediaRepository = getRepository(Media);
       const media = await mediaRepository.findOneOrFail({
         where: { id: Number(req.params.id) },
       });
 
       const is4k = String(req.query.is4k) === 'true';
-      const isMovie = media.mediaType === MediaType.MOVIE;
 
-      let serviceSettings;
-      if (isMovie) {
-        serviceSettings = settings.radarr.find(
-          (radarr) => radarr.isDefault && radarr.is4k === is4k
-        );
-      } else {
-        serviceSettings = settings.sonarr.find(
-          (sonarr) => sonarr.isDefault && sonarr.is4k === is4k
-        );
-      }
-
-      const specificServiceId = is4k ? media.serviceId4k : media.serviceId;
-      if (
-        specificServiceId &&
-        specificServiceId >= 0 &&
-        serviceSettings?.id !== specificServiceId
-      ) {
-        if (isMovie) {
-          serviceSettings = settings.radarr.find(
-            (radarr) => radarr.id === specificServiceId
-          );
-        } else {
-          serviceSettings = settings.sonarr.find(
-            (sonarr) => sonarr.id === specificServiceId
-          );
+      try {
+        await removeMediaFromService(media, is4k);
+      } catch (e) {
+        if (e instanceof NoRemovalServiceError) {
+          return next({ status: 409, message: e.message });
         }
+        throw e;
       }
-
-      if (!serviceSettings) {
-        const arrName = `${is4k ? '4K ' : ''}${isMovie ? 'Radarr' : 'Sonarr'}`;
-        logger.info(
-          `There is no default ${arrName} server configured. Did you set any of your ${arrName} servers as default?`,
-          {
-            label: 'Media Request',
-            mediaId: media.id,
-          }
-        );
-        return next({
-          status: 409,
-          message: `No ${arrName} server configured to delete media files`,
-        });
-      }
-
-      let service;
-      if (isMovie) {
-        service = new RadarrAPI({
-          apiKey: serviceSettings?.apiKey,
-          url: RadarrAPI.buildUrl(serviceSettings, '/api/v3'),
-        });
-      } else {
-        service = new SonarrAPI({
-          apiKey: serviceSettings?.apiKey,
-          url: SonarrAPI.buildUrl(serviceSettings, '/api/v3'),
-        });
-      }
-
-      if (isMovie) {
-        await (service as RadarrAPI).removeMovie(media.tmdbId);
-      } else {
-        const tmdb = new TheMovieDb();
-        const series = await tmdb.getTvShow({ tvId: media.tmdbId });
-        const tvdbId = series.external_ids.tvdb_id ?? media.tvdbId;
-        if (!tvdbId) {
-          throw new Error('TVDB ID not found');
-        }
-        await (service as SonarrAPI).removeSeries(tvdbId);
-
-        for (const season of media.seasons) {
-          season[is4k ? 'status4k' : 'status'] = MediaStatus.DELETED;
-        }
-      }
-
-      media[is4k ? 'status4k' : 'status'] = MediaStatus.DELETED;
-      media.resetServiceData(is4k);
-      await mediaRepository.save(media);
 
       return res.status(204).send();
     } catch (e) {
@@ -400,6 +458,134 @@ mediaRoutes.get<{ id: string }, MediaWatchDataResponse>(
         mediaId: req.params.id,
       });
       next({ status: 500, message: 'Failed to fetch watch data.' });
+    }
+  }
+);
+
+mediaRoutes.get<{ id: string }, MediaFilesResponse>(
+  '/:id/files',
+  isAuthenticated(),
+  async (req, res, next) => {
+    const media = await getRepository(Media).findOne({
+      where: { id: Number(req.params.id) },
+    });
+
+    if (!media) {
+      return next({ status: 404, message: 'Media does not exist.' });
+    }
+
+    // Full paths reveal the server's folder layout, so only managers see them
+    const includePath = !!req.user?.hasPermission(Permission.MANAGE_REQUESTS);
+
+    try {
+      const [files, files4k] = await Promise.all([
+        getMediaFiles(media, false, includePath),
+        getMediaFiles(media, true, includePath),
+      ]);
+
+      return res.status(200).json({ files, files4k });
+    } catch (e) {
+      logger.error('Something went wrong fetching media files', {
+        label: 'API',
+        errorMessage: e.message,
+        mediaId: req.params.id,
+      });
+      next({ status: 500, message: 'Failed to fetch media files.' });
+    }
+  }
+);
+
+mediaRoutes.get<{ id: string }, MediaSubtitlesResponse>(
+  '/:id/subtitles',
+  isAuthenticated(),
+  async (req, res, next) => {
+    if (!isBazarrConfigured()) {
+      return next({ status: 404, message: 'Bazarr API not configured.' });
+    }
+
+    const media = await getRepository(Media).findOne({
+      where: { id: Number(req.params.id) },
+    });
+
+    if (!media) {
+      return next({ status: 404, message: 'Media does not exist.' });
+    }
+
+    try {
+      const subtitles = await getMediaSubtitles(media);
+
+      if (!subtitles) {
+        return next({
+          status: 404,
+          message: 'Media is not tracked by Bazarr.',
+        });
+      }
+
+      return res.status(200).json(subtitles);
+    } catch (e) {
+      logger.error('Something went wrong fetching media subtitles', {
+        label: 'API',
+        errorMessage: e.message,
+        mediaId: req.params.id,
+      });
+      next({ status: 500, message: 'Failed to fetch subtitles.' });
+    }
+  }
+);
+
+mediaRoutes.post<{ id: string }, Record<string, never>, SubtitleRequestBody>(
+  '/:id/subtitles',
+  isAuthenticated(Permission.REQUEST),
+  async (req, res, next) => {
+    if (!isBazarrConfigured()) {
+      return next({ status: 404, message: 'Bazarr API not configured.' });
+    }
+
+    const media = await getRepository(Media).findOne({
+      where: { id: Number(req.params.id) },
+    });
+
+    if (!media) {
+      return next({ status: 404, message: 'Media does not exist.' });
+    }
+
+    const { language, forced, hi, seasonNumber, episodeNumber } = req.body;
+
+    if (
+      media.mediaType === MediaType.TV &&
+      (seasonNumber === undefined || episodeNumber === undefined)
+    ) {
+      return next({
+        status: 400,
+        message: 'Season and episode numbers are required for series.',
+      });
+    }
+
+    try {
+      await searchMediaSubtitles(media, {
+        language,
+        forced,
+        hi,
+        seasonNumber,
+        episodeNumber,
+      });
+
+      logger.info('Subtitle search requested', {
+        label: 'Media',
+        mediaId: media.id,
+        language,
+        userId: req.user?.id,
+      });
+
+      return res.status(204).send();
+    } catch (e) {
+      logger.error('Something went wrong requesting subtitles', {
+        label: 'API',
+        errorMessage: e.message,
+        mediaId: req.params.id,
+        language,
+      });
+      next({ status: 500, message: 'Failed to request subtitles.' });
     }
   }
 );

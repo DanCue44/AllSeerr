@@ -23,6 +23,8 @@ export interface User {
   createdAt: Date;
   updatedAt: Date;
   requestCount: number;
+  movieRatingLimit?: string | null;
+  tvRatingLimit?: string | null;
   settings?: UserSettings;
 }
 
@@ -33,6 +35,11 @@ export interface UserSettings {
   streamingRegion?: string;
   originalLanguage?: string;
   locale?: string;
+  accentColor?: string | null;
+  // Null uses the server default
+  bookLanguage?: string | null;
+  // Guided tour version this user has seen, null when never shown
+  tourVersion?: number | null;
   notificationTypes: Partial<NotificationAgentTypes>;
   watchlistSyncMovies?: boolean;
   watchlistSyncTv?: boolean;

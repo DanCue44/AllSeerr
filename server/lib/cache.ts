@@ -3,6 +3,15 @@ import { LRUCache } from 'lru-cache';
 export type AvailableCacheIds =
   | 'tmdb'
   | 'tmdbscan'
+  | 'library'
+  | 'musicbrainz'
+  | 'coverartarchive'
+  | 'listenbrainz'
+  | 'tadb'
+  | 'openlibrary'
+  | 'audible'
+  | 'googlebooks'
+  | 'audiobookshelf'
   | 'radarr'
   | 'sonarr'
   | 'rt'
@@ -10,7 +19,9 @@ export type AvailableCacheIds =
   | 'github'
   | 'plextv'
   | 'plexwatchlist'
-  | 'tvdb';
+  | 'tvdb'
+  | 'lidarr'
+  | 'chaptarr';
 
 const DEFAULT_TTL = 300;
 
@@ -24,10 +35,43 @@ const TMDB_MAX_KEYS = 1000;
 // Backstop against unbounded growth as the 15 minute TTL is what bounds this tier.
 const TMDB_SCAN_MAX_KEYS = 2000;
 
+// One small entry per title on the server and locale, so the whole library can be
+// sorted and filtered without asking TMDB again.
+const LIBRARY_MAX_KEYS = 20000;
+
 // Only the rolling quality profile, root folder and language profile lookups reach
 // these tiers, and keys are prefixed by server url, so this is a few keys per server.
 const RADARR_MAX_KEYS = 64;
 const SONARR_MAX_KEYS = 64;
+const LIDARR_MAX_KEYS = 64;
+const CHAPTARR_MAX_KEYS = 64;
+
+// One key per artist, release group or search, each a small JSON document.
+const MUSICBRAINZ_MAX_KEYS = 1000;
+
+// One key per release group, the resolved cover is also kept in metadata_album.
+const COVER_ART_ARCHIVE_MAX_KEYS = 2000;
+
+// Sitewide charts and new release lists, a handful of pages, and one short
+// list of similar artists per artist page.
+const LISTENBRAINZ_MAX_KEYS = 1000;
+
+// One key per artist, the resolved images are also kept in metadata_artist.
+const TADB_MAX_KEYS = 1000;
+
+// One key per work, author, search or list page, each a small JSON document.
+const OPENLIBRARY_MAX_KEYS = 2000;
+
+// One key per catalog search, ten small products each. The answer per book
+// is also kept in metadata_book_audio.
+const AUDIBLE_MAX_KEYS = 2000;
+
+// One key per volume search, twenty small volumes each. The answer per book
+// is also kept in metadata_book_ebook.
+const GOOGLE_BOOKS_MAX_KEYS = 2000;
+
+// One key per book and library, holding only the matched item id.
+const AUDIOBOOKSHELF_MAX_KEYS = 5000;
 
 // One key per searched title, each holding twenty search hits.
 const RT_MAX_KEYS = 500;
@@ -221,12 +265,52 @@ class CacheManager {
       stdTtl: 21600,
       max: TMDB_MAX_KEYS,
     }),
+    musicbrainz: new Cache('musicbrainz', 'MusicBrainz API', {
+      stdTtl: 21600,
+      max: MUSICBRAINZ_MAX_KEYS,
+    }),
+    coverartarchive: new Cache('coverartarchive', 'Cover Art Archive API', {
+      stdTtl: 43200,
+      max: COVER_ART_ARCHIVE_MAX_KEYS,
+    }),
+    listenbrainz: new Cache('listenbrainz', 'ListenBrainz API', {
+      stdTtl: 43200,
+      max: LISTENBRAINZ_MAX_KEYS,
+    }),
+    tadb: new Cache('tadb', 'TheAudioDB API', {
+      stdTtl: 43200,
+      max: TADB_MAX_KEYS,
+    }),
+    openlibrary: new Cache('openlibrary', 'OpenLibrary API', {
+      stdTtl: 43200,
+      max: OPENLIBRARY_MAX_KEYS,
+    }),
+    audible: new Cache('audible', 'Audible API', {
+      stdTtl: 86400 * 7,
+      max: AUDIBLE_MAX_KEYS,
+    }),
+    googlebooks: new Cache('googlebooks', 'Google Books API', {
+      stdTtl: 86400 * 7,
+      max: GOOGLE_BOOKS_MAX_KEYS,
+    }),
+    audiobookshelf: new Cache('audiobookshelf', 'Audiobookshelf API', {
+      stdTtl: 43200,
+      max: AUDIOBOOKSHELF_MAX_KEYS,
+    }),
     tmdbscan: new Cache('tmdbscan', 'The Movie Database API (Library Scans)', {
       stdTtl: 900,
       max: TMDB_SCAN_MAX_KEYS,
     }),
+    library: new Cache('library', 'Library Metadata', {
+      stdTtl: 43200,
+      max: LIBRARY_MAX_KEYS,
+    }),
     radarr: new Cache('radarr', 'Radarr API', { max: RADARR_MAX_KEYS }),
     sonarr: new Cache('sonarr', 'Sonarr API', { max: SONARR_MAX_KEYS }),
+    lidarr: new Cache('lidarr', 'Lidarr API', { max: LIDARR_MAX_KEYS }),
+    chaptarr: new Cache('chaptarr', 'Chaptarr API', {
+      max: CHAPTARR_MAX_KEYS,
+    }),
     rt: new Cache('rt', 'Rotten Tomatoes API', {
       stdTtl: 43200,
       max: RT_MAX_KEYS,

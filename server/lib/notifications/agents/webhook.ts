@@ -28,6 +28,8 @@ const KeyMap: Record<string, string | KeyMapFunction> = {
   media_imdbid: 'media.imdbId',
   media_tmdbid: 'media.tmdbId',
   media_tvdbid: 'media.tvdbId',
+  media_mbid: 'media.mbId',
+  media_olid: 'media.olId',
   media_type: 'media.mediaType',
   media_jellyfinMediaId: (payload) =>
     payload.media?.jellyfinMediaId ?? payload.media?.jellyfinMediaId4k ?? '',
@@ -35,9 +37,19 @@ const KeyMap: Record<string, string | KeyMapFunction> = {
     payload.media ? MediaStatus[payload.media.status] : '',
   media_status4k: (payload) =>
     payload.media ? MediaStatus[payload.media.status4k] : '',
+  media_statusAudio: (payload) =>
+    payload.media ? MediaStatus[payload.media.statusAudio] : '',
   media_plexRatingKey: (payload) => payload.media?.ratingKey ?? '',
   media_plexRatingKey4k: (payload) => payload.media?.ratingKey4k ?? '',
   request_id: 'request.id',
+  request_format: (payload) =>
+    payload.bookFormat ??
+    (payload.request?.type === 'book'
+      ? payload.request.isAudiobook
+        ? 'audiobook'
+        : 'ebook'
+      : ''),
+  removal_format: (payload) => payload.removal?.bookFormat ?? '',
   requestedBy_jellyfinUserId: 'request.requestedBy.jellyfinUserId',
   requestedBy_username: 'request.requestedBy.displayName',
   requestedBy_email: 'request.requestedBy.email',
@@ -50,6 +62,7 @@ const KeyMap: Record<string, string | KeyMapFunction> = {
     payload.issue ? IssueType[payload.issue.issueType] : '',
   issue_status: (payload) =>
     payload.issue ? IssueStatus[payload.issue.status] : '',
+  issue_format: (payload) => payload.issue?.bookFormat ?? '',
   reportedBy_username: 'issue.createdBy.displayName',
   reportedBy_email: 'issue.createdBy.email',
   reportedBy_avatar: 'issue.createdBy.avatar',

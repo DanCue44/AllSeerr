@@ -4,6 +4,7 @@ import { sliderTitles } from '@app/components/Discover/constants';
 import MediaSlider from '@app/components/MediaSlider';
 import { WatchProviderSelector } from '@app/components/Selector';
 import { encodeURIExtraParams } from '@app/hooks/useDiscover';
+import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import defineMessages from '@app/utils/defineMessages';
 import type {
@@ -13,13 +14,21 @@ import type {
 } from '@server/api/themoviedb/interfaces';
 import { DiscoverSliderType } from '@server/constants/discover';
 import type DiscoverSlider from '@server/entity/DiscoverSlider';
-import type { GenreSliderItem } from '@server/interfaces/api/discoverInterfaces';
+import type {
+  BookSubjectSearchResponse,
+  GenreSliderItem,
+} from '@server/interfaces/api/discoverInterfaces';
+import {
+  getBookSubjectLabel,
+  toBookSubjectSlug,
+} from '@server/lib/bookSubjects';
 import type { Keyword, ProductionCompany } from '@server/models/common';
 import axios from 'axios';
 import { Field, Form, Formik } from 'formik';
 import { useCallback, useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
 import AsyncSelect from 'react-select/async';
+import AsyncCreatableSelect from 'react-select/async-creatable';
 import * as Yup from 'yup';
 
 const messages = defineMessages('components.Discover.CreateSlider', {
@@ -31,6 +40,9 @@ const messages = defineMessages('components.Discover.CreateSlider', {
   providetmdbsearch: 'Provide a search query',
   providetmdbstudio: 'Provide TMDB Studio ID',
   providetmdbnetwork: 'Provide TMDB Network ID',
+  searchBookSubjects: 'Search OpenLibrary subjects…',
+  usebooksubject: 'Use "{subject}"',
+  booksubjectworks: '{count, plural, one {# book} other {# books}}',
   addsuccess: 'Created new slider and saved discover customization settings.',
   addfail: 'Failed to create new slider.',
   editsuccess: 'Edited slider and saved discover customization settings.',
@@ -51,6 +63,12 @@ type CreateSliderProps = {
   slider?: Partial<DiscoverSlider>;
 };
 
+type SubjectOption = {
+  label: string;
+  value: string;
+  workCount?: number;
+};
+
 type CreateOption = {
   type: DiscoverSliderType;
   title: string;
@@ -63,7 +81,11 @@ type CreateOption = {
 const CreateSlider = ({ onCreate, slider }: CreateSliderProps) => {
   const intl = useIntl();
   const { addToast } = useToasts();
+  const settings = useSettings();
   const [resultCount, setResultCount] = useState(0);
+  const [defaultSubject, setDefaultSubject] = useState<SubjectOption | null>(
+    null
+  );
   const [defaultDataValue, setDefaultDataValue] = useState<
     { label: string; value: number }[] | null
   >(null);
@@ -150,6 +172,13 @@ const CreateSlider = ({ onCreate, slider }: CreateSliderProps) => {
         case DiscoverSliderType.TMDB_STUDIO:
           loadDefaultCompany();
           break;
+        case DiscoverSliderType.BOOK_SUBJECT:
+          setDefaultSubject(
+            slider.data
+              ? { label: getBookSubjectLabel(slider.data), value: slider.data }
+              : null
+          );
+          break;
       }
     }
   }, [slider]);
@@ -203,6 +232,25 @@ const CreateSlider = ({ onCreate, slider }: CreateSliderProps) => {
     return results.data.results.map((result) => ({
       label: result.name,
       value: result.id,
+    }));
+  };
+
+  const loadBookSubjectOptions = async (
+    inputValue: string
+  ): Promise<SubjectOption[]> => {
+    if (inputValue.trim() === '') {
+      return [];
+    }
+
+    const results = await axios.get<BookSubjectSearchResponse>(
+      '/api/v1/discover/books/subjects',
+      { params: { query: encodeURIExtraParams(inputValue) } }
+    );
+
+    return results.data.results.map((result) => ({
+      label: result.name,
+      value: result.subject,
+      workCount: result.workCount,
     }));
   };
 
@@ -295,6 +343,19 @@ const CreateSlider = ({ onCreate, slider }: CreateSliderProps) => {
       params: 'watchRegion=$regionValue&watchProviders=$providersValue',
       titlePlaceholderText: intl.formatMessage(messages.slidernameplaceholder),
     },
+    // Books can only be requested once a book service is set up
+    ...(settings.currentSettings.booksEnabled
+      ? [
+          {
+            type: DiscoverSliderType.BOOK_SUBJECT,
+            title: intl.formatMessage(sliderTitles.booksubject),
+            dataUrl: '/api/v1/discover/books/subject/$value',
+            titlePlaceholderText: intl.formatMessage(
+              messages.slidernameplaceholder
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -352,7 +413,15 @@ const CreateSlider = ({ onCreate, slider }: CreateSliderProps) => {
         }
       }}
     >
-      {({ values, isValid, isSubmitting, errors, touched, setFieldValue }) => {
+      {({
+        values,
+        isValid,
+        isSubmitting,
+        errors,
+        touched,
+        setFieldValue,
+        setValues,
+      }) => {
         const activeOption = options.find(
           (option) => option.type === Number(values.sliderType)
         );
@@ -466,6 +535,72 @@ const CreateSlider = ({ onCreate, slider }: CreateSliderProps) => {
                 }
                 onChange={(region, providers) => {
                   setFieldValue('data', `${region},${providers.join('|')}`);
+                }}
+              />
+            );
+            break;
+          case DiscoverSliderType.BOOK_SUBJECT:
+            dataInput = (
+              <AsyncCreatableSelect<SubjectOption>
+                key={`book-subject-select-${defaultSubject?.value ?? ''}`}
+                inputId="data"
+                className="react-select-container"
+                classNamePrefix="react-select"
+                defaultValue={defaultSubject}
+                cacheOptions
+                isClearable
+                loadOptions={loadBookSubjectOptions}
+                placeholder={intl.formatMessage(messages.searchBookSubjects)}
+                noOptionsMessage={({ inputValue }) =>
+                  inputValue === ''
+                    ? intl.formatMessage(messages.starttyping)
+                    : intl.formatMessage(messages.nooptions)
+                }
+                // A typed subject is offered unless a suggestion has its key
+                isValidNewOption={(inputValue, _selected, options) => {
+                  const subject = toBookSubjectSlug(inputValue);
+
+                  return (
+                    subject !== '' &&
+                    !options.some(
+                      (option) => 'value' in option && option.value === subject
+                    )
+                  );
+                }}
+                getNewOptionData={(inputValue, optionLabel) => ({
+                  label:
+                    typeof optionLabel === 'string'
+                      ? optionLabel
+                      : inputValue.trim(),
+                  value: toBookSubjectSlug(inputValue),
+                })}
+                formatCreateLabel={(inputValue) =>
+                  intl.formatMessage(messages.usebooksubject, {
+                    subject: toBookSubjectSlug(inputValue),
+                  })
+                }
+                formatOptionLabel={(option, { context }) =>
+                  context === 'menu' && option.workCount !== undefined ? (
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="truncate">{option.label}</span>
+                      <span className="shrink-0 text-xs text-gray-400">
+                        {intl.formatMessage(messages.booksubjectworks, {
+                          count: option.workCount,
+                        })}
+                      </span>
+                    </div>
+                  ) : (
+                    option.label
+                  )
+                }
+                onChange={(option) => {
+                  // A picked subject names the slider until it has a title.
+                  // Both are set at once so the form checks them together.
+                  setValues({
+                    ...values,
+                    data: option?.value ?? '',
+                    title: values.title || option?.label || '',
+                  });
                 }}
               />
             );

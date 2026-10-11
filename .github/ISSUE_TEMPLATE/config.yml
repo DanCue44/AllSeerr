@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 💬 Support via Discord
-    url: https://discord.gg/seerr
-    about: Chat with other users and the Seerr dev team
-  - name: 💬 Support via GitHub Discussions
-    url: https://github.com/seerr-team/seerr/discussions
-    about: Ask questions and discuss with other community members
+  - name: 💬 Questions and support
+    url: https://github.com/DanCue44/AllSeerr/discussions
+    about: Ask questions and discuss AllSeerr with other users
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/DanCue44/AllSeerr/security/advisories/new
+    about: Report security problems privately, never in a public issue

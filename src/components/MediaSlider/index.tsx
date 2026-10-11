@@ -2,12 +2,17 @@ import ShowMoreCard from '@app/components/MediaSlider/ShowMoreCard';
 import PersonCard from '@app/components/PersonCard';
 import Slider from '@app/components/Slider';
 import TitleCard from '@app/components/TitleCard';
+import BookTitleCard from '@app/components/TitleCard/BookTitleCard';
+import MusicTitleCard from '@app/components/TitleCard/MusicTitleCard';
 import useSettings from '@app/hooks/useSettings';
 import { useUser } from '@app/hooks/useUser';
 import { ArrowRightCircleIcon } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
 import { Permission } from '@server/lib/permissions';
 import type {
+  AlbumResult,
+  ArtistResult,
+  BookResult,
   MovieResult,
   PersonResult,
   TvResult,
@@ -20,7 +25,14 @@ interface MixedResult {
   page: number;
   totalResults: number;
   totalPages: number;
-  results: (TvResult | MovieResult | PersonResult)[];
+  results: (
+    | TvResult
+    | MovieResult
+    | PersonResult
+    | AlbumResult
+    | ArtistResult
+    | BookResult
+  )[];
 }
 
 interface MediaSliderProps {
@@ -62,7 +74,14 @@ const MediaSlider = ({
 
   let titles = (data ?? []).reduce(
     (a, v) => [...a, ...v.results],
-    [] as (MovieResult | TvResult | PersonResult)[]
+    [] as (
+      | MovieResult
+      | TvResult
+      | PersonResult
+      | AlbumResult
+      | ArtistResult
+      | BookResult
+    )[]
   );
 
   if (settings.currentSettings.hideAvailable) {
@@ -77,8 +96,12 @@ const MediaSlider = ({
   if (settings.currentSettings.hideBlocklisted) {
     titles = titles.filter(
       (i) =>
-        !(i.mediaType === 'movie' || i.mediaType === 'tv') ||
-        i.mediaInfo?.status !== MediaStatus.BLOCKLISTED
+        !(
+          i.mediaType === 'movie' ||
+          i.mediaType === 'tv' ||
+          i.mediaType === 'album' ||
+          i.mediaType === 'book'
+        ) || i.mediaInfo?.status !== MediaStatus.BLOCKLISTED
     );
   }
 
@@ -169,6 +192,47 @@ const MediaSlider = ({
               profilePath={title.profilePath}
             />
           );
+        case 'album':
+          return (
+            <MusicTitleCard
+              key={title.id}
+              id={title.id}
+              mediaType="album"
+              title={title.title}
+              subtitle={title.artistName}
+              year={title.releaseDate}
+              image={title.posterPath}
+              needsCoverArt={title.needsCoverArt}
+              albumType={title.albumType}
+              status={title.mediaInfo?.status}
+              inProgress={(title.mediaInfo?.downloadStatus ?? []).length > 0}
+            />
+          );
+        case 'artist':
+          return (
+            <MusicTitleCard
+              key={title.id}
+              id={title.id}
+              mediaType="artist"
+              title={title.name}
+              subtitle={title.disambiguation}
+              image={title.artistThumb}
+            />
+          );
+        case 'book':
+          return (
+            <BookTitleCard
+              key={title.id}
+              id={title.id}
+              mediaType="book"
+              title={title.title}
+              subtitle={title.authorName}
+              year={title.firstPublishYear}
+              image={title.posterPath}
+              status={title.mediaInfo?.status}
+              statusAudio={title.mediaInfo?.statusAudio}
+            />
+          );
       }
     });
 
@@ -179,7 +243,12 @@ const MediaSlider = ({
         posters={titles
           .slice(20, 24)
           .map((title) =>
-            title.mediaType !== 'person' ? title.posterPath : undefined
+            title.mediaType !== 'person' &&
+            title.mediaType !== 'album' &&
+            title.mediaType !== 'artist' &&
+            title.mediaType !== 'book'
+              ? title.posterPath
+              : undefined
           )}
       />
     );

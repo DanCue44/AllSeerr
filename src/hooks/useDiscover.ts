@@ -15,7 +15,8 @@ export interface BaseSearchResult<T> {
 }
 
 interface BaseMedia {
-  id: number;
+  // Albums and artists are keyed by their MusicBrainz id
+  id: number | string;
   mediaType: string;
   mediaInfo?: {
     status: MediaStatus;
@@ -95,7 +96,7 @@ const useDiscover = <
     }
   );
 
-  const resultIds: Set<number> = new Set<number>();
+  const resultIds: Set<number | string> = new Set<number | string>();
 
   const isLoadingInitialData = !data && !error;
   const isLoadingMore =
@@ -138,8 +139,12 @@ const useDiscover = <
   ) {
     titles = titles.filter(
       (i) =>
-        !(i.mediaType === 'movie' || i.mediaType === 'tv') ||
-        i.mediaInfo?.status !== MediaStatus.BLOCKLISTED
+        !(
+          i.mediaType === 'movie' ||
+          i.mediaType === 'tv' ||
+          i.mediaType === 'album' ||
+          i.mediaType === 'book'
+        ) || i.mediaInfo?.status !== MediaStatus.BLOCKLISTED
     );
   }
 

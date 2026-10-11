@@ -1,4 +1,3 @@
-import PlexTvAPI from '@server/api/plextv';
 import TheMovieDb, {
   MovieSortOptionsIterable,
   TvSortOptionsIterable,
@@ -14,6 +13,10 @@ import type {
   WatchlistResponse,
 } from '@server/interfaces/api/discoverInterfaces';
 import { getSettings } from '@server/lib/settings';
+import {
+  getPlexUserWatchlist,
+  withFollowImages,
+} from '@server/lib/watchlistPage';
 import logger from '@server/logger';
 import { mapProductionCompany } from '@server/models/Movie';
 import {
@@ -27,6 +30,8 @@ import { isCollection, isMovie, isPerson } from '@server/utils/typeHelpers';
 import { Router } from 'express';
 import { sortBy } from 'lodash';
 import { z } from 'zod';
+import discoverBooksRoutes from './discoverBooks';
+import discoverMusicRoutes from './discoverMusic';
 
 export const createTmdbWithRegionLanguage = (user?: User): TheMovieDb => {
   const settings = getSettings();
@@ -61,6 +66,9 @@ export const createTmdbWithBlocklistSettings = (): TheMovieDb => {
 };
 
 const discoverRoutes = Router();
+
+discoverRoutes.use('/music', discoverMusicRoutes);
+discoverRoutes.use('/books', discoverBooksRoutes);
 
 const QueryFilterOptions = z.object({
   page: z.coerce.string().optional(),
@@ -968,7 +976,7 @@ discoverRoutes.get<Record<string, unknown>, WatchlistResponse>(
           page: page,
           totalPages: Math.ceil(total / itemsPerPage),
           totalResults: total,
-          results: result,
+          results: await withFollowImages(result),
         });
       }
     }
@@ -982,23 +990,15 @@ discoverRoutes.get<Record<string, unknown>, WatchlistResponse>(
       });
     }
 
-    // List watchlist from Plex
-    const plexTV = new PlexTvAPI(activeUser.plexToken);
-
-    const watchlist = await plexTV.getWatchlist({ offset });
-
-    return res.json({
-      page,
-      totalPages: Math.ceil(watchlist.totalSize / itemsPerPage),
-      totalResults: watchlist.totalSize,
-      results: watchlist.items.map((item) => ({
-        id: item.tmdbId,
-        ratingKey: item.ratingKey,
-        title: item.title,
-        mediaType: item.type === 'show' ? 'tv' : 'movie',
-        tmdbId: item.tmdbId,
-      })),
-    });
+    // List watchlist from Plex, after any albums and books watchlisted here
+    return res.json(
+      await getPlexUserWatchlist({
+        userId: activeUser.id,
+        plexToken: activeUser.plexToken,
+        page,
+        itemsPerPage,
+      })
+    );
   }
 );
 

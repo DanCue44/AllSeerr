@@ -1,3 +1,9 @@
+import {
+  AmbientPageHeader,
+  listPageMessages,
+  PillButton,
+  PillSelect,
+} from '@app/components/AllSeerr/ListPage';
 import Button from '@app/components/Common/Button';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
@@ -9,6 +15,8 @@ import {
 } from '@app/components/Discover/constants';
 import FilterSlideover from '@app/components/Discover/FilterSlideover';
 import useDiscover from '@app/hooks/useDiscover';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
+import useRememberedQuery from '@app/hooks/useRememberedQuery';
 import { useUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
@@ -44,12 +52,20 @@ const SortOptions: Record<string, TMDBSortOptions> = {
   TitleDesc: 'original_name.desc',
 } as const;
 
-const DiscoverTv = () => {
+interface DiscoverTvProps {
+  /** Shown inside a space, which brings its own title */
+  embedded?: boolean;
+}
+
+const DiscoverTv = ({ embedded = false }: DiscoverTvProps) => {
   const intl = useIntl();
   const router = useRouter();
   const [showFilters, setShowFilters] = useState(false);
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
   const preparedFilters = prepareFilterValues(router.query);
   const updateQueryParams = useUpdateQueryParams({});
+  useRememberedQuery('discover-tv-filters');
 
   const {
     isLoadingInitialData,
@@ -69,67 +85,117 @@ const DiscoverTv = () => {
 
   const title = intl.formatMessage(messages.discovertv);
 
+  const sortOptions = (
+    <>
+      <option value={SortOptions.PopularityDesc}>
+        {intl.formatMessage(messages.sortPopularityDesc)}
+      </option>
+      <option value={SortOptions.PopularityAsc}>
+        {intl.formatMessage(messages.sortPopularityAsc)}
+      </option>
+      <option value={SortOptions.FirstAirDateDesc}>
+        {intl.formatMessage(messages.sortFirstAirDateDesc)}
+      </option>
+      <option value={SortOptions.FirstAirDateAsc}>
+        {intl.formatMessage(messages.sortFirstAirDateAsc)}
+      </option>
+      <option value={SortOptions.TmdbRatingDesc}>
+        {intl.formatMessage(messages.sortTmdbRatingDesc)}
+      </option>
+      <option value={SortOptions.TmdbRatingAsc}>
+        {intl.formatMessage(messages.sortTmdbRatingAsc)}
+      </option>
+      <option value={SortOptions.TitleAsc}>
+        {intl.formatMessage(messages.sortTitleAsc)}
+      </option>
+      <option value={SortOptions.TitleDesc}>
+        {intl.formatMessage(messages.sortTitleDesc)}
+      </option>
+    </>
+  );
+
+  const filterSlideover = (
+    <FilterSlideover
+      type="tv"
+      currentFilters={preparedFilters}
+      onClose={() => setShowFilters(false)}
+      show={showFilters}
+    />
+  );
+
+  const activeFilters = intl.formatMessage(messages.activefilters, {
+    count: countActiveFilters(preparedFilters),
+  });
+
+  const ambientControls = (
+    <>
+      <PillSelect
+        id="sortBy"
+        label={intl.formatMessage(listPageMessages.sortBy)}
+        icon={<BarsArrowDownIcon />}
+        value={preparedFilters.sortBy || SortOptions.PopularityDesc}
+        onChange={(e) => updateQueryParams('sortBy', e.target.value)}
+      >
+        {sortOptions}
+      </PillSelect>
+      <PillButton
+        onClick={() => setShowFilters(true)}
+        active={countActiveFilters(preparedFilters) > 0}
+      >
+        <FunnelIcon />
+        <span>{activeFilters}</span>
+      </PillButton>
+    </>
+  );
+
   return (
     <>
-      <PageTitle title={title} />
-      <div className="mb-4 flex flex-col justify-between lg:flex-row lg:items-end">
-        <Header>{title}</Header>
-        <div className="mt-2 flex flex-grow flex-col sm:flex-row lg:flex-grow-0">
-          <div className="mb-2 flex flex-grow sm:mb-0 sm:mr-2 lg:flex-grow-0">
-            <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-gray-800 px-3 text-gray-100 sm:text-sm">
-              <BarsArrowDownIcon className="h-6 w-6" />
-            </span>
-            <select
-              id="sortBy"
-              name="sortBy"
-              className="rounded-r-only"
-              value={preparedFilters.sortBy || SortOptions.PopularityDesc}
-              onChange={(e) => updateQueryParams('sortBy', e.target.value)}
-            >
-              <option value={SortOptions.PopularityDesc}>
-                {intl.formatMessage(messages.sortPopularityDesc)}
-              </option>
-              <option value={SortOptions.PopularityAsc}>
-                {intl.formatMessage(messages.sortPopularityAsc)}
-              </option>
-              <option value={SortOptions.FirstAirDateDesc}>
-                {intl.formatMessage(messages.sortFirstAirDateDesc)}
-              </option>
-              <option value={SortOptions.FirstAirDateAsc}>
-                {intl.formatMessage(messages.sortFirstAirDateAsc)}
-              </option>
-              <option value={SortOptions.TmdbRatingDesc}>
-                {intl.formatMessage(messages.sortTmdbRatingDesc)}
-              </option>
-              <option value={SortOptions.TmdbRatingAsc}>
-                {intl.formatMessage(messages.sortTmdbRatingAsc)}
-              </option>
-              <option value={SortOptions.TitleAsc}>
-                {intl.formatMessage(messages.sortTitleAsc)}
-              </option>
-              <option value={SortOptions.TitleDesc}>
-                {intl.formatMessage(messages.sortTitleDesc)}
-              </option>
-            </select>
+      {!embedded && <PageTitle title={title} />}
+      {ambient ? (
+        <>
+          {filterSlideover}
+          {embedded ? (
+            <div className="mb-6 flex flex-wrap items-center gap-2">
+              {ambientControls}
+            </div>
+          ) : (
+            <AmbientPageHeader title={title} controls={ambientControls} />
+          )}
+        </>
+      ) : (
+        <>
+          <div className="mb-4 flex flex-col justify-between lg:flex-row lg:items-end">
+            {!embedded && <Header>{title}</Header>}
+            <div className="mt-2 flex flex-grow flex-col sm:flex-row lg:flex-grow-0">
+              <div className="mb-2 flex flex-grow sm:mb-0 sm:mr-2 lg:flex-grow-0">
+                <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-gray-800 px-3 text-gray-100 sm:text-sm">
+                  <BarsArrowDownIcon className="h-6 w-6" />
+                </span>
+                <select
+                  id="sortBy"
+                  name="sortBy"
+                  className="rounded-r-only"
+                  value={preparedFilters.sortBy || SortOptions.PopularityDesc}
+                  onChange={(e) => updateQueryParams('sortBy', e.target.value)}
+                >
+                  {sortOptions}
+                </select>
+              </div>
+              {filterSlideover}
+              <div className="mb-2 flex flex-grow sm:mb-0 lg:flex-grow-0">
+                <Button onClick={() => setShowFilters(true)} className="w-full">
+                  <FunnelIcon />
+                  <span>
+                    {intl.formatMessage(messages.activefilters, {
+                      count: countActiveFilters(preparedFilters),
+                    })}
+                  </span>
+                </Button>
+              </div>
+            </div>
           </div>
-          <FilterSlideover
-            type="tv"
-            currentFilters={preparedFilters}
-            onClose={() => setShowFilters(false)}
-            show={showFilters}
-          />
-          <div className="mb-2 flex flex-grow sm:mb-0 lg:flex-grow-0">
-            <Button onClick={() => setShowFilters(true)} className="w-full">
-              <FunnelIcon />
-              <span>
-                {intl.formatMessage(messages.activefilters, {
-                  count: countActiveFilters(preparedFilters),
-                })}
-              </span>
-            </Button>
-          </div>
-        </div>
-      </div>
+        </>
+      )}
       <ListView
         items={titles}
         isEmpty={isEmpty}

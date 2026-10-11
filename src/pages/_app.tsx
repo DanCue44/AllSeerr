@@ -1,21 +1,30 @@
-import Layout from '@app/components/Layout';
+import BrandingHead from '@app/components/AllSeerr/BrandingHead';
+import InterfaceLayout from '@app/components/AllSeerr/Layout/InterfaceLayout';
 import LoadingBar from '@app/components/LoadingBar';
-import PWAHeader from '@app/components/PWAHeader';
 import ServiceWorkerSetup from '@app/components/ServiceWorkerSetup';
 import StatusChecker from '@app/components/StatusChecker';
 import { InteractionProvider } from '@app/context/InteractionContext';
+import type { InterfaceStyle } from '@app/context/InterfaceStyleContext';
+import {
+  InterfaceStyleProvider,
+  parseInterfaceStyle,
+} from '@app/context/InterfaceStyleContext';
 import { LanguageContext } from '@app/context/LanguageContext';
 import { SettingsProvider } from '@app/context/SettingsContext';
 import { UserContext } from '@app/context/UserContext';
 import type { User } from '@app/hooks/useUser';
 import { Permission, useUser } from '@app/hooks/useUser';
+import '@app/styles/allseerr-theme.css';
 import '@app/styles/globals.css';
 import { polyfillIntl } from '@app/utils/polyfillIntl';
 import { getHostAndPort } from '@app/utils/urlHelper';
 import '@fontsource-variable/inter';
+import '@fontsource-variable/manrope';
+import '@fontsource-variable/unbounded';
 import { MediaServerType } from '@server/constants/server';
 import type { PublicSettingsResponse } from '@server/interfaces/api/settingsInterfaces';
 import type { AvailableLocale } from '@server/types/languages';
+import { DEFAULT_ACCENT_COLOR } from '@server/utils/accentColor';
 import axios from 'axios';
 import type { AppInitialProps, AppProps } from 'next/app';
 import App from 'next/app';
@@ -116,6 +125,7 @@ interface ExtendedAppProps extends AppProps {
   messages: MessagesType;
   locale: AvailableLocale;
   currentSettings: PublicSettingsResponse;
+  interfaceStyle: InterfaceStyle;
 }
 
 const CoreApp: Omit<NextAppComponentType, 'origGetInitialProps'> = ({
@@ -126,6 +136,7 @@ const CoreApp: Omit<NextAppComponentType, 'origGetInitialProps'> = ({
   messages,
   locale,
   currentSettings,
+  interfaceStyle,
 }: ExtendedAppProps) => {
   let component: React.ReactNode;
   const [loadedMessages, setMessages] = useState<MessagesType>(messages);
@@ -182,9 +193,9 @@ const CoreApp: Omit<NextAppComponentType, 'origGetInitialProps'> = ({
     component = <Component {...pageProps} />;
   } else {
     component = (
-      <Layout>
+      <InterfaceLayout>
         <Component {...pageProps} />
-      </Layout>
+      </InterfaceLayout>
     );
   }
 
@@ -212,13 +223,13 @@ const CoreApp: Omit<NextAppComponentType, 'origGetInitialProps'> = ({
                   name="viewport"
                   content="initial-scale=1, viewport-fit=cover, width=device-width"
                 />
-                <PWAHeader
-                  applicationTitle={currentSettings.applicationTitle}
-                />
               </Head>
+              <BrandingHead />
               <StatusChecker />
               <ServiceWorkerSetup />
-              <UserContext initialUser={user}>{component}</UserContext>
+              <InterfaceStyleProvider initialStyle={interfaceStyle}>
+                <UserContext initialUser={user}>{component}</UserContext>
+              </InterfaceStyleProvider>
               <Toaster
                 position="top-right"
                 toastOptions={{ duration: 4000 }}
@@ -242,18 +253,27 @@ CoreApp.getInitialProps = async (initialProps) => {
     initialized: false,
     applicationTitle: '',
     applicationUrl: '',
+    applicationLogoVersion: '',
+    accentColor: DEFAULT_ACCENT_COLOR,
     hideAvailable: false,
     hideBlocklisted: false,
     hideRequested: false,
     movie4kEnabled: false,
     series4kEnabled: false,
+    booksEnabled: false,
     localLogin: true,
     mediaServerLogin: true,
     discoverRegion: '',
     streamingRegion: '',
+    blockedWatchProviders: '',
+    musicEnabled: false,
+    subtitlesEnabled: false,
     originalLanguage: '',
     mediaServerType: MediaServerType.NOT_CONFIGURED,
     partialRequestsEnabled: true,
+    allowCurrentSeasonRequests: false,
+    defaultBookFormat: 'both',
+    bookLanguage: 'en',
     enableSpecialEpisodes: false,
     cacheImages: false,
     vapidPublic: '',
@@ -328,7 +348,18 @@ CoreApp.getInitialProps = async (initialProps) => {
   const messages = await loadLocaleData(locale as AvailableLocale);
   await polyfillIntl();
 
-  return { ...appInitialProps, user, messages, locale, currentSettings };
+  const interfaceStyle = parseInterfaceStyle(
+    ctx.req ? ctx.req.headers.cookie : document.cookie
+  );
+
+  return {
+    ...appInitialProps,
+    user,
+    messages,
+    locale,
+    currentSettings,
+    interfaceStyle,
+  };
 };
 
 export default CoreApp;

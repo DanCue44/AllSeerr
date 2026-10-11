@@ -2,7 +2,6 @@ import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
 import {
   ArrowUpCircleIcon,
-  BeakerIcon,
   CodeBracketIcon,
   ServerIcon,
 } from '@heroicons/react/24/outline';
@@ -12,11 +11,9 @@ import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 const messages = defineMessages('components.Layout.VersionStatus', {
-  streamdevelop: 'Seerr Develop',
-  streamstable: 'Seerr Stable',
+  appname: 'AllSeerr',
+  localbuild: 'Local build',
   outofdate: 'Out of Date',
-  commitsbehind:
-    '{commitsBehind} {commitsBehind, plural, one {commit} other {commits}} behind',
 });
 
 interface VersionStatusProps {
@@ -37,12 +34,17 @@ const VersionStatus = ({ onClick }: VersionStatusProps) => {
     return null;
   }
 
-  const versionStream =
+  const commit =
     data.commitTag === 'local'
-      ? 'Keep it up! 👍'
-      : data.version.startsWith('develop-')
-        ? intl.formatMessage(messages.streamdevelop)
-        : intl.formatMessage(messages.streamstable);
+      ? intl.formatMessage(messages.localbuild)
+      : data.commitTag.slice(0, 7);
+  // Older builds report develop-<commit> instead of an AllSeerr version, and
+  // release builds are tagged with the version itself
+  const version = data.version.startsWith('develop-')
+    ? commit
+    : data.releaseBuild
+      ? data.version
+      : `${data.version} · ${commit}`;
 
   return (
     <Link
@@ -63,32 +65,21 @@ const VersionStatus = ({ onClick }: VersionStatusProps) => {
     >
       {data.commitTag === 'local' ? (
         <CodeBracketIcon className="h-6 w-6" />
-      ) : data.version.startsWith('develop-') ? (
-        <BeakerIcon className="h-6 w-6" />
       ) : (
         <ServerIcon className="h-6 w-6" />
       )}
       <div className="flex min-w-0 flex-1 flex-col truncate px-2 last:pr-0">
-        <span className="font-bold">{versionStream}</span>
-        {data.commitsBehind !== undefined && (
-          <span className="truncate">
-            {data.commitTag === 'local' ? (
-              '(⌐■_■)'
-            ) : data.commitsBehind > 0 ? (
-              intl.formatMessage(messages.commitsbehind, {
-                commitsBehind: data.commitsBehind,
-              })
-            ) : data.commitsBehind === -1 ? (
-              intl.formatMessage(messages.outofdate)
-            ) : (
-              <code className="bg-transparent p-0">
-                {data.version.replace('develop-', '')}
-              </code>
-            )}
-          </span>
-        )}
+        <span className="font-bold">
+          {intl.formatMessage(messages.appname)}
+        </span>
+        <code className="truncate bg-transparent p-0">{version}</code>
       </div>
-      {data.updateAvailable && <ArrowUpCircleIcon className="h-6 w-6" />}
+      {data.updateAvailable && (
+        <ArrowUpCircleIcon
+          className="h-6 w-6"
+          aria-label={intl.formatMessage(messages.outofdate)}
+        />
+      )}
     </Link>
   );
 };

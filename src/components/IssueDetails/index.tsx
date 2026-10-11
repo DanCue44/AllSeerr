@@ -1,3 +1,5 @@
+import UserAvatar from '@app/components/AllSeerr/RequestList/UserAvatar';
+import ArrActions from '@app/components/ArrActions';
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
@@ -6,14 +8,27 @@ import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
 import IssueComment from '@app/components/IssueDetails/IssueComment';
 import IssueDescription from '@app/components/IssueDetails/IssueDescription';
-import { issueOptions } from '@app/components/IssueModal/constants';
+import { getIssueOption } from '@app/components/IssueModal/constants';
 import useDeepLinks from '@app/hooks/useDeepLinks';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
+import type { MediaTitle } from '@app/utils/mediaTitleHelpers';
+import {
+  getMediaApiUrl,
+  getMediaPagePath,
+  getMediaTitleBackdrop,
+  getMediaTitleCredit,
+  getMediaTitleName,
+  getMediaTitlePoster,
+  getMediaTitleYear,
+  getTrackLabel,
+  isMusicTitle,
+} from '@app/utils/mediaTitleHelpers';
 import { Transition } from '@headlessui/react';
 import {
   ChatBubbleOvalLeftEllipsisIcon,
@@ -23,11 +38,9 @@ import {
 } from '@heroicons/react/24/outline';
 import { ArrowPathIcon } from '@heroicons/react/24/solid';
 import { IssueStatus } from '@server/constants/issue';
-import { MediaType } from '@server/constants/media';
+import { MediaStatus, MediaType } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import type Issue from '@server/entity/Issue';
-import type { MovieDetails } from '@server/models/Movie';
-import type { TvDetails } from '@server/models/Tv';
 import axios from 'axios';
 import { Field, Form, Formik } from 'formik';
 import Link from 'next/link';
@@ -71,10 +84,16 @@ const messages = defineMessages('components.IssueDetails', {
   nocomments: 'No comments.',
   unknownissuetype: 'Unknown',
   commentplaceholder: 'Add a comment…',
+  problemtrack: 'Affected Track',
+  alltracks: 'All Tracks',
+  problemformat: 'Affected Format',
 });
 
-const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
-  return (movie as MovieDetails).title !== undefined;
+const serviceNames: Record<MediaType, string> = {
+  [MediaType.MOVIE]: 'Radarr',
+  [MediaType.TV]: 'Sonarr',
+  [MediaType.MUSIC]: 'Lidarr',
+  [MediaType.BOOK]: 'LazyLibrarian',
 };
 
 const IssueDetails = () => {
@@ -83,13 +102,13 @@ const IssueDetails = () => {
   const intl = useIntl();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const { user: currentUser, hasPermission } = useUser();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
   const { data: issueData, mutate: revalidateIssue } = useSWR<Issue>(
     `/api/v1/issue/${router.query.issueId}`
   );
-  const { data, error } = useSWR<MovieDetails | TvDetails>(
-    issueData?.media.tmdbId
-      ? `/api/v1/${issueData.media.mediaType}/${issueData.media.tmdbId}`
-      : null
+  const { data, error } = useSWR<MediaTitle>(
+    issueData ? getMediaApiUrl(issueData.media) : null
   );
 
   const { mediaUrl, mediaUrl4k } = useDeepLinks({
@@ -103,8 +122,9 @@ const IssueDetails = () => {
     message: Yup.string().required(),
   });
 
-  const issueOption = issueOptions.find(
-    (opt) => opt.issueType === issueData?.issueType
+  const issueOption = getIssueOption(
+    issueData?.issueType,
+    issueData?.media.mediaType
   );
   const settings = useSettings();
 
@@ -175,8 +195,54 @@ const IssueDetails = () => {
     }
   };
 
-  const title = isMovie(data) ? data.title : data.name;
-  const releaseYear = isMovie(data) ? data.releaseDate : data.firstAirDate;
+  const title = getMediaTitleName(data);
+  const releaseYear = getMediaTitleYear(data);
+  const credit = getMediaTitleCredit(data);
+  const poster = getMediaTitlePoster(data);
+  const backdrop = getMediaTitleBackdrop(data);
+  const arr =
+    issueData.media.mediaType === MediaType.BOOK &&
+    settings.currentSettings.bookService === 'chaptarr'
+      ? 'Chaptarr'
+      : (serviceNames[issueData.media.mediaType] ?? 'Sonarr');
+
+  // The affected track of an album, from the album's track list
+  let problemTrack: string | undefined;
+  if (isMusicTitle(data) && issueData.problemEpisode > 0) {
+    const disc = issueData.problemSeason || 1;
+    const multiDisc = new Set(data.tracks.map((track) => track.disc)).size > 1;
+    const track = data.tracks.find(
+      (t) => t.disc === disc && t.position === issueData.problemEpisode
+    );
+    problemTrack = track
+      ? getTrackLabel(track, multiDisc)
+      : `${multiDisc ? `${disc}-` : ''}${issueData.problemEpisode}`;
+  }
+
+  const extraFacts = (
+    <>
+      {issueData.media.mediaType === MediaType.MUSIC && (
+        <div className="media-fact">
+          <span>{intl.formatMessage(messages.problemtrack)}</span>
+          <span className="media-fact-value">
+            {problemTrack ?? intl.formatMessage(messages.alltracks)}
+          </span>
+        </div>
+      )}
+      {issueData.media.mediaType === MediaType.BOOK && issueData.bookFormat && (
+        <div className="media-fact">
+          <span>{intl.formatMessage(messages.problemformat)}</span>
+          <span className="media-fact-value">
+            {intl.formatMessage(
+              issueData.bookFormat === 'audiobook'
+                ? globalMessages.audiobook
+                : globalMessages.ebook
+            )}
+          </span>
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div
@@ -206,12 +272,12 @@ const IssueDetails = () => {
           {intl.formatMessage(messages.deleteissueconfirm)}
         </Modal>
       </Transition>
-      {data.backdropPath && (
+      {backdrop && (
         <div className="media-page-bg-image">
           <CachedImage
-            type="tmdb"
+            type={backdrop.type}
             alt=""
-            src={`https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${data.backdropPath}`}
+            src={backdrop.src}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             fill
             priority
@@ -220,25 +286,29 @@ const IssueDetails = () => {
             className="absolute inset-0"
             style={{
               backgroundImage:
-                'linear-gradient(180deg, rgba(17, 24, 39, 0.47) 0%, rgba(17, 24, 39, 1) 100%)',
+                'linear-gradient(180deg, rgb(var(--tw-gray-900, 17 24 39) / 0.47) 0%, rgb(var(--tw-gray-900, 17 24 39) / 1) 100%)',
             }}
           />
         </div>
       )}
       <div className="media-header">
-        <div className="media-poster">
+        <div
+          className={`media-poster ${
+            poster.square
+              ? ambient
+                ? 'aspect-square bg-as-tile'
+                : 'aspect-square bg-gray-800'
+              : ''
+          }`}
+        >
           <CachedImage
-            type="tmdb"
-            src={
-              data.posterPath
-                ? `https://image.tmdb.org/t/p/w600_and_h900_bestv2${data.posterPath}`
-                : '/images/seerr_poster_not_found.png'
-            }
+            type={poster.type}
+            src={poster.src}
             alt=""
             sizes="100vw"
             style={{ width: '100%', height: 'auto' }}
             width={600}
-            height={900}
+            height={poster.square ? 600 : 900}
             priority
           />
         </div>
@@ -257,17 +327,14 @@ const IssueDetails = () => {
           </div>
           <h1>
             <Link
-              href={`/${
-                issueData.media.mediaType === MediaType.MOVIE ? 'movie' : 'tv'
-              }/${data.id}`}
+              href={getMediaPagePath(issueData.media)}
               className="hover:underline"
             >
               {title}
             </Link>{' '}
-            {releaseYear && (
-              <span className="media-year">({releaseYear.slice(0, 4)})</span>
-            )}
+            {releaseYear && <span className="media-year">({releaseYear})</span>}
           </h1>
+          {credit && <span className="media-attributes">{credit}</span>}
           <span className="media-attributes">
             {intl.formatMessage(messages.openedby, {
               issueId: issueData.id,
@@ -280,14 +347,24 @@ const IssueDetails = () => {
                   }
                   className="group ml-1 inline-flex h-full items-center xl:ml-1.5"
                 >
-                  <CachedImage
-                    type="avatar"
-                    src={issueData.createdBy.avatar}
-                    alt=""
-                    className="mr-0.5 h-5 w-5 scale-100 transform-gpu rounded-full object-cover transition duration-300 group-hover:scale-105 xl:mr-1 xl:h-6 xl:w-6"
-                    width={20}
-                    height={20}
-                  />
+                  {ambient ? (
+                    <UserAvatar
+                      id={issueData.createdBy.id}
+                      name={issueData.createdBy.displayName}
+                      avatar={issueData.createdBy.avatar}
+                      size={22}
+                      className="mr-1"
+                    />
+                  ) : (
+                    <CachedImage
+                      type="avatar"
+                      src={issueData.createdBy.avatar}
+                      alt=""
+                      className="mr-0.5 h-5 w-5 scale-100 transform-gpu rounded-full object-cover transition duration-300 group-hover:scale-105 xl:mr-1 xl:h-6 xl:w-6"
+                      width={20}
+                      height={20}
+                    />
+                  )}
                   <span className="font-semibold text-gray-100 transition duration-300 group-hover:text-white group-hover:underline">
                     {issueData.createdBy.displayName}
                   </span>
@@ -356,6 +433,7 @@ const IssueDetails = () => {
                   )}
                 </>
               )}
+              {extraFacts}
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.lastupdated)}</span>
                 <span className="media-fact-value">
@@ -411,10 +489,7 @@ const IssueDetails = () => {
                     <ServerIcon />
                     <span>
                       {intl.formatMessage(messages.openinarr, {
-                        arr:
-                          issueData.media.mediaType === MediaType.MOVIE
-                            ? 'Radarr'
-                            : 'Sonarr',
+                        arr,
                       })}
                     </span>
                   </Button>
@@ -459,18 +534,68 @@ const IssueDetails = () => {
                     <ServerIcon />
                     <span>
                       {intl.formatMessage(messages.openin4karr, {
-                        arr:
-                          issueData.media.mediaType === MediaType.MOVIE
-                            ? 'Radarr'
-                            : 'Sonarr',
+                        arr,
                       })}
                     </span>
                   </Button>
                 )}
             </div>
           </div>
-          <div className="mt-6">
-            <div className="font-semibold text-gray-100 lg:text-xl">
+          {hasPermission(Permission.MANAGE_REQUESTS) && (
+            <div className="mt-6">
+              <ArrActions
+                layout="card"
+                mediaId={issueData.media.id}
+                mediaType={issueData.media.mediaType}
+                issueId={issueData.id}
+                allow4k={
+                  (issueData.media.mediaType === MediaType.MOVIE
+                    ? settings.currentSettings.movie4kEnabled
+                    : issueData.media.mediaType === MediaType.TV &&
+                      settings.currentSettings.series4kEnabled) &&
+                  (issueData.media.status4k !== MediaStatus.UNKNOWN ||
+                    !!issueData.media.externalServiceId4k)
+                }
+                initialTarget={
+                  issueData.media.mediaType === MediaType.TV
+                    ? {
+                        seasonNumber:
+                          issueData.problemSeason > 0
+                            ? issueData.problemSeason
+                            : undefined,
+                        episodeNumber:
+                          issueData.problemSeason > 0 &&
+                          issueData.problemEpisode > 0
+                            ? issueData.problemEpisode
+                            : undefined,
+                      }
+                    : issueData.media.mediaType === MediaType.BOOK
+                      ? {
+                          bookFormat:
+                            issueData.bookFormat === 'audiobook'
+                              ? 'audiobook'
+                              : 'ebook',
+                        }
+                      : undefined
+                }
+                onChange={() => revalidateIssue()}
+              />
+            </div>
+          )}
+          <div
+            className={
+              ambient
+                ? 'mt-6 rounded-[22px] bg-as-surface px-6 py-[22px]'
+                : 'mt-6'
+            }
+          >
+            <div
+              className={
+                ambient
+                  ? 'font-display text-lg font-medium text-as-ink lg:text-xl'
+                  : 'font-semibold text-gray-100 lg:text-xl'
+              }
+            >
               {intl.formatMessage(messages.comments)}
             </div>
             {otherComments.map((comment) => (
@@ -483,7 +608,11 @@ const IssueDetails = () => {
               />
             ))}
             {otherComments.length === 0 && (
-              <div className="mb-10 mt-4 text-gray-400">
+              <div
+                className={`mt-4 ${
+                  ambient ? 'mb-4 text-as-ink-faint' : 'mb-10 text-gray-400'
+                }`}
+              >
                 <span>{intl.formatMessage(messages.nocomments)}</span>
               </div>
             )}
@@ -504,7 +633,7 @@ const IssueDetails = () => {
                 {({ isValid, isSubmitting, values, handleSubmit }) => {
                   return (
                     <Form>
-                      <div className="my-6">
+                      <div className={ambient ? 'mb-0 mt-6' : 'my-6'}>
                         <Field
                           id="message"
                           name="message"
@@ -622,6 +751,7 @@ const IssueDetails = () => {
                 )}
               </>
             )}
+            {extraFacts}
             <div className="media-fact">
               <span>{intl.formatMessage(messages.lastupdated)}</span>
               <span className="media-fact-value">
@@ -676,10 +806,7 @@ const IssueDetails = () => {
                 <ServerIcon />
                 <span>
                   {intl.formatMessage(messages.openinarr, {
-                    arr:
-                      issueData.media.mediaType === MediaType.MOVIE
-                        ? 'Radarr'
-                        : 'Sonarr',
+                    arr,
                   })}
                 </span>
               </Button>
@@ -724,10 +851,7 @@ const IssueDetails = () => {
                   <ServerIcon />
                   <span>
                     {intl.formatMessage(messages.openin4karr, {
-                      arr:
-                        issueData.media.mediaType === MediaType.MOVIE
-                          ? 'Radarr'
-                          : 'Sonarr',
+                      arr,
                     })}
                   </span>
                 </Button>

@@ -3,8 +3,11 @@ import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
+import DeclineRequestModal from '@app/components/DeclineRequestModal';
 import RequestModal from '@app/components/RequestModal';
+import RequestSeasonBadges from '@app/components/RequestSeasonBadges';
 import StatusBadge from '@app/components/StatusBadge';
+import useBookLanguages from '@app/hooks/useBookLanguages';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
@@ -25,7 +28,13 @@ import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { RequestResultsResponse } from '@server/interfaces/api/requestInterfaces';
+import {
+  getRequestDownloadKey,
+  getRequestStatusKey,
+} from '@server/lib/bookRequests';
+import type { BookDetails } from '@server/models/Book';
 import type { MovieDetails } from '@server/models/Movie';
+import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
 import axios from 'axios';
 import Link from 'next/link';
@@ -36,6 +45,7 @@ import useSWR, { mutate } from 'swr';
 
 const messages = defineMessages('components.RequestList.RequestItem', {
   seasons: '{seasonCount, plural, one {Season} other {Seasons}}',
+  language: 'Language',
   failedretry: 'Something went wrong while retrying the request.',
   failedmodify: 'Something went wrong while modifying the request.',
   requested: 'Requested',
@@ -54,9 +64,41 @@ const messages = defineMessages('components.RequestList.RequestItem', {
   profileName: 'Profile',
 });
 
-const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
-  return (movie as MovieDetails).title !== undefined;
+type RequestTitle = MovieDetails | TvDetails | MusicDetails | BookDetails;
+
+const isMusic = (title: RequestTitle): title is MusicDetails => {
+  return (title as MusicDetails).mediaType === 'album';
 };
+
+const isBook = (title: RequestTitle): title is BookDetails => {
+  return (title as BookDetails).mediaType === 'book';
+};
+
+const isMovie = (movie: RequestTitle): movie is MovieDetails => {
+  return (
+    !isMusic(movie) &&
+    !isBook(movie) &&
+    (movie as MovieDetails).title !== undefined
+  );
+};
+
+const getTitleName = (title: RequestTitle): string =>
+  isMovie(title) || isMusic(title) || isBook(title) ? title.title : title.name;
+
+const getTitleYear = (title: RequestTitle): string | undefined =>
+  isBook(title)
+    ? title.firstPublishYear?.toString()
+    : (isMovie(title) || isMusic(title)
+        ? title.releaseDate
+        : title.firstAirDate
+      )?.slice(0, 4);
+
+const getMediaPath = (request: NonFunctionProperties<MediaRequest>): string =>
+  request.type === 'music'
+    ? `/music/${request.media.mbId}`
+    : request.type === 'book'
+      ? `/book/${request.media.olId}`
+      : `/${request.type}/${request.media.tmdbId}`;
 
 interface RequestItemErrorProps {
   requestData?: NonFunctionProperties<MediaRequest>;
@@ -84,9 +126,9 @@ const RequestItemError = ({
   });
 
   const requestDownloadStatus = getRequestDownloadStatus(
-    requestData?.media?.[
-      requestData?.is4k ? 'downloadStatus4k' : 'downloadStatus'
-    ],
+    requestData
+      ? requestData.media?.[getRequestDownloadKey(requestData)]
+      : undefined,
     requestData?.type === 'tv'
       ? (requestData?.seasons ?? []).map((season) => season.seasonNumber)
       : []
@@ -102,7 +144,11 @@ const RequestItemError = ({
                 requestData?.type
                   ? requestData?.type === 'movie'
                     ? globalMessages.movie
-                    : globalMessages.tvshow
+                    : requestData?.type === 'music'
+                      ? globalMessages.album
+                      : requestData?.type === 'book'
+                        ? globalMessages.book
+                        : globalMessages.tvshow
                   : globalMessages.request
               ),
             })}
@@ -146,11 +192,7 @@ const RequestItemError = ({
                   </Badge>
                 ) : (
                   <StatusBadge
-                    status={
-                      requestData.media[
-                        requestData.is4k ? 'status4k' : 'status'
-                      ]
-                    }
+                    status={requestData.media[getRequestStatusKey(requestData)]}
                     downloadItem={requestDownloadStatus}
                     title={intl.formatMessage(messages.unknowntitle)}
                     inProgress={requestDownloadStatus.length > 0}
@@ -303,14 +345,17 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
   const { addToast } = useToasts();
   const intl = useIntl();
   const { user, hasPermission } = useUser();
+  const { getLanguageName } = useBookLanguages();
   const [showEditModal, setShowEditModal] = useState(false);
   const url =
     request.type === 'movie'
       ? `/api/v1/movie/${request.media.tmdbId}`
-      : `/api/v1/tv/${request.media.tmdbId}`;
-  const { data: title, error } = useSWR<MovieDetails | TvDetails>(
-    inView ? url : null
-  );
+      : request.type === 'music'
+        ? `/api/v1/music/${request.media.mbId}`
+        : request.type === 'book'
+          ? `/api/v1/book/${request.media.olId}`
+          : `/api/v1/tv/${request.media.tmdbId}`;
+  const { data: title, error } = useSWR<RequestTitle>(inView ? url : null);
   const { data: requestData, mutate: revalidate } = useSWR<
     NonFunctionProperties<MediaRequest>
   >(`/api/v1/request/${request.id}`, {
@@ -319,6 +364,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
       {
         downloadStatus: request.media.downloadStatus,
         downloadStatus4k: request.media.downloadStatus4k,
+        downloadStatusAudio: request.media.downloadStatusAudio,
       },
       15000
     ),
@@ -329,10 +375,19 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
     'approve' | 'decline' | null
   >(null);
 
-  const modifyRequest = async (type: 'approve' | 'decline') => {
+  const [showDeclineModal, setShowDeclineModal] = useState(false);
+
+  const modifyRequest = async (
+    type: 'approve' | 'decline',
+    reason?: string
+  ) => {
     setUpdatingType(type);
     try {
-      await axios.post(`/api/v1/request/${request.id}/${type}`);
+      await axios.post(
+        `/api/v1/request/${request.id}/${type}`,
+        reason ? { reason } : undefined
+      );
+      setShowDeclineModal(false);
       revalidate();
       revalidateList();
       mutate('/api/v1/request/count');
@@ -415,7 +470,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
   }
 
   const requestDownloadStatus = getRequestDownloadStatus(
-    requestData.media[requestData.is4k ? 'downloadStatus4k' : 'downloadStatus'],
+    requestData.media[getRequestDownloadKey(requestData)],
     requestData.type === 'tv'
       ? requestData.seasons.map((season) => season.seasonNumber)
       : []
@@ -423,9 +478,18 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
 
   return (
     <>
+      <DeclineRequestModal
+        show={showDeclineModal}
+        title={getTitleName(title)}
+        isUpdating={updatingType === 'decline'}
+        onDecline={(reason) => modifyRequest('decline', reason)}
+        onCancel={() => setShowDeclineModal(false)}
+      />
       <RequestModal
         show={showEditModal}
         tmdbId={request.media.tmdbId}
+        mbId={request.media.mbId}
+        olId={request.media.olId}
         type={request.type}
         is4k={request.is4k}
         editRequest={request}
@@ -436,11 +500,21 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
         }}
       />
       <div className="relative flex w-full flex-col justify-between overflow-hidden rounded-xl bg-gray-800 py-2 text-gray-400 shadow-md ring-1 ring-gray-700 xl:h-28 xl:flex-row">
-        {title.backdropPath && (
+        {(isMusic(title)
+          ? title.artistBackdrop
+          : isBook(title)
+            ? undefined
+            : title.backdropPath) && (
           <div className="absolute inset-0 z-0 w-full bg-cover bg-center xl:w-2/3">
             <CachedImage
-              type="tmdb"
-              src={`https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${title.backdropPath}`}
+              type={isMusic(title) ? 'music' : 'tmdb'}
+              src={
+                isMusic(title)
+                  ? (title.artistBackdrop ?? '')
+                  : isBook(title)
+                    ? ''
+                    : `https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${title.backdropPath}`
+              }
               alt=""
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               fill
@@ -449,7 +523,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               className="absolute inset-0"
               style={{
                 backgroundImage:
-                  'linear-gradient(90deg, rgba(31, 41, 55, 0.47) 0%, rgba(31, 41, 55, 1) 100%)',
+                  'linear-gradient(90deg, rgb(var(--tw-gray-800, 31 41 55) / 0.47) 0%, rgb(var(--tw-gray-800, 31 41 55) / 1) 100%)',
               }}
             />
           </div>
@@ -457,64 +531,107 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
         <div className="relative flex w-full flex-col justify-between overflow-hidden sm:flex-row">
           <div className="relative z-10 flex w-full items-center overflow-hidden pl-4 pr-4 sm:pr-0 xl:w-7/12 2xl:w-2/3">
             <Link
-              href={
-                requestData.type === 'movie'
-                  ? `/movie/${requestData.media.tmdbId}`
-                  : `/tv/${requestData.media.tmdbId}`
-              }
-              className="relative h-auto w-12 flex-shrink-0 scale-100 transform-gpu overflow-hidden rounded-md transition duration-300 hover:scale-105"
+              href={getMediaPath(requestData)}
+              className={`relative h-auto w-12 flex-shrink-0 scale-100 transform-gpu overflow-hidden rounded-md transition duration-300 hover:scale-105 ${
+                isMusic(title) ? 'aspect-square bg-gray-700' : ''
+              }`}
             >
-              <CachedImage
-                type="tmdb"
-                src={
-                  title.posterPath
-                    ? `https://image.tmdb.org/t/p/w600_and_h900_bestv2${title.posterPath}`
-                    : '/images/seerr_poster_not_found.png'
-                }
-                alt=""
-                sizes="100vw"
-                style={{ width: '100%', height: 'auto', objectFit: 'cover' }}
-                width={600}
-                height={900}
-              />
+              {isMusic(title) ? (
+                title.posterPath && (
+                  <CachedImage
+                    type="music"
+                    src={title.posterPath}
+                    alt=""
+                    sizes="100vw"
+                    style={{
+                      width: '100%',
+                      height: 'auto',
+                      objectFit: 'cover',
+                    }}
+                    width={500}
+                    height={500}
+                  />
+                )
+              ) : isBook(title) ? (
+                <CachedImage
+                  type="book"
+                  src={title.posterPath ?? '/images/seerr_poster_not_found.png'}
+                  alt=""
+                  sizes="100vw"
+                  style={{ width: '100%', height: 'auto', objectFit: 'cover' }}
+                  width={600}
+                  height={900}
+                />
+              ) : (
+                <CachedImage
+                  type="tmdb"
+                  src={
+                    title.posterPath
+                      ? `https://image.tmdb.org/t/p/w600_and_h900_bestv2${title.posterPath}`
+                      : '/images/seerr_poster_not_found.png'
+                  }
+                  alt=""
+                  sizes="100vw"
+                  style={{ width: '100%', height: 'auto', objectFit: 'cover' }}
+                  width={600}
+                  height={900}
+                />
+              )}
             </Link>
             <div className="flex flex-col justify-center overflow-hidden pl-2 xl:pl-4">
               <div className="pt-0.5 text-xs font-medium text-white sm:pt-1">
-                {(isMovie(title)
-                  ? title.releaseDate
-                  : title.firstAirDate
-                )?.slice(0, 4)}
+                {getTitleYear(title)}
               </div>
               <Link
-                href={
-                  requestData.type === 'movie'
-                    ? `/movie/${requestData.media.tmdbId}`
-                    : `/tv/${requestData.media.tmdbId}`
-                }
+                href={getMediaPath(requestData)}
                 className="mr-2 min-w-0 truncate text-lg font-bold text-white hover:underline xl:text-xl"
               >
-                {isMovie(title) ? title.title : title.name}
+                {getTitleName(title)}
               </Link>
-              {!isMovie(title) && request.seasons.length > 0 && (
-                <div className="card-field">
-                  <span className="card-field-name">
-                    {intl.formatMessage(messages.seasons, {
-                      seasonCount: request.seasons.length,
-                    })}
+              {isBook(title) && (
+                <div className="flex items-center truncate text-sm text-gray-300">
+                  <span className="mr-2 truncate">
+                    {title.authors.map((author) => author.name).join(', ')}
                   </span>
-                  <div className="hide-scrollbar flex flex-nowrap overflow-x-scroll">
-                    {request.seasons.map((season) => (
-                      <span key={`season-${season.id}`} className="mr-2">
-                        <Badge>
-                          {season.seasonNumber === 0
-                            ? intl.formatMessage(globalMessages.specials)
-                            : season.seasonNumber}
-                        </Badge>
-                      </span>
-                    ))}
-                  </div>
+                  <Badge badgeType="primary">
+                    {intl.formatMessage(
+                      requestData.isAudiobook
+                        ? globalMessages.audiobook
+                        : globalMessages.ebook
+                    )}
+                  </Badge>
                 </div>
               )}
+              {isBook(title) && getLanguageName(requestData.language) && (
+                <div className="card-field">
+                  <span className="card-field-name">
+                    {intl.formatMessage(messages.language)}
+                  </span>
+                  <span className="flex truncate text-sm text-gray-300">
+                    {getLanguageName(requestData.language)}
+                  </span>
+                </div>
+              )}
+              {isMusic(title) && (
+                <div className="truncate text-sm text-gray-300">
+                  {title.artistCredit}
+                </div>
+              )}
+              {!isMovie(title) &&
+                !isMusic(title) &&
+                !isBook(title) &&
+                request.seasons.length > 0 && (
+                  <div className="card-field">
+                    <span className="card-field-name">
+                      {intl.formatMessage(messages.seasons, {
+                        seasonCount: request.seasons.length,
+                      })}
+                    </span>
+                    <div className="hide-scrollbar flex flex-nowrap overflow-x-scroll">
+                      <RequestSeasonBadges request={request} />
+                    </div>
+                  </div>
+                )}
             </div>
           </div>
           <div className="z-10 ml-4 mt-4 flex w-full flex-col justify-center gap-1 overflow-hidden pr-4 text-sm sm:ml-2 sm:mt-0 xl:flex-1 xl:pr-0">
@@ -523,35 +640,49 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                 {intl.formatMessage(globalMessages.status)}
               </span>
               {requestData.status === MediaRequestStatus.DECLINED ? (
-                <Badge badgeType="danger">
-                  {intl.formatMessage(globalMessages.declined)}
-                </Badge>
+                <>
+                  <Badge badgeType="danger">
+                    {intl.formatMessage(globalMessages.declined)}
+                  </Badge>
+                  {requestData.declineReason && (
+                    <span className="ml-2 truncate text-gray-300">
+                      {requestData.declineReason}
+                    </span>
+                  )}
+                </>
               ) : requestData.status === MediaRequestStatus.FAILED ? (
                 <Badge
                   badgeType="danger"
-                  href={`/${requestData.type}/${requestData.media.tmdbId}?manage=1`}
+                  href={`${getMediaPath(requestData)}?manage=1`}
                 >
                   {intl.formatMessage(globalMessages.failed)}
                 </Badge>
               ) : requestData.status === MediaRequestStatus.PENDING &&
-                requestData.media[requestData.is4k ? 'status4k' : 'status'] ===
+                requestData.media[getRequestStatusKey(requestData)] ===
                   MediaStatus.DELETED ? (
                 <Badge
                   badgeType="warning"
-                  href={`/${requestData.type}/${requestData.media.tmdbId}?manage=1`}
+                  href={`${getMediaPath(requestData)}?manage=1`}
                 >
                   {intl.formatMessage(globalMessages.pending)}
                 </Badge>
               ) : (
                 <StatusBadge
-                  status={
-                    requestData.media[requestData.is4k ? 'status4k' : 'status']
-                  }
+                  status={requestData.media[getRequestStatusKey(requestData)]}
                   downloadItem={requestDownloadStatus}
-                  title={isMovie(title) ? title.title : title.name}
+                  title={getTitleName(title)}
                   inProgress={requestDownloadStatus.length > 0}
                   is4k={requestData.is4k}
                   tmdbId={requestData.media.tmdbId}
+                  mbId={requestData.media.mbId}
+                  olId={requestData.media.olId}
+                  bookFormat={
+                    requestData.type === 'book'
+                      ? requestData.isAudiobook
+                        ? 'audiobook'
+                        : 'ebook'
+                      : undefined
+                  }
                   mediaType={requestData.type}
                   plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
                   serviceUrl={
@@ -720,7 +851,12 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                     <TrashIcon />
                     <span>
                       {intl.formatMessage(messages.removearr, {
-                        arr: request.type === 'movie' ? 'Radarr' : 'Sonarr',
+                        arr:
+                          request.type === 'movie'
+                            ? 'Radarr'
+                            : request.type === 'music'
+                              ? 'Lidarr'
+                              : 'Sonarr',
                       })}
                     </span>
                   </ConfirmButton>
@@ -745,7 +881,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                   <Button
                     className="w-full"
                     buttonType="danger"
-                    onClick={() => modifyRequest('decline')}
+                    onClick={() => setShowDeclineModal(true)}
                     disabled={updatingType !== null}
                   >
                     {updatingType === 'decline' ? <Spinner /> : <XMarkIcon />}

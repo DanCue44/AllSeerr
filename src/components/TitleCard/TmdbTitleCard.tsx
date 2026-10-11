@@ -1,4 +1,8 @@
 import TitleCard from '@app/components/TitleCard';
+import BookTitleCard from '@app/components/TitleCard/BookTitleCard';
+import MusicBrainzTitleCard from '@app/components/TitleCard/MusicBrainzTitleCard';
+import MusicTitleCard from '@app/components/TitleCard/MusicTitleCard';
+import OpenLibraryTitleCard from '@app/components/TitleCard/OpenLibraryTitleCard';
 import { Permission, useUser } from '@app/hooks/useUser';
 import type { MovieDetails } from '@server/models/Movie';
 import type { TvDetails } from '@server/models/Tv';
@@ -9,7 +13,15 @@ export interface TmdbTitleCardProps {
   id: number;
   tmdbId: number;
   tvdbId?: number;
-  type: 'movie' | 'tv';
+  // Music media lists pass their albums through here with their MBID
+  mbId?: string | null;
+  // and books with their OpenLibrary work id. Followed artists and authors
+  // come with their MusicBrainz artist or OpenLibrary author id, and the
+  // name and photo to show.
+  olId?: string | null;
+  type: 'movie' | 'tv' | 'music' | 'book' | 'artist' | 'author';
+  title?: string;
+  image?: string | null;
   canExpand?: boolean;
   isAddedToWatchlist?: boolean;
   mutateParent?: () => void;
@@ -19,7 +31,47 @@ const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
   return (movie as MovieDetails).title !== undefined;
 };
 
-const TmdbTitleCard = ({
+const TmdbTitleCard = (props: TmdbTitleCardProps) => {
+  if (props.type === 'music') {
+    return props.mbId ? (
+      <MusicBrainzTitleCard mbId={props.mbId} canExpand={props.canExpand} />
+    ) : null;
+  }
+
+  if (props.type === 'book') {
+    return props.olId ? (
+      <OpenLibraryTitleCard olId={props.olId} canExpand={props.canExpand} />
+    ) : null;
+  }
+
+  if (props.type === 'artist') {
+    return props.mbId ? (
+      <MusicTitleCard
+        id={props.mbId}
+        mediaType="artist"
+        title={props.title ?? ''}
+        image={props.image}
+        canExpand={props.canExpand}
+      />
+    ) : null;
+  }
+
+  if (props.type === 'author') {
+    return props.olId ? (
+      <BookTitleCard
+        id={props.olId}
+        mediaType="author"
+        title={props.title ?? ''}
+        image={props.image}
+        canExpand={props.canExpand}
+      />
+    ) : null;
+  }
+
+  return <TmdbMediaTitleCard {...props} type={props.type} />;
+};
+
+const TmdbMediaTitleCard = ({
   id,
   tmdbId,
   tvdbId,
@@ -27,7 +79,7 @@ const TmdbTitleCard = ({
   canExpand,
   isAddedToWatchlist = false,
   mutateParent,
-}: TmdbTitleCardProps) => {
+}: TmdbTitleCardProps & { type: 'movie' | 'tv' }) => {
   const { hasPermission } = useUser();
 
   const { ref, inView } = useInView({

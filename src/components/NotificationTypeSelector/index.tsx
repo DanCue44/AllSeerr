@@ -28,7 +28,12 @@ const messages = defineMessages('components.NotificationTypeSelector', {
   mediaavailableDescription:
     'Send notifications when media requests become available.',
   usermediaavailableDescription:
-    'Get notified when your media requests become available.',
+    'Get notified when your media requests or watchlisted titles become available, and about new releases from the artists and authors you follow.',
+  mediaepisodesavailable: 'New Episodes Available',
+  mediaepisodesavailableDescription:
+    'Send notifications when new episodes of requested seasons that are still airing become available.',
+  usermediaepisodesavailableDescription:
+    'Get notified when new episodes of seasons you requested become available.',
   mediafailed: 'Request Processing Failed',
   mediafailedDescription:
     'Send notifications when media requests fail to be added to Radarr or Sonarr.',
@@ -61,9 +66,37 @@ const messages = defineMessages('components.NotificationTypeSelector', {
     'Get notified when issues you reported are reopened.',
   adminissuereopenedDescription:
     'Get notified when issues are reopened by other users.',
+  removalrequested: 'Removal Pending Approval',
+  removalrequestedDescription:
+    'Send notifications when users ask for media to be removed.',
+  userremovalrequestedDescription:
+    'Get notified when other users ask for media to be removed.',
+  removalapproved: 'Removal Approved',
+  removalapprovedDescription:
+    'Send notifications when removal requests are approved.',
+  userremovalapprovedDescription:
+    'Get notified when your removal requests are approved.',
+  removaldeclined: 'Removal Declined',
+  removaldeclinedDescription:
+    'Send notifications when removal requests are declined.',
+  userremovaldeclinedDescription:
+    'Get notified when your removal requests are declined.',
+  seasonrolloverpending: 'Seasons Scheduled for Deletion',
+  seasonrolloverpendingDescription:
+    'Send notifications when a new season starts and older seasons of a current season request are about to be deleted.',
+  userseasonrolloverpendingDescription:
+    'Get notified when a new season starts and older seasons of a current season request are about to be deleted.',
   mediaautorequested: 'Request Automatically Submitted',
   mediaautorequestedDescription:
     'Get notified when new media requests are automatically submitted for items on Your Watchlist.',
+  scanfailure: 'Scan Failures',
+  scanfailureDescription:
+    'Send notifications when a library scan fails 3 times in a row, and when it works again.',
+  userscanfailureDescription:
+    'Get notified when a library scan fails 3 times in a row, and when it works again.',
+  newsletter: 'Recently Added Newsletter',
+  usernewsletterDescription:
+    'Receive a periodic email listing the media which recently became available.',
 });
 
 export const hasNotificationType = (
@@ -106,6 +139,13 @@ export enum Notification {
   ISSUE_RESOLVED = 1024,
   ISSUE_REOPENED = 2048,
   MEDIA_AUTO_REQUESTED = 4096,
+  MEDIA_EPISODES_AVAILABLE = 8192,
+  REMOVAL_PENDING = 16384,
+  REMOVAL_APPROVED = 32768,
+  REMOVAL_DECLINED = 65536,
+  NEWSLETTER = 131072,
+  SEASON_ROLLOVER_PENDING = 262144,
+  SCAN_FAILURE = 524288,
 }
 
 export const ALL_NOTIFICATIONS = Object.values(Notification)
@@ -128,6 +168,7 @@ interface NotificationTypeSelectorProps {
   currentTypes: number;
   onUpdate: (newTypes: number) => void;
   error?: string;
+  showNewsletter?: boolean;
 }
 
 const NotificationTypeSelector = ({
@@ -136,6 +177,7 @@ const NotificationTypeSelector = ({
   currentTypes,
   onUpdate,
   error,
+  showNewsletter = false,
 }: NotificationTypeSelectorProps) => {
   const intl = useIntl();
   const settings = useSettings();
@@ -275,6 +317,17 @@ const NotificationTypeSelector = ({
         hasNotifyUser: true,
       },
       {
+        id: 'media-episodes-available',
+        name: intl.formatMessage(messages.mediaepisodesavailable),
+        description: intl.formatMessage(
+          user
+            ? messages.usermediaepisodesavailableDescription
+            : messages.mediaepisodesavailableDescription
+        ),
+        value: Notification.MEDIA_EPISODES_AVAILABLE,
+        hasNotifyUser: true,
+      },
+      {
         id: 'media-failed',
         name: intl.formatMessage(messages.mediafailed),
         description: intl.formatMessage(
@@ -337,6 +390,52 @@ const NotificationTypeSelector = ({
           !user || hasPermission(Permission.MANAGE_ISSUES) ? false : true,
       },
       {
+        id: 'removal-requested',
+        name: intl.formatMessage(messages.removalrequested),
+        description: intl.formatMessage(
+          user
+            ? messages.userremovalrequestedDescription
+            : messages.removalrequestedDescription
+        ),
+        value: Notification.REMOVAL_PENDING,
+        hasNotifyUser: false,
+        hidden: user && !hasPermission(Permission.MANAGE_REQUESTS),
+      },
+      {
+        id: 'removal-approved',
+        name: intl.formatMessage(messages.removalapproved),
+        description: intl.formatMessage(
+          user
+            ? messages.userremovalapprovedDescription
+            : messages.removalapprovedDescription
+        ),
+        value: Notification.REMOVAL_APPROVED,
+        hasNotifyUser: true,
+      },
+      {
+        id: 'removal-declined',
+        name: intl.formatMessage(messages.removaldeclined),
+        description: intl.formatMessage(
+          user
+            ? messages.userremovaldeclinedDescription
+            : messages.removaldeclinedDescription
+        ),
+        value: Notification.REMOVAL_DECLINED,
+        hasNotifyUser: true,
+      },
+      {
+        id: 'season-rollover-pending',
+        name: intl.formatMessage(messages.seasonrolloverpending),
+        description: intl.formatMessage(
+          user
+            ? messages.userseasonrolloverpendingDescription
+            : messages.seasonrolloverpendingDescription
+        ),
+        value: Notification.SEASON_ROLLOVER_PENDING,
+        hasNotifyUser: false,
+        hidden: user && !hasPermission(Permission.MANAGE_REQUESTS),
+      },
+      {
         id: 'issue-reopened',
         name: intl.formatMessage(messages.issuereopened),
         description: intl.formatMessage(
@@ -355,6 +454,26 @@ const NotificationTypeSelector = ({
         hasNotifyUser:
           !user || hasPermission(Permission.MANAGE_ISSUES) ? false : true,
       },
+      {
+        id: 'scan-failure',
+        name: intl.formatMessage(messages.scanfailure),
+        description: intl.formatMessage(
+          user
+            ? messages.userscanfailureDescription
+            : messages.scanfailureDescription
+        ),
+        value: Notification.SCAN_FAILURE,
+        hasNotifyUser: false,
+        hidden: user && !hasPermission(Permission.ADMIN),
+      },
+      {
+        id: 'newsletter',
+        name: intl.formatMessage(messages.newsletter),
+        description: intl.formatMessage(messages.usernewsletterDescription),
+        value: Notification.NEWSLETTER,
+        hidden: !user || !showNewsletter,
+        hasNotifyUser: true,
+      },
     ];
 
     const filteredTypes = types.filter(
@@ -369,7 +488,15 @@ const NotificationTypeSelector = ({
     return user
       ? sortBy(filteredTypes, 'hasNotifyUser', 'DESC')
       : filteredTypes;
-  }, [user, hasPermission, settings, intl, allowedTypes, enabledTypes]);
+  }, [
+    user,
+    hasPermission,
+    settings,
+    intl,
+    allowedTypes,
+    enabledTypes,
+    showNewsletter,
+  ]);
 
   if (!availableTypes.length) {
     return null;

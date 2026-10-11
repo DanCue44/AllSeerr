@@ -19,6 +19,7 @@ const messages = defineMessages('components.UserProfile.UserSettings', {
   menuGeneralSettings: 'General',
   menuChangePass: 'Password',
   menuLinkedAccounts: 'Linked Accounts',
+  menuApiKey: 'API Key',
   menuNotifications: 'Notifications',
   menuPermissions: 'Permissions',
   unauthorizedDescription:
@@ -68,6 +69,11 @@ const UserSettings = ({ children }: UserSettingsProps) => {
       text: intl.formatMessage(messages.menuLinkedAccounts),
       route: '/settings/linked-accounts',
       regex: /\/settings\/linked-accounts/,
+    },
+    {
+      text: intl.formatMessage(messages.menuApiKey),
+      route: '/settings/api-key',
+      regex: /\/settings\/api-key/,
     },
     {
       text: intl.formatMessage(messages.menuNotifications),

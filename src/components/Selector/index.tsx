@@ -374,6 +374,7 @@ type WatchProviderSelectorProps = {
   region?: string;
   activeProviders?: number[];
   onChange: (region: string, value: number[]) => void;
+  hideRegion?: boolean;
 };
 
 export const WatchProviderSelector = ({
@@ -381,6 +382,7 @@ export const WatchProviderSelector = ({
   onChange,
   region,
   activeProviders,
+  hideRegion = false,
 }: WatchProviderSelectorProps) => {
   const intl = useIntl();
   const { currentSettings } = useSettings();
@@ -400,6 +402,13 @@ export const WatchProviderSelector = ({
       type === 'movie' ? 'movies' : 'tv'
     }?watchRegion=${watchRegion}`
   );
+
+  // A fixed region follows the parent, since there is no selector to change it
+  useEffect(() => {
+    if (hideRegion && region && region !== watchRegion) {
+      setWatchRegion(region);
+    }
+  }, [hideRegion, region, watchRegion]);
 
   useEffect(() => {
     onChange(watchRegion, activeProvider);
@@ -428,18 +437,20 @@ export const WatchProviderSelector = ({
 
   return (
     <>
-      <RegionSelector
-        value={watchRegion}
-        name="watchRegion"
-        onChange={(_name, value) => {
-          if (value !== watchRegion) {
-            setActiveProvider([]);
-          }
-          setWatchRegion(value);
-        }}
-        disableAll
-        watchProviders
-      />
+      {!hideRegion && (
+        <RegionSelector
+          value={watchRegion}
+          name="watchRegion"
+          onChange={(_name, value) => {
+            if (value !== watchRegion) {
+              setActiveProvider([]);
+            }
+            setWatchRegion(value);
+          }}
+          disableAll
+          watchProviders
+        />
+      )}
       {isLoading ? (
         <SmallLoadingSpinner />
       ) : (

@@ -1,0 +1,38 @@
+[
+  {
+    "artist_mbid": "5b11f4ce-a62d-471e-81fc-a69a8278c7da",
+    "name": "Nirvana",
+    "comment": "1980s–1990s US grunge band",
+    "type": "Group",
+    "gender": null,
+    "score": 11156,
+    "reference_mbid": "a74b1b7f-71a5-4011-9441-d0b5e4122711"
+  },
+  {
+    "artist_mbid": "8bfac288-ccc5-448d-9573-c33ea2aa5c30",
+    "name": "Red Hot Chili Peppers",
+    "comment": "",
+    "type": "Group",
+    "gender": null,
+    "score": 10587,
+    "reference_mbid": "a74b1b7f-71a5-4011-9441-d0b5e4122711"
+  },
+  {
+    "artist_mbid": "9c9f1380-2516-4fc9-a3e6-f9f61941d090",
+    "name": "Muse",
+    "comment": "UK rock band",
+    "type": "Group",
+    "gender": null,
+    "score": 10286,
+    "reference_mbid": "a74b1b7f-71a5-4011-9441-d0b5e4122711"
+  },
+  {
+    "artist_mbid": "cc197bad-dc9c-440d-a5b5-d52ba2e14234",
+    "name": "Coldplay",
+    "comment": "",
+    "type": "Group",
+    "gender": null,
+    "score": 9919,
+    "reference_mbid": "a74b1b7f-71a5-4011-9441-d0b5e4122711"
+  }
+]

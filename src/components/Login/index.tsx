@@ -1,6 +1,13 @@
 import EmbyLogo from '@app/assets/services/emby-icon-only.svg';
 import JellyfinLogo from '@app/assets/services/jellyfin-icon.svg';
 import PlexLogo from '@app/assets/services/plex.svg';
+import {
+  AuthBackdrop,
+  authCard,
+  authHeading,
+  authPage,
+} from '@app/components/AllSeerr/Auth';
+import AppLogo from '@app/components/Common/AppLogo';
 import Button from '@app/components/Common/Button';
 import ImageFader from '@app/components/Common/ImageFader';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -8,6 +15,8 @@ import LanguagePicker from '@app/components/Layout/LanguagePicker';
 import JellyfinLogin from '@app/components/Login/JellyfinLogin';
 import LocalLogin from '@app/components/Login/LocalLogin';
 import PlexLoginButton from '@app/components/Login/PlexLoginButton';
+import useBranding from '@app/hooks/useBranding';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import useSettings from '@app/hooks/useSettings';
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
@@ -16,7 +25,6 @@ import { XCircleIcon } from '@heroicons/react/24/solid';
 import { MediaServerType } from '@server/constants/server';
 import axios from 'axios';
 import { useRouter } from 'next/dist/client/router';
-import Image from 'next/image';
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useIntl } from 'react-intl';
 import { CSSTransition, SwitchTransition } from 'react-transition-group';
@@ -35,7 +43,10 @@ const Login = () => {
   const intl = useIntl();
   const router = useRouter();
   const settings = useSettings();
+  const { hasCustomLogo, logoUrl } = useBranding();
   const { user, revalidate } = useUser();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
 
   const [error, setError] = useState('');
   const [isProcessing, setProcessing] = useState(false);
@@ -124,12 +135,12 @@ const Login = () => {
           <Button
             key="seerr"
             data-testid="seerr-login-button"
-            className="flex-1 bg-transparent"
+            className={`flex-1 bg-transparent ${ambient ? 'h-[50px]' : ''}`}
             onClick={() => setMediaServerLogin(false)}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/os_icon.svg"
+              src={hasCustomLogo ? logoUrl : '/allseerr-logo.png'}
               alt={settings.currentSettings.applicationTitle}
               className="mr-2 h-5"
             />
@@ -139,7 +150,7 @@ const Login = () => {
           <Button
             key="mediaserver"
             data-testid="mediaserver-login-button"
-            className="flex-1 bg-transparent"
+            className={`flex-1 bg-transparent ${ambient ? 'h-[50px]' : ''}`}
             onClick={() => setMediaServerLogin(true)}
           >
             <MediaServerLogo />
@@ -149,28 +160,39 @@ const Login = () => {
       )),
   ].filter((o): o is JSX.Element => !!o);
 
+  const backdropImages =
+    backdrops?.map(
+      (backdrop) => `https://image.tmdb.org/t/p/original${backdrop}`
+    ) ?? [];
+
   return (
-    <div className="relative flex min-h-screen flex-col bg-gray-900 py-14">
+    <div
+      className={
+        ambient
+          ? authPage
+          : 'relative flex min-h-screen flex-col bg-gray-900 py-14'
+      }
+    >
       <PageTitle title={intl.formatMessage(messages.signin)} />
-      <ImageFader
-        backgroundImages={
-          backdrops?.map(
-            (backdrop) => `https://image.tmdb.org/t/p/original${backdrop}`
-          ) ?? []
-        }
-      />
+      {ambient ? (
+        <AuthBackdrop images={backdropImages} />
+      ) : (
+        <ImageFader backgroundImages={backdropImages} />
+      )}
       <div className="absolute right-4 top-4 z-50">
         <LanguagePicker />
       </div>
       <div className="relative z-40 mt-10 flex flex-col items-center px-4 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="relative h-48 w-full max-w-full">
-          <Image src="/logo_stacked.svg" alt="Logo" fill />
+        <div
+          className={`relative w-full max-w-full ${ambient ? 'h-40' : 'h-48'}`}
+        >
+          <AppLogo variant="stacked" />
         </div>
       </div>
       <div className="relative z-50 mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div
-          className="bg-gray-800/50 shadow sm:rounded-lg"
-          style={{ backdropFilter: 'blur(5px)' }}
+          className={ambient ? authCard : 'bg-gray-800/50 shadow sm:rounded-lg'}
+          style={ambient ? undefined : { backdropFilter: 'blur(5px)' }}
         >
           <>
             <Transition
@@ -183,20 +205,34 @@ const Login = () => {
               leaveFrom="opacity-100"
               leaveTo="opacity-0"
             >
-              <div className="mb-4 rounded-md bg-red-600 p-4">
+              <div
+                className={
+                  ambient
+                    ? 'mx-6 mb-0 mt-6 rounded-[18px] bg-as-bad-bg p-4'
+                    : 'mb-4 rounded-md bg-red-600 p-4'
+                }
+              >
                 <div className="flex">
                   <div className="flex-shrink-0">
-                    <XCircleIcon className="h-5 w-5 text-red-300" />
+                    <XCircleIcon
+                      className={`h-5 w-5 ${
+                        ambient ? 'text-as-bad' : 'text-red-300'
+                      }`}
+                    />
                   </div>
                   <div className="ml-3">
-                    <h3 className="text-sm font-medium text-red-300">
+                    <h3
+                      className={`text-sm font-medium ${
+                        ambient ? 'text-as-bad' : 'text-red-300'
+                      }`}
+                    >
                       {error}
                     </h3>
                   </div>
                 </div>
               </div>
             </Transition>
-            <div className="px-10 py-8">
+            <div className={ambient ? 'px-6 py-8 sm:px-10' : 'px-10 py-8'}>
               <SwitchTransition mode="out-in">
                 <CSSTransition
                   key={mediaServerLogin ? 'ms' : 'local'}
@@ -234,14 +270,32 @@ const Login = () => {
               {additionalLoginOptions.length > 0 &&
                 (loginFormVisible ? (
                   <div className="flex items-center py-5">
-                    <div className="flex-grow border-t border-gray-600" />
-                    <span className="mx-2 flex-shrink text-sm text-gray-400">
+                    <div
+                      className={`flex-grow border-t ${
+                        ambient ? 'border-as-line' : 'border-gray-600'
+                      }`}
+                    />
+                    <span
+                      className={`mx-2 flex-shrink text-sm ${
+                        ambient ? 'text-as-ink-faint' : 'text-gray-400'
+                      }`}
+                    >
                       {intl.formatMessage(messages.orsigninwith)}
                     </span>
-                    <div className="flex-grow border-t border-gray-600" />
+                    <div
+                      className={`flex-grow border-t ${
+                        ambient ? 'border-as-line' : 'border-gray-600'
+                      }`}
+                    />
                   </div>
                 ) : (
-                  <h2 className="mb-6 text-center text-lg font-bold text-neutral-200">
+                  <h2
+                    className={`mb-6 text-center ${
+                      ambient
+                        ? authHeading
+                        : 'text-lg font-bold text-neutral-200'
+                    }`}
+                  >
                     {intl.formatMessage(messages.signinheader)}
                   </h2>
                 ))}

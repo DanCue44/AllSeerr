@@ -5,7 +5,11 @@ import SettingsBadge from '@app/components/Settings/SettingsBadge';
 import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
-import { ArrowDownOnSquareIcon, BeakerIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowDownOnSquareIcon,
+  BeakerIcon,
+  EnvelopeIcon,
+} from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { Field, Form, Formik } from 'formik';
 import { useState } from 'react';
@@ -19,9 +23,9 @@ const messages = defineMessages('components.Settings.Notifications', {
   validationSmtpPortRequired: 'You must provide a valid port number',
   agentenabled: 'Enable Agent',
   embedPoster: 'Embed Poster',
-  usePublicLogo: 'Use public Seerr logo instead of instance logo',
+  usePublicLogo: 'Use public AllSeerr logo instead of instance logo',
   usePublicLogoTip:
-    'If your Seerr instance is not publicly accessible, enable this option so email clients outside your network can display the image. The image will be pulled from the public GitHub repository.',
+    'If your AllSeerr instance is not publicly accessible, enable this option so email clients outside your network can display the AllSeerr logo. The image will be pulled from the public AllSeerr GitHub repository.',
   userEmailRequired: 'Require user email',
   emailsender: 'Sender Address',
   smtpHost: 'SMTP Host',
@@ -51,6 +55,18 @@ const messages = defineMessages('components.Settings.Notifications', {
   pgpPasswordTip:
     'Sign encrypted email messages using <OpenPgpLink>OpenPGP</OpenPgpLink>',
   validationPgpPassword: 'You must provide a PGP password',
+  newsletterEnabled: 'Enable Recently Added Newsletter',
+  newsletterEnabledTip:
+    'Periodically email users a list of the media which became available since the last newsletter',
+  newsletterDay: 'Newsletter Day',
+  newsletterHour: 'Newsletter Time',
+  newsletterInclude4k: 'Include 4K Media in Newsletter',
+  sendTestNewsletter: 'Send Test Newsletter',
+  sendTestNewsletterTip:
+    'The test newsletter is sent to your email address using the saved settings',
+  toastNewsletterTestSending: 'Sending test newsletter…',
+  toastNewsletterTestSuccess: 'Test newsletter sent!',
+  toastNewsletterTestFailed: 'Test newsletter failed to send.',
 });
 
 export function OpenPgpLink(msg: React.ReactNode) {
@@ -65,6 +81,7 @@ const NotificationsEmail = () => {
   const intl = useIntl();
   const { addToast, removeToast } = useToasts();
   const [isTesting, setIsTesting] = useState(false);
+  const [isTestingNewsletter, setIsTestingNewsletter] = useState(false);
   const {
     data,
     error,
@@ -155,6 +172,10 @@ const NotificationsEmail = () => {
         senderName: data.options.senderName,
         pgpPrivateKey: data.options.pgpPrivateKey,
         pgpPassword: data.options.pgpPassword,
+        newsletterEnabled: data.options.newsletterEnabled ?? false,
+        newsletterDay: data.options.newsletterDay ?? 0,
+        newsletterHour: data.options.newsletterHour ?? 9,
+        newsletterInclude4k: data.options.newsletterInclude4k ?? false,
       }}
       validationSchema={NotificationsEmailSchema}
       onSubmit={async (values) => {
@@ -177,6 +198,10 @@ const NotificationsEmail = () => {
               senderName: values.senderName,
               pgpPrivateKey: values.pgpPrivateKey,
               pgpPassword: values.pgpPassword,
+              newsletterEnabled: values.newsletterEnabled,
+              newsletterDay: Number(values.newsletterDay),
+              newsletterHour: Number(values.newsletterHour),
+              newsletterInclude4k: values.newsletterInclude4k,
             },
           });
           mutate('/api/v1/settings/public');
@@ -247,6 +272,44 @@ const NotificationsEmail = () => {
             });
           } finally {
             setIsTesting(false);
+          }
+        };
+
+        const testNewsletter = async () => {
+          setIsTestingNewsletter(true);
+          let toastId: string | undefined;
+          try {
+            addToast(
+              intl.formatMessage(messages.toastNewsletterTestSending),
+              {
+                autoDismiss: false,
+                appearance: 'info',
+              },
+              (id) => {
+                toastId = id;
+              }
+            );
+            await axios.post(
+              '/api/v1/settings/notifications/email/newsletter/test'
+            );
+
+            if (toastId) {
+              removeToast(toastId);
+            }
+            addToast(intl.formatMessage(messages.toastNewsletterTestSuccess), {
+              autoDismiss: true,
+              appearance: 'success',
+            });
+          } catch {
+            if (toastId) {
+              removeToast(toastId);
+            }
+            addToast(intl.formatMessage(messages.toastNewsletterTestFailed), {
+              autoDismiss: true,
+              appearance: 'error',
+            });
+          } finally {
+            setIsTestingNewsletter(false);
           }
         };
 
@@ -516,6 +579,100 @@ const NotificationsEmail = () => {
                   typeof errors.pgpPassword === 'string' && (
                     <div className="error">{errors.pgpPassword}</div>
                   )}
+              </div>
+            </div>
+            <div className="form-row">
+              <label htmlFor="newsletterEnabled" className="checkbox-label">
+                {intl.formatMessage(messages.newsletterEnabled)}
+                <span className="label-tip">
+                  {intl.formatMessage(messages.newsletterEnabledTip)}
+                </span>
+              </label>
+              <div className="form-input-area">
+                <Field
+                  type="checkbox"
+                  id="newsletterEnabled"
+                  name="newsletterEnabled"
+                />
+              </div>
+            </div>
+            <div className="form-row">
+              <label htmlFor="newsletterDay" className="text-label">
+                {intl.formatMessage(messages.newsletterDay)}
+              </label>
+              <div className="form-input-area">
+                <div className="form-input-field">
+                  <Field as="select" id="newsletterDay" name="newsletterDay">
+                    {[0, 1, 2, 3, 4, 5, 6].map((day) => (
+                      <option key={`newsletter-day-${day}`} value={day}>
+                        {intl.formatDate(new Date(2024, 0, 7 + day), {
+                          weekday: 'long',
+                        })}
+                      </option>
+                    ))}
+                  </Field>
+                </div>
+              </div>
+            </div>
+            <div className="form-row">
+              <label htmlFor="newsletterHour" className="text-label">
+                {intl.formatMessage(messages.newsletterHour)}
+              </label>
+              <div className="form-input-area">
+                <div className="form-input-field">
+                  <Field as="select" id="newsletterHour" name="newsletterHour">
+                    {[...Array(24).keys()].map((hour) => (
+                      <option key={`newsletter-hour-${hour}`} value={hour}>
+                        {intl.formatTime(new Date(2024, 0, 1, hour), {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}
+                      </option>
+                    ))}
+                  </Field>
+                </div>
+              </div>
+            </div>
+            <div className="form-row">
+              <label htmlFor="newsletterInclude4k" className="checkbox-label">
+                {intl.formatMessage(messages.newsletterInclude4k)}
+              </label>
+              <div className="form-input-area">
+                <Field
+                  type="checkbox"
+                  id="newsletterInclude4k"
+                  name="newsletterInclude4k"
+                />
+              </div>
+            </div>
+            <div className="form-row">
+              <span className="text-label">
+                {intl.formatMessage(messages.sendTestNewsletter)}
+                <span className="label-tip">
+                  {intl.formatMessage(messages.sendTestNewsletterTip)}
+                </span>
+              </span>
+              <div className="form-input-area">
+                <Button
+                  buttonType="warning"
+                  disabled={
+                    !data.enabled ||
+                    isSubmitting ||
+                    isTesting ||
+                    isTestingNewsletter
+                  }
+                  onClick={(e) => {
+                    e.preventDefault();
+                    testNewsletter();
+                  }}
+                >
+                  <EnvelopeIcon />
+                  <span>
+                    {isTestingNewsletter
+                      ? intl.formatMessage(globalMessages.testing)
+                      : intl.formatMessage(messages.sendTestNewsletter)}
+                  </span>
+                </Button>
               </div>
             </div>
             <div className="actions">

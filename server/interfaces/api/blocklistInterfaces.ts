@@ -3,7 +3,9 @@ import type { PaginatedResponse } from '@server/interfaces/api/common';
 
 export interface BlocklistItem {
   tmdbId: number;
-  mediaType: 'movie' | 'tv';
+  mbId?: string | null;
+  olId?: string | null;
+  mediaType: 'movie' | 'tv' | 'music' | 'book';
   title?: string;
   createdAt?: Date;
   user?: User;

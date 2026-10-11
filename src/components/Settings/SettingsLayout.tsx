@@ -1,6 +1,7 @@
 import PageTitle from '@app/components/Common/PageTitle';
 import type { SettingsRoute } from '@app/components/Common/SettingsTabs';
 import SettingsTabs from '@app/components/Common/SettingsTabs';
+import ScanHealthAlert from '@app/components/ScanHealthAlert';
 import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -93,7 +94,10 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
       <div className="mt-6">
         <SettingsTabs settingsRoutes={settingsRoutes} />
       </div>
-      <div className="mt-10 text-white">{children}</div>
+      <div className="mt-10 text-white">
+        <ScanHealthAlert />
+        {children}
+      </div>
     </>
   );
   function getAvailableMediaServerName() {

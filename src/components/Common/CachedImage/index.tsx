@@ -6,7 +6,7 @@ const imageLoader: ImageLoader = ({ src }) => src;
 
 export type CachedImageProps = ImageProps & {
   src: string;
-  type: 'tmdb' | 'avatar' | 'tvdb';
+  type: 'tmdb' | 'avatar' | 'tvdb' | 'music' | 'book';
 };
 
 /**
@@ -32,6 +32,24 @@ const CachedImage = ({ src, type, ...props }: CachedImageProps) => {
             '/imageproxy/tvdb/'
           )
         : src;
+  } else if (type === 'music') {
+    // Cover Art Archive covers and TheAudioDB artist images. Always cached:
+    // Cover Art Archive redirects through Internet Archive storage, which
+    // takes a second or more per image
+    imageUrl = !src.startsWith('/')
+      ? src
+          .replace(/^https:\/\/archive\.org\//, '/imageproxy/caa/')
+          .replace(/^https:\/\/r2\.theaudiodb\.com\//, '/imageproxy/tadb/')
+      : src;
+  } else if (type === 'book') {
+    // OpenLibrary covers and author photos. Always cached, for the same
+    // Internet Archive redirects as album covers
+    imageUrl = !src.startsWith('/')
+      ? src.replace(
+          /^https:\/\/covers\.openlibrary\.org\//,
+          '/imageproxy/openlibrary/'
+        )
+      : src;
   } else if (type === 'avatar') {
     // jellyfin avatar (if any)
     imageUrl = src;

@@ -1,0 +1,41 @@
+---
+title: Update Channels
+description: Choose between the stable and testing images.
+sidebar_position: 4
+---
+# Update Channels
+
+The AllSeerr image `ghcr.io/dancue44/allseerr` has three channels, picked with the image tag:
+
+| Tag | Channel | For |
+|---|---|---|
+| `latest` | The newest release (also tagged with its version, for example `3.5.0.2`) | Most users. Built for amd64 and arm64. |
+| `main` | Every change merged to the `main` branch, between releases | Users who want fixes as soon as they are merged. amd64 only. |
+| `develop` | Testing builds from the `develop` branch | Users who want new features early and are happy to report problems. Expect rough edges. amd64 only. |
+
+Changes are tried on `develop`, merged to `main`, and released from `main`.
+
+To switch, change the tag in your `docker run` command, Compose file or Unraid template, pull the image and recreate the container. For example, with Compose:
+
+```yaml
+services:
+  allseerr:
+    image: ghcr.io/dancue44/allseerr:develop
+```
+
+```bash
+docker compose pull allseerr
+docker compose up -d
+```
+
+:::warning
+Back up your config folder before switching channels (see [Backups](/using-seerr/backups)). Moving from `develop` or `main` back to `latest` is safe only when `latest` has caught up with the database migrations the newer channel already ran. If in doubt, stay on that channel until the next release, or restore the backup you made before switching.
+:::
+
+## Version numbers
+
+An AllSeerr version is the Seerr release it is based on plus an AllSeerr revision. For example, `3.5.0.2` is the second AllSeerr release based on Seerr 3.5.0. The version and the exact build (commit) are shown in **Settings &rarr; About**.
+
+## Version check
+
+With **Version Check** enabled in **Settings &rarr; General**, AllSeerr asks GitHub for new releases and tells admins when an update is available. Turn it off if you do not want AllSeerr to contact GitHub.

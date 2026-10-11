@@ -35,7 +35,7 @@ You cannot configure both the **Authorization Header** field and a custom `Autho
 
 ### JSON Payload
 
-Customize the JSON payload to suit your needs. Seerr provides several [template variables](#template-variables) for use in the payload, which will be replaced with the relevant data when the notifications are triggered.
+Customize the JSON payload to suit your needs. AllSeerr provides several [template variables](#template-variables) for use in the payload, which will be replaced with the relevant data when the notifications are triggered.
 
 ## Template Variables
 
@@ -97,7 +97,7 @@ These following special variables are only included in media-related notificatio
 
 | Variable                    | Value                                                                                                          |
 | ----------------------------| -------------------------------------------------------------------------------------------------------------- |
-| `{{media_type}}`            | The media type (`movie` or `tv`)                                                                               |
+| `{{media_type}}`            | The media type (`movie`, `tv`, `music` or `book`)                                                              |
 | `{{media_imdbid}}`          | The media's IMDb ID                                                                                            |
 | `{{media_tmdbid}}`          | The media's TMDB ID                                                                                            |
 | `{{media_tvdbid}}`          | The media's TheTVDB ID                                                                                         |
@@ -106,6 +106,9 @@ These following special variables are only included in media-related notificatio
 | `{{media_jellyfinMediaId}}` | The media's Jellyfin Media ID                                                                                  |
 | `{{media_plexRatingKey}}`   | The media's Plex ratingKey, if available (for standard library match)                                          |
 | `{{media_plexRatingKey4k}}` | The media's Plex ratingKey for 4K match, if available                                                          |
+| `{{media_mbid}}`            | The album's MusicBrainz release group ID (music only)                                                          |
+| `{{media_olid}}`            | The book's OpenLibrary work ID, such as `OL45804W` (books only)                                                |
+| `{{media_statusAudio}}`     | The book's audiobook availability status (books only; `{{media_status}}` is the ebook)                         |
 
 #### Request
 
@@ -116,6 +119,7 @@ The following special variables are only included in request-related notificatio
 | Variable                                  | Value                                                                          |
 | ----------------------------------------- | ------------------------------------------------------------------------------ |
 | `{{request_id}}`                          | The request ID                                                                 |
+| `{{request_format}}`                      | For book requests, the format (`ebook`, `audiobook` or `both`)                 |
 | `{{requestedBy_username}}`                | The requesting user's username                                                 |
 | `{{requestedBy_email}}`                   | The requesting user's email address                                            |
 | `{{requestedBy_avatar}}`                  | The requesting user's avatar URL                                               |

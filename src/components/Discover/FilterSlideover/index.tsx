@@ -12,6 +12,7 @@ import {
   USCertificationSelector,
   WatchProviderSelector,
 } from '@app/components/Selector';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import useSettings from '@app/hooks/useSettings';
 import {
   useBatchUpdateQueryParams,
@@ -64,6 +65,12 @@ const FilterSlideover = ({
   const { currentSettings } = useSettings();
   const updateQueryParams = useUpdateQueryParams({});
   const batchUpdateQueryParams = useBatchUpdateQueryParams({});
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
+  // Section labels: small caps headings in the Ambient panel
+  const labelClass = ambient
+    ? 'text-xs font-bold uppercase tracking-wider text-as-ink-faint'
+    : 'text-lg font-semibold';
 
   const dateGte =
     type === 'movie' ? 'primaryReleaseDateGte' : 'firstAirDateGte';
@@ -81,7 +88,7 @@ const FilterSlideover = ({
     >
       <div className="flex flex-col space-y-4">
         <div>
-          <div className="mb-2 text-lg font-semibold">
+          <div className={`mb-2 ${labelClass}`}>
             {intl.formatMessage(
               type === 'movie' ? messages.releaseDate : messages.firstAirDate
             )}
@@ -133,7 +140,7 @@ const FilterSlideover = ({
         </div>
         {type === 'movie' && (
           <>
-            <span className="text-lg font-semibold">
+            <span className={labelClass}>
               {intl.formatMessage(messages.studio)}
             </span>
             <CompanySelector
@@ -144,7 +151,7 @@ const FilterSlideover = ({
             />
           </>
         )}
-        <span className="text-lg font-semibold">
+        <span className={labelClass}>
           {intl.formatMessage(messages.genres)}
         </span>
         <GenreSelector
@@ -157,7 +164,7 @@ const FilterSlideover = ({
         />
         {type === 'tv' && (
           <>
-            <span className="text-lg font-semibold">
+            <span className={labelClass}>
               {intl.formatMessage(messages.status)}
             </span>
             <StatusSelector
@@ -172,7 +179,7 @@ const FilterSlideover = ({
             />
           </>
         )}
-        <span className="text-lg font-semibold">
+        <span className={labelClass}>
           {intl.formatMessage(messages.keywords)}
         </span>
         <KeywordSelector
@@ -182,7 +189,7 @@ const FilterSlideover = ({
             updateQueryParams('keywords', value?.map((v) => v.value).join(','));
           }}
         />
-        <span className="text-lg font-semibold">
+        <span className={labelClass}>
           {intl.formatMessage(messages.excludeKeywords)}
         </span>
         <KeywordSelector
@@ -195,7 +202,7 @@ const FilterSlideover = ({
             );
           }}
         />
-        <span className="text-lg font-semibold">
+        <span className={labelClass}>
           {intl.formatMessage(messages.originalLanguage)}
         </span>
         <LanguageSelector
@@ -206,7 +213,7 @@ const FilterSlideover = ({
             updateQueryParams('language', value);
           }}
         />
-        <span className="text-lg font-semibold">
+        <span className={labelClass}>
           {intl.formatMessage(messages.certification)}
         </span>
         <USCertificationSelector
@@ -216,7 +223,7 @@ const FilterSlideover = ({
             batchUpdateQueryParams(params);
           }}
         />
-        <span className="text-lg font-semibold">
+        <span className={labelClass}>
           {intl.formatMessage(messages.runtime)}
         </span>
         <div className="relative z-0">
@@ -255,7 +262,7 @@ const FilterSlideover = ({
             })}
           />
         </div>
-        <span className="text-lg font-semibold">
+        <span className={labelClass}>
           {intl.formatMessage(messages.tmdbuserscore)}
         </span>
         <div className="relative z-0">
@@ -294,7 +301,7 @@ const FilterSlideover = ({
             })}
           />
         </div>
-        <span className="text-lg font-semibold">
+        <span className={labelClass}>
           {intl.formatMessage(messages.tmdbuservotecount)}
         </span>
         <div className="relative z-0">
@@ -333,7 +340,7 @@ const FilterSlideover = ({
             })}
           />
         </div>
-        <span className="text-lg font-semibold">
+        <span className={labelClass}>
           {intl.formatMessage(messages.streamingservices)}
         </span>
         <WatchProviderSelector
@@ -359,7 +366,11 @@ const FilterSlideover = ({
         />
         <div className="pt-4">
           <Button
-            className="w-full"
+            className={
+              ambient
+                ? 'h-10 w-full rounded-full border-as-line bg-transparent font-semibold text-as-ink hover:border-as-line-strong hover:bg-as-raised active:bg-as-raised'
+                : 'w-full'
+            }
             disabled={Object.keys(currentFilters).length === 0}
             onClick={() => {
               const copyCurrent = Object.assign({}, currentFilters);

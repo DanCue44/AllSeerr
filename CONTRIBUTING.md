@@ -1,249 +1,82 @@
-# Contributing to Seerr
+# Contributing to AllSeerr
 
-All help is welcome and greatly appreciated! If you would like to contribute to the project, the following instructions should get you started...
+AllSeerr is a fork of [Seerr](https://github.com/seerr-team/seerr) that adds music, books and
+audiobooks. Bug reports, ideas and pull requests are welcome at
+[DanCue44/AllSeerr](https://github.com/DanCue44/AllSeerr).
 
-## Before Contributing
+Problems that also happen in plain Seerr are best reported
+[upstream](https://github.com/seerr-team/seerr/issues), where they help everyone.
 
-> [!WARNING]
->
-> **Large features and major refactors need maintainer approval before you start coding.** If your contribution adds a significant new feature, makes sweeping changes across the codebase, or refactors a substantial part of Seerr, open a proposal in [GitHub Discussions](https://github.com/seerr-team/seerr/discussions) first. Describe what you want to change and why, then wait for the maintainers to agree on the direction before you submit a pull request. Large pull requests opened without prior discussion may be closed without review.
->
-> **Only pick up issues that maintainers have confirmed.** If you want to work on an existing feature request or bug report, check that it has the `confirmed` label and no longer has the `awaiting triage` label. The `confirmed` label means maintainers have reviewed the issue and welcome anyone to implement it. Issues still awaiting triage may be declined, duplicated, or need a different approach, so pull requests for them may be closed.
+## Before You Start
 
-## AI Assistance Notice
-
-> [!IMPORTANT]
->
-> Automated AI-generated contributions without human review are not allowed and will be rejected. This is an open-source project maintained by volunteers. We do not have the resources to review pull requests that could have been avoided with proper human oversight. While we have no issue with contributors using AI tools as an aid, it is your responsibility as a contributor to ensure that all submissions are carefully reviewed and meet our quality standards.
->
-> **We expect AI-assisted development, not AI-driven development.** Use AI as a tool to help you write code. Do not let an AI agent autonomously generate an entire contribution and submit it on your behalf. It does not matter who clicks submit, an agent acting on its own or a human relaying its output unread. What matters is whether you reviewed, tested, and understood the change before it went up. We have been increasingly receiving low-effort, fully AI-generated PRs and will not tolerate them. Contributors who repeatedly submit unreviewed AI output may be banned.
->
-> **Submissions that appear to be unreviewed AI output will be considered low-effort and may result in a ban if repeated even after several warnings.** Signs of unreviewed AI output include but are not limited to:
->
-> - Blank or template-default PR descriptions
-> - AI-generated PR descriptions that replace our template with their own structure (e.g., "Summary / What changed / Root cause / Test plan" instead of following the PR template; this is the default output format of tools like Claude Code and is an immediate indicator that the PR was not reviewed by a human)
-> - AI-generated content moved under our template's headers without being rewritten in your own words. Matching our structure is not the same as writing the description yourself
-> - Unchecked checklists or missing checklist entirely
-> - Failing CI checks that would have been caught by running `pnpm build`
-> - Code that does not match the described changes
-> - Inability to answer questions about the submitted code
->
-> **Read and follow the [Contributing Guide](CONTRIBUTING.md) before submitting.**
-> If your AI tool generates its own PR description format, it is your responsibility to rewrite it to follow our template before submitting, and rewrite means write the content yourself, not relabel the AI's output under our section headers. An incomplete PR template tells maintainers that insufficient review has been performed on the submission, regardless of the actual code quality. We may close such PRs without review.
->
-> If you are using **any kind of AI assistance** to contribute to Seerr, it must be disclosed in the pull request.
-
-### Disclosure Requirements
-
-If you are using any kind of AI assistance while contributing to Seerr, **this must be disclosed in the pull request description**, along with the extent to which AI assistance was used (e.g., docs only vs. code generation).
-
-PR responses (comments, review replies) must be written in your own words, per the Expectations below. The one exception is AI-assisted translation, if you use AI to translate a response into English, disclose that here too.
-
-As a small exception, trivial tab-completion doesn't need to be disclosed, so long as it is limited to single keywords or short phrases.
-
-**Disclosure does not exempt a PR from the AI-driven development policy above.**
-If the implementation was primarily generated by an AI tool in one or two prompts, and your own involvement was limited to testing or a small edit, that is AI-driven development whether or not you disclosed it. Disclosure tells us how much scrutiny to apply to your PR. It does not turn an AI-driven contribution into an AI-assisted one.
-
-Example disclosures that meet our bar:
-
-> - **AI Disclosure:** I designed the approach and wrote the implementation myself.
-> I used Claude to scaffold the initial component and help debug a TypeScript
-> generics issue.
-> - **AI Disclosure:** I consulted ChatGPT to understand the codebase but the solution
-> was fully authored manually by myself.
-> - **AI Disclosure:** None.
-
-A disclosure like the one below is honest, but the PR will still be closed as
-AI-driven:
-
-> **AI Disclosure:** This PR was written primarily by Claude Code, then tested
-> and lightly tweaked.
-
-When using AI assistance, we expect contributors to:
-
-- **Understand the code** that is produced and be able to answer
-  questions about it.
-- **Follow the contributing guide**. AI tools do not excuse you from
-  filling out the PR template, testing section, and checklist.
-- **Run the build and tests** before submitting.
-
-Failure to disclose AI assistance is first and foremost disrespectful to the human maintainers on the other end of the pull request, but it also makes it difficult to determine how much scrutiny to apply to the contribution.
-
-In a perfect world, AI assistance would produce equal or higher quality work than any human. That is not the world we live in today, and in most cases it is generating slop.
-
-When using AI assistance, we expect contributors to understand the code that is produced and be able to answer critical questions about it. It is not a maintainer's job to review a PR so broken that it requires significant rework to be acceptable.
-
-Please be respectful to maintainers and disclose AI assistance.
-
-### Expectations for AI-Assisted Contributions
-
-1. **PR descriptions and all comments must be your own words.** Do not paste LLM output as your PR description, review response, or issue comment. We want *your* understanding and explanation of the changes, not a machine-generated summary. An exception is made for LLM-assisted translation, however, note it explicitly if used.
-
-   **Don't be a meat proxy** (the term is borrowed from [this post](https://gruhn.me/blog/2026-08-03/)). If a maintainer asks you a question and you paste it into an AI, then paste the answer back without reading it, checking it against the code, and putting it in your own words, you haven't added anything to the exchange. We could have asked the AI ourselves and skipped the wait. This project is maintained by volunteers reviewing your contribution on their own time, and relaying answers you haven't read wastes that time rather than saving it.
-
-2. **Contributions must be concise and focused.** A PR that claims to fix one thing but touches a bunch of unrelated code will be rejected. This is a common side effect of broad AI prompts and makes review unnecessarily difficult.
-
-3. **You must be able to handle review feedback yourself.** If you cannot discuss or implement requested changes without round-tripping reviewer comments through an AI, that tells us you don't understand the code you submitted. We will close the PR.
-
-4. **Don't commit non-project files.** Editor configs, AI tool directories, and other local tooling files do not belong in the repository. Keep your commits clean.
-
-5. **Changes must be tested.** Build the project, run the tests, and manually verify the functionality you modified. Don't just assume CI will catch everything.
-
-6. **Final discretion lies with the reviewers.** If a PR cannot be reasonably reviewed for any reason due to over-complexity, size, or poor structure, it will be rejected. This applies equally to AI-assisted and non-AI-assisted contributions.
+- Search the [issues](https://github.com/DanCue44/AllSeerr/issues) first, and open one before a
+  large change so the direction can be agreed before you write the code.
+- Keep pull requests focused on one change.
+- Security problems go through
+  [private vulnerability reporting](https://github.com/DanCue44/AllSeerr/security/advisories/new),
+  never public issues. See [SECURITY.md](SECURITY.md).
 
 ## Development
 
-### Tools Required
-
-- HTML/Typescript/Javascript editor
-- [VSCode](https://code.visualstudio.com/) is recommended. Upon opening the project, a few extensions will be automatically recommended for install.
-- [NodeJS](https://nodejs.org/en/download/) (Node 22.x)
-- [Pnpm](https://pnpm.io/cli/install)
-- [Git](https://git-scm.com/downloads)
-
-### Getting Started
-
-1. [Fork](https://help.github.com/articles/fork-a-repo/) the repository to your own GitHub account and [clone](https://help.github.com/articles/cloning-a-repository/) it to your local device:
-
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/seerr.git
-   cd seerr/
-   ```
-
-2. Add the remote `upstream`:
-
-   ```bash
-   git remote add upstream https://github.com/seerr-team/seerr.git
-   ```
-
-3. Create a new branch:
-
-   ```bash
-   git switch -c BRANCH_NAME develop
-   ```
-
-   - It is recommended to give your branch a meaningful name, relevant to the feature or fix you are working on.
-     - Good examples:
-       - `docs-docker`
-       - `feature-new-system`
-       - `fix-title-cards`
-     - Bad examples:
-       - `bug`
-       - `docs`
-       - `feature`
-       - `fix`
-       - `patch`
-
-4. Run the development environment:
-
-   ```bash
-   pnpm install
-   pnpm dev
-   ```
-
-   - Alternatively, you can use [Docker](https://www.docker.com/) with `docker compose up -d`. This method does not require installing NodeJS or Yarn on your machine directly.
-
-5. Create your patch and test your changes.
-
-   - Be sure to follow both the [code](#contributing-code) and [UI text](#ui-text-style) guidelines.
-   - Should you need to update your fork, you can do so by rebasing from `upstream`:
-
-     ```bash
-     git fetch upstream
-     git rebase upstream/develop
-     git push origin BRANCH_NAME -f
-     ```
-
-### Helm Chart
-
-Tools Required:
-
-- [Helm](https://helm.sh/docs/intro/install/)
-- [helm-docs](https://github.com/norwoodj/helm-docs)
-
-Steps:
-
-1. Make the necessary changes.
-2. Test your changes.
-3. Update the `version` in `charts/seerr-chart/Chart.yaml` following [Semantic Versioning (SemVer)](https://semver.org/).
-4. Run the `helm-docs` command to regenerate the chart's README.
-
-### Contributing Code
-
-- If you are taking on an existing bug or feature ticket, please comment on the [issue](/../../issues) to avoid multiple people working on the same thing.
-- Pull requests with titles not following [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) will **not** be merged. PR titles are automatically checked for compliance.
-- Please make meaningful commits, or squash them prior to opening a pull request.
-  - Do not squash commits once people have begun reviewing your changes.
-- Always rebase your branch to the latest `develop` branch.
-- It is your responsibility to keep your branch up-to-date. Your work will **not** be merged unless it is rebased off the latest `develop` branch.
-- You can create a "draft" pull request early to get feedback on your work.
-- Your code **must** be formatted correctly, or the tests will fail.
-  - We use Prettier to format our code base. It should automatically run with a Git hook, but it is recommended to have the Prettier extension installed in your editor and format on save.
-- If you have questions or need help, you can reach out via [Discussions](/../../discussions) or our [Discord server](https://discord.gg/seerr).
-- Only open pull requests to `develop`, never `master`! Any pull requests opened to `master` will be closed.
-
-### UI Text Style
-
-When adding new UI text, please try to adhere to the following guidelines:
-
-1. Be concise and clear, and use as few words as possible to make your point.
-2. Use the Oxford comma where appropriate.
-3. Use the appropriate Unicode characters for ellipses, arrows, and other special characters/symbols.
-4. Capitalize proper nouns, such as Plex, Radarr, Sonarr, Telegram, Slack, Pushover, etc. Be sure to also use the official capitalization for any abbreviations; e.g., IMDb has a lowercase 'b', whereas TMDB and TheTVDB have a capital 'B'.
-5. Title case headings, button text, and form labels. Note that verbs such as "is" should be capitalized, whereas prepositions like "from" should be lowercase (unless as the first or last word of the string, in which case they are also capitalized).
-6. Capitalize the first word in validation error messages, dropdowns, and form "tips." These strings should not end in punctuation.
-7. Ensure that toast notification strings are complete sentences ending in punctuation.
-8. If an additional description or "tip" is required for a form field, it should be styled using the global CSS class `label-tip`.
-9. In full sentences, abbreviations like "info" or "auto" should not be used in place of full words, unless referencing the name/label of a specific setting or option which has an abbreviation in its name.
-10. Do your best to check for spelling errors and grammatical mistakes.
-11. Do not misspell "Seerr."
-
-## Translation
-
-We use [Weblate](https://translate.seerr.dev/projects/seerr/seerr-frontend/) for our translations, and your help with localizing Seerr would be greatly appreciated! If your language is not listed below, please [open a feature request](/../../issues/new/choose).
-
-<a href="https://translate.seerr.dev/engage/seerr/"><img src="https://translate.seerr.dev/widget/seerr/multi-auto.svg" alt="Translation status" /></a>
-
-## Migrations
-
-If you are adding a new feature that requires a database migration, you will need to create 2 migrations: one for SQLite and one for PostgreSQL. Here is how you could do it:
-
-1. Create a PostgreSQL database or use an existing one:
+You need [Node.js](https://nodejs.org/en/download/) 22, [pnpm](https://pnpm.io/installation) and
+[Git](https://git-scm.com/downloads).
 
 ```bash
-sudo docker run --name postgres-seerr -e POSTGRES_PASSWORD=postgres -d -p 127.0.0.1:5432:5432/tcp postgres:latest
+git clone https://github.com/YOUR_USERNAME/AllSeerr.git
+cd AllSeerr
+git switch -c your-branch main
+pnpm install
+pnpm dev
 ```
 
-2. Reset the SQLite database and the PostgreSQL database:
+Pull requests go to `develop`, the testing branch. Changes move to `main` once they have been
+tried there, and releases are tagged from `main`.
+
+## Before Opening a Pull Request
+
+Run these and make sure they pass:
 
 ```bash
-rm config/db/db.*
-rm config/settings.*
-PGPASSWORD=postgres sudo docker exec -it postgres-seerr /usr/bin/psql -h 127.0.0.1 -U postgres -c "DROP DATABASE IF EXISTS seerr;"
-PGPASSWORD=postgres sudo docker exec -it postgres-seerr /usr/bin/psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE seerr;"
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
 ```
 
-3. Switch to the `develop` branch and create the original database for SQLite and PostgreSQL so that TypeORM can automatically generate the migrations:
+- Add or update tests for the behavior you change. Tests must not reach the network.
+- New UI text goes through `defineMessages`; run `pnpm i18n:extract` to update
+  `src/i18n/locale/en.json`.
+- API changes need a matching update to `seerr-api.yml`. An invalid spec breaks every API call,
+  and `server/apiSpec.test.ts` checks it.
+- Prettier formats the code base; the Git hooks run it for you.
+
+## Commits and Pull Request Titles
+
+Commits and pull request titles follow
+[Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), for example
+`fix(music): keep the requested album monitored`. Subjects are lowercase, and the header and each
+body line stay within 100 characters. Commitlint checks this in a Git hook.
+
+## Database Migrations
+
+A change to an entity needs two migrations, one for SQLite and one for PostgreSQL. Build and start
+the app once on `main` against an empty database of each type, then generate them from your
+branch:
 
 ```bash
-git switch develop
-pnpm i
-rm -r .next dist; pnpm build
-pnpm start
-DB_TYPE="postgres" DB_USER=postgres DB_PASS=postgres pnpm start
-```
-
-(You can shutdown the server once the message "Server ready on 5055" appears)
-
-4. Let TypeORM generate the migrations:
-
-```bash
-git switch -c your-feature-branch
-pnpm i
 pnpm migration:generate server/migration/sqlite/YourMigrationName
 DB_TYPE="postgres" DB_USER=postgres DB_PASS=postgres pnpm migration:generate server/migration/postgres/YourMigrationName
 ```
 
-## Attribution
+## UI Text Style
 
-This contribution guide was inspired by the [Next.js](https://github.com/vercel/next.js), [Radarr](https://github.com/Radarr/Radarr), and [Ghostty](https://github.com/ghostty-org/ghostty) contribution guides. In addition, our AI policy draws from [Jellyfin's LLM policies](https://jellyfin.org/docs/general/contributing/llm-policies/).
+AllSeerr follows Seerr's UI text style:
+
+1. Be concise and clear.
+2. Use the Oxford comma where appropriate.
+3. Capitalize proper nouns with their official spelling, such as Plex, Lidarr, TMDB or IMDb.
+4. Use title case for headings, buttons and form labels.
+5. Capitalize the first word of validation messages, dropdown options and form tips, without
+   ending punctuation.
+6. Write toast messages as complete sentences that end in punctuation.
+7. Style extra descriptions for a form field with the `label-tip` CSS class.

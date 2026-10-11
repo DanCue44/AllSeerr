@@ -1,4 +1,6 @@
+import AmbientTvDetails from '@app/components/AllSeerr/TvDetails';
 import TvDetails from '@app/components/TvDetails';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { getHostAndPort } from '@app/utils/urlHelper';
 import type { TvDetails as TvDetailsType } from '@server/models/Tv';
 import axios from 'axios';
@@ -9,7 +11,13 @@ interface TvPageProps {
 }
 
 const TvPage: NextPage<TvPageProps> = ({ tv }) => {
-  return <TvDetails tv={tv} />;
+  const [interfaceStyle] = useInterfaceStyle();
+
+  return interfaceStyle === 'ambient' ? (
+    <AmbientTvDetails tv={tv} />
+  ) : (
+    <TvDetails tv={tv} />
+  );
 };
 
 export const getServerSideProps: GetServerSideProps<TvPageProps> = async (

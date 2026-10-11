@@ -1,4 +1,6 @@
+import AmbientMovieDetails from '@app/components/AllSeerr/MovieDetails';
 import MovieDetails from '@app/components/MovieDetails';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { getHostAndPort } from '@app/utils/urlHelper';
 import type { MovieDetails as MovieDetailsType } from '@server/models/Movie';
 import axios from 'axios';
@@ -9,7 +11,13 @@ interface MoviePageProps {
 }
 
 const MoviePage: NextPage<MoviePageProps> = ({ movie }) => {
-  return <MovieDetails movie={movie} />;
+  const [interfaceStyle] = useInterfaceStyle();
+
+  return interfaceStyle === 'ambient' ? (
+    <AmbientMovieDetails movie={movie} />
+  ) : (
+    <MovieDetails movie={movie} />
+  );
 };
 
 export const getServerSideProps: GetServerSideProps<MoviePageProps> = async (

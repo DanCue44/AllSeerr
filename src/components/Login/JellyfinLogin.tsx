@@ -1,6 +1,12 @@
+import {
+  authHeading,
+  authInput,
+  authPrimary,
+} from '@app/components/AllSeerr/Auth';
 import Button from '@app/components/Common/Button';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
 import JellyfinQuickConnectModal from '@app/components/Login/JellyfinQuickConnectModal';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import defineMessages from '@app/utils/defineMessages';
@@ -44,6 +50,8 @@ interface JellyfinLoginProps {
 const JellyfinLogin = ({ revalidate, serverType }: JellyfinLoginProps) => {
   const toasts = useToasts();
   const intl = useIntl();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
   const settings = useSettings();
   const [showQuickConnect, setShowQuickConnect] = useState(false);
 
@@ -128,7 +136,13 @@ const JellyfinLogin = ({ revalidate, serverType }: JellyfinLoginProps) => {
             <>
               <Form data-form-type="login">
                 <div>
-                  <h2 className="-mt-1 mb-6 text-center text-lg font-bold text-neutral-200">
+                  <h2
+                    className={`-mt-1 mb-6 text-center ${
+                      ambient
+                        ? authHeading
+                        : 'text-lg font-bold text-neutral-200'
+                    }`}
+                  >
                     {intl.formatMessage(messages.loginwithapp, {
                       appName: mediaServerFormatValues.mediaServerName,
                     })}
@@ -141,7 +155,11 @@ const JellyfinLogin = ({ revalidate, serverType }: JellyfinLoginProps) => {
                         name="username"
                         type="text"
                         placeholder={intl.formatMessage(messages.username)}
-                        className="!bg-gray-700/80 placeholder:text-gray-400"
+                        className={
+                          ambient
+                            ? authInput
+                            : '!bg-gray-700/80 placeholder:text-gray-400'
+                        }
                         data-form-type="username"
                       />
                     </div>
@@ -167,7 +185,11 @@ const JellyfinLogin = ({ revalidate, serverType }: JellyfinLoginProps) => {
                         type="password"
                         autoComplete="current-password"
                         placeholder={intl.formatMessage(messages.password)}
-                        className="!bg-gray-700/80 placeholder:text-gray-400"
+                        className={
+                          ambient
+                            ? authInput
+                            : '!bg-gray-700/80 placeholder:text-gray-400'
+                        }
                         data-form-type="password"
                         data-1pignore="false"
                         data-lpignore="false"
@@ -190,7 +212,11 @@ const JellyfinLogin = ({ revalidate, serverType }: JellyfinLoginProps) => {
                                     : ''
                                 }forgotpassword.html`
                           }
-                          className="pt-2 text-sm text-indigo-500 hover:text-indigo-400"
+                          className={`pt-2 text-sm ${
+                            ambient
+                              ? 'text-as-accent-soft hover:text-as-accent'
+                              : 'text-indigo-500 hover:text-indigo-400'
+                          }`}
                         >
                           {intl.formatMessage(messages.forgotpassword)}
                         </a>
@@ -203,7 +229,7 @@ const JellyfinLogin = ({ revalidate, serverType }: JellyfinLoginProps) => {
                   buttonType="primary"
                   type="submit"
                   disabled={isSubmitting || !isValid}
-                  className="mt-2 w-full shadow-sm"
+                  className={`mt-2 w-full shadow-sm ${ambient ? authPrimary : ''}`}
                 >
                   <ArrowLeftOnRectangleIcon />
                   <span>

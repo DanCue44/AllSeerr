@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>AllSeerr</Name>
+  <Repository>ghcr.io/dancue44/allseerr:latest</Repository>
+  <Registry>https://github.com/DanCue44/AllSeerr/pkgs/container/allseerr</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/DanCue44/AllSeerr/issues</Support>
+  <Project>https://github.com/DanCue44/AllSeerr</Project>
+  <Overview>AllSeerr is a free and open source request manager for your media server. Users can discover and request movies, series, music, books and audiobooks, and requests are sent to Radarr, Sonarr, Lidarr and Chaptarr. It works with Jellyfin, Emby and Plex. AllSeerr is based on Seerr.[br][br]
+[b]Permissions:[/b] the container runs as UID 1000 / GID 1000 and does not use PUID or PGID. Before the first start, make the appdata folder writable by that user, for example:[br]
+[code]mkdir -p /mnt/user/appdata/allseerr &amp;&amp; chown -R 1000:1000 /mnt/user/appdata/allseerr[/code]</Overview>
+  <Category>MediaApp:Other Tools:Utilities</Category>
+  <WebUI>http://[IP]:[PORT:5055]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/DanCue44/AllSeerr/main/unraid/allseerr.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/DanCue44/AllSeerr/main/public/android-chrome-512x512.png</Icon>
+  <ExtraParams>--init</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>The appdata folder must be writable by UID 1000 (chown -R 1000:1000 /mnt/user/appdata/allseerr). The image ignores PUID and PGID.</Requires>
+  <Config Name="WebUI Port" Target="5055" Default="5055" Mode="tcp" Description="Port for the AllSeerr web interface" Type="Port" Display="always" Required="true" Mask="false">5055</Config>
+  <Config Name="Config" Target="/app/config" Default="/mnt/user/appdata/allseerr" Mode="rw" Description="Settings, database and logs. Must be writable by UID 1000." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/allseerr</Config>
+  <Config Name="TZ" Target="TZ" Default="America/New_York" Mode="" Description="Time zone, for example America/New_York or Europe/London" Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
+  <Config Name="LOG_LEVEL" Target="LOG_LEVEL" Default="info" Mode="" Description="Log level: debug, info, warn or error" Type="Variable" Display="advanced" Required="false" Mask="false">info</Config>
+</Container>

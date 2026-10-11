@@ -14,7 +14,12 @@ const messages = defineMessages('components.Discover.PlexWatchlistSlider', {
     'Media added to your <PlexWatchlistSupportLink>Plex Watchlist</PlexWatchlistSupportLink> will appear here.',
 });
 
-const PlexWatchlistSlider = () => {
+interface PlexWatchlistSliderProps {
+  /** Only show this media type */
+  mediaType?: WatchlistItem['mediaType'];
+}
+
+const PlexWatchlistSlider = ({ mediaType }: PlexWatchlistSliderProps) => {
   const intl = useIntl();
   const { user } = useUser();
 
@@ -27,7 +32,19 @@ const PlexWatchlistSlider = () => {
     revalidateOnMount: true,
   });
 
+  // The first page is narrowed here; the watchlist has no media type filter.
+  // Followed artists go with music and followed authors with books.
+  const items = mediaType
+    ? watchlistItems?.results.filter(
+        (item) =>
+          item.mediaType === mediaType ||
+          (mediaType === 'music' && item.mediaType === 'artist') ||
+          (mediaType === 'book' && item.mediaType === 'author')
+      )
+    : watchlistItems?.results;
+
   if (
+    (mediaType && items && items.length === 0) ||
     (watchlistItems &&
       watchlistItems.results.length === 0 &&
       !user?.settings?.watchlistSyncMovies &&
@@ -46,9 +63,9 @@ const PlexWatchlistSlider = () => {
         </Link>
       </div>
       <Slider
-        sliderKey="watchlist"
+        sliderKey={mediaType ? `watchlist-${mediaType}` : 'watchlist'}
         isLoading={!watchlistItems}
-        isEmpty={!!watchlistItems && watchlistItems.results.length === 0}
+        isEmpty={!!items && items.length === 0}
         emptyMessage={intl.formatMessage(messages.emptywatchlist, {
           PlexWatchlistSupportLink: (msg: React.ReactNode) => (
             <a
@@ -61,12 +78,16 @@ const PlexWatchlistSlider = () => {
             </a>
           ),
         })}
-        items={watchlistItems?.results.map((item) => (
+        items={items?.map((item) => (
           <TmdbTitleCard
             id={item.tmdbId}
-            key={`watchlist-slider-item-${item.ratingKey}`}
+            key={`watchlist-slider-item-${item.ratingKey || `${item.mediaType}-${item.id}`}`}
             tmdbId={item.tmdbId}
+            mbId={item.mbId}
+            olId={item.olId}
             type={item.mediaType}
+            title={item.title}
+            image={item.image}
             isAddedToWatchlist={true}
           />
         ))}

@@ -1,3 +1,5 @@
+import UserAvatar from '@app/components/AllSeerr/RequestList/UserAvatar';
+import { statusTone } from '@app/components/AllSeerr/Title/styles';
 import Alert from '@app/components/Common/Alert';
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
@@ -11,6 +13,7 @@ import Table from '@app/components/Common/Table';
 import BulkEditModal from '@app/components/UserList/BulkEditModal';
 import PlexImportModal from '@app/components/UserList/PlexImportModal';
 import useDebouncedState from '@app/hooks/useDebouncedState';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { useUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
@@ -29,6 +32,7 @@ import {
   InboxArrowDownIcon,
   MagnifyingGlassIcon,
   PencilIcon,
+  TrashIcon,
   UserPlusIcon,
 } from '@heroicons/react/24/solid';
 import { MediaServerType } from '@server/constants/server';
@@ -94,6 +98,8 @@ const messages = defineMessages('components.UserList', {
   ascending: 'ascending',
   descending: 'descending',
   searchUsers: 'Search…',
+  selectAll: 'Select all',
+  joinedDate: 'Joined {date}',
   localLoginDisabled:
     'The <strong>Enable Local Sign-In</strong> setting is currently disabled.',
 });
@@ -113,6 +119,8 @@ const UserList = () => {
   const settings = useSettings();
   const { addToast } = useToasts();
   const { user: currentUser, hasPermission: currentHasPermission } = useUser();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
   const [currentSort, setCurrentSort] = useState<Sort>('created');
   const [currentPageSize, setCurrentPageSize] = useState<number>(10);
   const [searchInput, searchQuery, setSearchInput] = useDebouncedState<string>(
@@ -368,6 +376,266 @@ const UserList = () => {
   const passwordGenerationEnabled =
     settings.currentSettings.applicationUrl &&
     settings.currentSettings.emailEnabled;
+
+  const userTypeBadge = (user: User) =>
+    user.userType === UserType.PLEX ? (
+      <Badge badgeType="warning">{intl.formatMessage(messages.plexuser)}</Badge>
+    ) : user.userType === UserType.LOCAL ? (
+      <Badge badgeType="default">
+        {intl.formatMessage(messages.localuser)}
+      </Badge>
+    ) : user.userType === UserType.EMBY ? (
+      <Badge badgeType="success">
+        {intl.formatMessage(messages.mediaServerUser, {
+          mediaServerName: 'Emby',
+        })}
+      </Badge>
+    ) : user.userType === UserType.JELLYFIN ? (
+      <Badge badgeType="default">
+        {intl.formatMessage(messages.mediaServerUser, {
+          mediaServerName: 'Jellyfin',
+        })}
+      </Badge>
+    ) : null;
+
+  const paginationContent = (
+    <>
+      <div className="hidden lg:flex lg:flex-1">
+        <p className="text-sm">
+          {data.results.length > 0 &&
+            intl.formatMessage(globalMessages.showingresults, {
+              from: pageIndex * currentPageSize + 1,
+              to:
+                data.results.length < currentPageSize
+                  ? pageIndex * currentPageSize + data.results.length
+                  : (pageIndex + 1) * currentPageSize,
+              total: data.pageInfo.results,
+              strong: (msg: React.ReactNode) => (
+                <span className="font-medium">{msg}</span>
+              ),
+            })}
+        </p>
+      </div>
+      <div className="flex justify-center sm:flex-1 sm:justify-start lg:justify-center">
+        <span className="-mt-3 items-center text-sm sm:-ml-4 sm:mt-0 lg:ml-0">
+          {intl.formatMessage(globalMessages.resultsperpage, {
+            pageSize: (
+              <select
+                id="pageSize"
+                name="pageSize"
+                onChange={(e) => {
+                  setCurrentPageSize(Number(e.target.value));
+                  router
+                    .push(router.pathname)
+                    .then(() => window.scrollTo(0, 0));
+                }}
+                value={currentPageSize}
+                className="short inline"
+              >
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            ),
+          })}
+        </span>
+      </div>
+      <div className="flex flex-auto justify-center space-x-2 sm:flex-1 sm:justify-end">
+        <Button
+          disabled={!hasPrevPage}
+          onClick={() => updateQueryParams('page', (page - 1).toString())}
+        >
+          <ChevronLeftIcon />
+          <span>{intl.formatMessage(globalMessages.previous)}</span>
+        </Button>
+        <Button
+          disabled={!hasNextPage}
+          onClick={() => updateQueryParams('page', (page + 1).toString())}
+        >
+          <span>{intl.formatMessage(globalMessages.next)}</span>
+          <ChevronRightIcon />
+        </Button>
+      </div>
+    </>
+  );
+
+  // Ambient: a card list with avatars, role pills and pill actions in
+  // place of the table. Sorting stays on the sort select above.
+  const ambientUserList = (
+    <div className="mt-6 flex flex-col gap-3">
+      {(data.results ?? []).length > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] bg-as-surface px-5 py-3">
+          <label
+            htmlFor="selectAll"
+            className="!mb-0 flex cursor-pointer items-center gap-3 text-sm"
+          >
+            <input
+              type="checkbox"
+              id="selectAll"
+              name="selectAll"
+              checked={isAllUsersSelected()}
+              onChange={() => {
+                toggleAllUsers();
+              }}
+            />
+            <span>{intl.formatMessage(messages.selectAll)}</span>
+          </label>
+          <Button
+            buttonType="warning"
+            onClick={() => setShowBulkEditModal(true)}
+            disabled={selectedUsers.length === 0}
+          >
+            <PencilIcon />
+            <span>{intl.formatMessage(messages.bulkedit)}</span>
+          </Button>
+        </div>
+      )}
+      {data.results.map((user) => {
+        const isOwner = user.id === 1;
+        const isAdmin =
+          !isOwner && hasPermission(Permission.ADMIN, user.permissions);
+        const name =
+          user.username ||
+          user.jellyfinUsername ||
+          user.plexUsername ||
+          user.email;
+
+        return (
+          <div
+            key={`user-list-${user.id}`}
+            data-testid="user-list-row"
+            className="flex flex-col gap-4 rounded-[22px] bg-as-surface px-5 py-4 lg:flex-row lg:items-center"
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-4">
+              <div className="flex w-6 flex-none">
+                {isUserPermsEditable(user.id) && (
+                  <input
+                    type="checkbox"
+                    id={`user-list-select-${user.id}`}
+                    name={`user-list-select-${user.id}`}
+                    checked={isUserSelected(user.id)}
+                    onChange={() => {
+                      toggleUser(user.id);
+                    }}
+                    aria-label={name}
+                  />
+                )}
+              </div>
+              <Link href={`/users/${user.id}`} className="flex-none">
+                <UserAvatar
+                  id={user.id}
+                  name={user.displayName ?? name}
+                  avatar={user.avatar}
+                  size={48}
+                />
+              </Link>
+              <div className="min-w-0">
+                <Link
+                  href={`/users/${user.id}`}
+                  className="block truncate font-display text-[17px] font-medium text-as-ink transition hover:text-as-accent-soft"
+                  data-testid="user-list-username-link"
+                >
+                  {name}
+                </Link>
+                {(
+                  user.username ||
+                  user.jellyfinUsername ||
+                  user.plexUsername
+                )?.toLowerCase() !== user.email && (
+                  <div className="truncate text-sm text-as-ink-faint">
+                    {user.email}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              {user.id === currentUser?.id ||
+              currentHasPermission(
+                [Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW],
+                { type: 'or' }
+              ) ? (
+                <Link
+                  href={`/users/${user.id}/requests`}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-as-tile px-3 py-1 text-xs font-semibold text-as-ink-soft transition hover:text-as-ink"
+                >
+                  <span className="text-as-ink-faint">
+                    {intl.formatMessage(messages.totalrequests)}
+                  </span>
+                  {user.requestCount}
+                </Link>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-as-tile px-3 py-1 text-xs font-semibold text-as-ink-soft">
+                  <span className="text-as-ink-faint">
+                    {intl.formatMessage(messages.totalrequests)}
+                  </span>
+                  {user.requestCount}
+                </span>
+              )}
+              {userTypeBadge(user)}
+              <span
+                className={`inline-flex rounded-full px-2.5 text-xs font-semibold leading-5 ${
+                  isOwner || isAdmin ? statusTone.accent : statusTone.neutral
+                }`}
+              >
+                {intl.formatMessage(
+                  isOwner
+                    ? messages.owner
+                    : isAdmin
+                      ? messages.admin
+                      : messages.user
+                )}
+              </span>
+              <span className="px-1 text-xs text-as-ink-faint">
+                {intl.formatMessage(messages.joinedDate, {
+                  date: intl.formatDate(user.createdAt, {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  }),
+                })}
+              </span>
+            </div>
+            <div className="flex flex-none gap-2">
+              <Button
+                className="flex-1 lg:flex-none"
+                disabled={user.id === 1 && currentUser?.id !== 1}
+                onClick={() =>
+                  router.push(
+                    '/users/[userId]/settings',
+                    `/users/${user.id}/settings`
+                  )
+                }
+              >
+                <PencilIcon />
+                <span>{intl.formatMessage(globalMessages.edit)}</span>
+              </Button>
+              <Button
+                buttonType="danger"
+                className="flex-1 lg:flex-none"
+                disabled={
+                  user.id === 1 ||
+                  (currentUser?.id !== 1 &&
+                    hasPermission(Permission.ADMIN, user.permissions))
+                }
+                onClick={() => setDeleteModal({ isOpen: true, user })}
+              >
+                <TrashIcon />
+                <span>{intl.formatMessage(globalMessages.delete)}</span>
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+      <nav
+        className="flex flex-col items-center gap-3 rounded-[22px] bg-as-surface px-5 py-3 sm:flex-row"
+        aria-label="Pagination"
+      >
+        {paginationContent}
+      </nav>
+    </div>
+  );
 
   return (
     <>
@@ -749,288 +1017,209 @@ const UserList = () => {
           </div>
         </div>
       </div>
-      <Table>
-        <thead>
-          <tr>
-            <Table.TH>
-              {(data.results ?? []).length > 1 && (
-                <input
-                  type="checkbox"
-                  id="selectAll"
-                  name="selectAll"
-                  checked={isAllUsersSelected()}
-                  onChange={() => {
-                    toggleAllUsers();
-                  }}
-                />
-              )}
-            </Table.TH>
-            <SortableColumnHeader
-              sortKey="displayname"
-              currentSort={currentSort}
-              sortDirection={sortDirection}
-              onSortChange={handleSortChange}
-            >
-              {intl.formatMessage(messages.user)}
-            </SortableColumnHeader>
-            <SortableColumnHeader
-              sortKey="requests"
-              currentSort={currentSort}
-              sortDirection={sortDirection}
-              onSortChange={handleSortChange}
-            >
-              {intl.formatMessage(messages.totalrequests)}
-            </SortableColumnHeader>
-            <SortableColumnHeader
-              sortKey="usertype"
-              currentSort={currentSort}
-              sortDirection={sortDirection}
-              onSortChange={handleSortChange}
-            >
-              {intl.formatMessage(messages.accounttype)}
-            </SortableColumnHeader>
-            <SortableColumnHeader
-              sortKey="role"
-              currentSort={currentSort}
-              sortDirection={sortDirection}
-              onSortChange={handleSortChange}
-            >
-              {intl.formatMessage(messages.role)}
-            </SortableColumnHeader>
-            <SortableColumnHeader
-              sortKey="created"
-              currentSort={currentSort}
-              sortDirection={sortDirection}
-              onSortChange={handleSortChange}
-            >
-              {intl.formatMessage(messages.created)}
-            </SortableColumnHeader>
-            <Table.TH className="w-1/12 min-w-[12rem] whitespace-nowrap text-right">
-              {(data.results ?? []).length > 1 && (
-                <div className="flex justify-end">
-                  <Button
-                    buttonType="warning"
-                    className="w-full"
-                    onClick={() => setShowBulkEditModal(true)}
-                    disabled={selectedUsers.length === 0}
-                  >
-                    <PencilIcon />
-                    <span>{intl.formatMessage(messages.bulkedit)}</span>
-                  </Button>
-                </div>
-              )}
-            </Table.TH>
-          </tr>
-        </thead>
-        <Table.TBody>
-          {data?.results.map((user) => (
-            <tr key={`user-list-${user.id}`} data-testid="user-list-row">
-              <Table.TD>
-                {isUserPermsEditable(user.id) && (
+      {ambient ? (
+        ambientUserList
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <Table.TH>
+                {(data.results ?? []).length > 1 && (
                   <input
                     type="checkbox"
-                    id={`user-list-select-${user.id}`}
-                    name={`user-list-select-${user.id}`}
-                    checked={isUserSelected(user.id)}
+                    id="selectAll"
+                    name="selectAll"
+                    checked={isAllUsersSelected()}
                     onChange={() => {
-                      toggleUser(user.id);
+                      toggleAllUsers();
                     }}
                   />
                 )}
-              </Table.TD>
-              <Table.TD>
-                <div className="flex items-center">
-                  <Link
-                    href={`/users/${user.id}`}
-                    className="h-10 w-10 flex-shrink-0"
-                  >
-                    <CachedImage
-                      type="avatar"
-                      className="h-10 w-10 rounded-full object-cover"
-                      src={user.avatar}
-                      alt=""
-                      width={40}
-                      height={40}
+              </Table.TH>
+              <SortableColumnHeader
+                sortKey="displayname"
+                currentSort={currentSort}
+                sortDirection={sortDirection}
+                onSortChange={handleSortChange}
+              >
+                {intl.formatMessage(messages.user)}
+              </SortableColumnHeader>
+              <SortableColumnHeader
+                sortKey="requests"
+                currentSort={currentSort}
+                sortDirection={sortDirection}
+                onSortChange={handleSortChange}
+              >
+                {intl.formatMessage(messages.totalrequests)}
+              </SortableColumnHeader>
+              <SortableColumnHeader
+                sortKey="usertype"
+                currentSort={currentSort}
+                sortDirection={sortDirection}
+                onSortChange={handleSortChange}
+              >
+                {intl.formatMessage(messages.accounttype)}
+              </SortableColumnHeader>
+              <SortableColumnHeader
+                sortKey="role"
+                currentSort={currentSort}
+                sortDirection={sortDirection}
+                onSortChange={handleSortChange}
+              >
+                {intl.formatMessage(messages.role)}
+              </SortableColumnHeader>
+              <SortableColumnHeader
+                sortKey="created"
+                currentSort={currentSort}
+                sortDirection={sortDirection}
+                onSortChange={handleSortChange}
+              >
+                {intl.formatMessage(messages.created)}
+              </SortableColumnHeader>
+              <Table.TH className="w-1/12 min-w-[12rem] whitespace-nowrap text-right">
+                {(data.results ?? []).length > 1 && (
+                  <div className="flex justify-end">
+                    <Button
+                      buttonType="warning"
+                      className="w-full"
+                      onClick={() => setShowBulkEditModal(true)}
+                      disabled={selectedUsers.length === 0}
+                    >
+                      <PencilIcon />
+                      <span>{intl.formatMessage(messages.bulkedit)}</span>
+                    </Button>
+                  </div>
+                )}
+              </Table.TH>
+            </tr>
+          </thead>
+          <Table.TBody>
+            {data?.results.map((user) => (
+              <tr key={`user-list-${user.id}`} data-testid="user-list-row">
+                <Table.TD>
+                  {isUserPermsEditable(user.id) && (
+                    <input
+                      type="checkbox"
+                      id={`user-list-select-${user.id}`}
+                      name={`user-list-select-${user.id}`}
+                      checked={isUserSelected(user.id)}
+                      onChange={() => {
+                        toggleUser(user.id);
+                      }}
                     />
-                  </Link>
-                  <div className="ml-4">
+                  )}
+                </Table.TD>
+                <Table.TD>
+                  <div className="flex items-center">
                     <Link
                       href={`/users/${user.id}`}
-                      className="text-base font-bold leading-5 transition duration-300 hover:underline"
-                      data-testid="user-list-username-link"
+                      className="h-10 w-10 flex-shrink-0"
                     >
-                      {user.username ||
-                        user.jellyfinUsername ||
-                        user.plexUsername ||
-                        user.email}
+                      <CachedImage
+                        type="avatar"
+                        className="h-10 w-10 rounded-full object-cover"
+                        src={user.avatar}
+                        alt=""
+                        width={40}
+                        height={40}
+                      />
                     </Link>
-                    {(
-                      user.username ||
-                      user.jellyfinUsername ||
-                      user.plexUsername
-                    )?.toLowerCase() !== user.email && (
-                      <div className="text-sm leading-5 text-gray-300">
-                        {user.email}
-                      </div>
-                    )}
+                    <div className="ml-4">
+                      <Link
+                        href={`/users/${user.id}`}
+                        className="text-base font-bold leading-5 transition duration-300 hover:underline"
+                        data-testid="user-list-username-link"
+                      >
+                        {user.username ||
+                          user.jellyfinUsername ||
+                          user.plexUsername ||
+                          user.email}
+                      </Link>
+                      {(
+                        user.username ||
+                        user.jellyfinUsername ||
+                        user.plexUsername
+                      )?.toLowerCase() !== user.email && (
+                        <div className="text-sm leading-5 text-gray-300">
+                          {user.email}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </Table.TD>
-              <Table.TD>
-                {user.id === currentUser?.id ||
-                currentHasPermission(
-                  [Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW],
-                  { type: 'or' }
-                ) ? (
-                  <Link
-                    href={`/users/${user.id}/requests`}
-                    className="text-sm leading-5 transition duration-300 hover:underline"
-                  >
-                    {user.requestCount}
-                  </Link>
-                ) : (
-                  user.requestCount
-                )}
-              </Table.TD>
-              <Table.TD>
-                {user.userType === UserType.PLEX ? (
-                  <Badge badgeType="warning">
-                    {intl.formatMessage(messages.plexuser)}
-                  </Badge>
-                ) : user.userType === UserType.LOCAL ? (
-                  <Badge badgeType="default">
-                    {intl.formatMessage(messages.localuser)}
-                  </Badge>
-                ) : user.userType === UserType.EMBY ? (
-                  <Badge badgeType="success">
-                    {intl.formatMessage(messages.mediaServerUser, {
-                      mediaServerName: 'Emby',
-                    })}
-                  </Badge>
-                ) : user.userType === UserType.JELLYFIN ? (
-                  <Badge badgeType="default">
-                    {intl.formatMessage(messages.mediaServerUser, {
-                      mediaServerName: 'Jellyfin',
-                    })}
-                  </Badge>
-                ) : null}
-              </Table.TD>
-              <Table.TD>
-                {user.id === 1
-                  ? intl.formatMessage(messages.owner)
-                  : hasPermission(Permission.ADMIN, user.permissions)
-                    ? intl.formatMessage(messages.admin)
-                    : intl.formatMessage(messages.user)}
-              </Table.TD>
-              <Table.TD>
-                {intl.formatDate(user.createdAt, {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </Table.TD>
-              <Table.TD alignText="right">
-                <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 sm:gap-2">
-                  <Button
-                    buttonType="warning"
-                    disabled={user.id === 1 && currentUser?.id !== 1}
-                    onClick={() =>
-                      router.push(
-                        '/users/[userId]/settings',
-                        `/users/${user.id}/settings`
-                      )
-                    }
-                  >
-                    {intl.formatMessage(globalMessages.edit)}
-                  </Button>
-                  <Button
-                    buttonType="danger"
-                    disabled={
-                      user.id === 1 ||
-                      (currentUser?.id !== 1 &&
-                        hasPermission(Permission.ADMIN, user.permissions))
-                    }
-                    onClick={() => setDeleteModal({ isOpen: true, user })}
-                  >
-                    {intl.formatMessage(globalMessages.delete)}
-                  </Button>
-                </div>
+                </Table.TD>
+                <Table.TD>
+                  {user.id === currentUser?.id ||
+                  currentHasPermission(
+                    [Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW],
+                    { type: 'or' }
+                  ) ? (
+                    <Link
+                      href={`/users/${user.id}/requests`}
+                      className="text-sm leading-5 transition duration-300 hover:underline"
+                    >
+                      {user.requestCount}
+                    </Link>
+                  ) : (
+                    user.requestCount
+                  )}
+                </Table.TD>
+                <Table.TD>{userTypeBadge(user)}</Table.TD>
+                <Table.TD>
+                  {user.id === 1
+                    ? intl.formatMessage(messages.owner)
+                    : hasPermission(Permission.ADMIN, user.permissions)
+                      ? intl.formatMessage(messages.admin)
+                      : intl.formatMessage(messages.user)}
+                </Table.TD>
+                <Table.TD>
+                  {intl.formatDate(user.createdAt, {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </Table.TD>
+                <Table.TD alignText="right">
+                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 sm:gap-2">
+                    <Button
+                      buttonType="warning"
+                      disabled={user.id === 1 && currentUser?.id !== 1}
+                      onClick={() =>
+                        router.push(
+                          '/users/[userId]/settings',
+                          `/users/${user.id}/settings`
+                        )
+                      }
+                    >
+                      {intl.formatMessage(globalMessages.edit)}
+                    </Button>
+                    <Button
+                      buttonType="danger"
+                      disabled={
+                        user.id === 1 ||
+                        (currentUser?.id !== 1 &&
+                          hasPermission(Permission.ADMIN, user.permissions))
+                      }
+                      onClick={() => setDeleteModal({ isOpen: true, user })}
+                    >
+                      {intl.formatMessage(globalMessages.delete)}
+                    </Button>
+                  </div>
+                </Table.TD>
+              </tr>
+            ))}
+            <tr className="bg-gray-700">
+              <Table.TD colSpan={8} noPadding>
+                <nav
+                  className="flex w-screen flex-col items-center space-x-4 space-y-3 px-6 py-3 sm:flex-row sm:space-y-0 lg:w-full"
+                  aria-label="Pagination"
+                >
+                  {paginationContent}
+                </nav>
               </Table.TD>
             </tr>
-          ))}
-          <tr className="bg-gray-700">
-            <Table.TD colSpan={8} noPadding>
-              <nav
-                className="flex w-screen flex-col items-center space-x-4 space-y-3 px-6 py-3 sm:flex-row sm:space-y-0 lg:w-full"
-                aria-label="Pagination"
-              >
-                <div className="hidden lg:flex lg:flex-1">
-                  <p className="text-sm">
-                    {data.results.length > 0 &&
-                      intl.formatMessage(globalMessages.showingresults, {
-                        from: pageIndex * currentPageSize + 1,
-                        to:
-                          data.results.length < currentPageSize
-                            ? pageIndex * currentPageSize + data.results.length
-                            : (pageIndex + 1) * currentPageSize,
-                        total: data.pageInfo.results,
-                        strong: (msg: React.ReactNode) => (
-                          <span className="font-medium">{msg}</span>
-                        ),
-                      })}
-                  </p>
-                </div>
-                <div className="flex justify-center sm:flex-1 sm:justify-start lg:justify-center">
-                  <span className="-mt-3 items-center text-sm sm:-ml-4 sm:mt-0 lg:ml-0">
-                    {intl.formatMessage(globalMessages.resultsperpage, {
-                      pageSize: (
-                        <select
-                          id="pageSize"
-                          name="pageSize"
-                          onChange={(e) => {
-                            setCurrentPageSize(Number(e.target.value));
-                            router
-                              .push(router.pathname)
-                              .then(() => window.scrollTo(0, 0));
-                          }}
-                          value={currentPageSize}
-                          className="short inline"
-                        >
-                          <option value="5">5</option>
-                          <option value="10">10</option>
-                          <option value="25">25</option>
-                          <option value="50">50</option>
-                          <option value="100">100</option>
-                        </select>
-                      ),
-                    })}
-                  </span>
-                </div>
-                <div className="flex flex-auto justify-center space-x-2 sm:flex-1 sm:justify-end">
-                  <Button
-                    disabled={!hasPrevPage}
-                    onClick={() =>
-                      updateQueryParams('page', (page - 1).toString())
-                    }
-                  >
-                    <ChevronLeftIcon />
-                    <span>{intl.formatMessage(globalMessages.previous)}</span>
-                  </Button>
-                  <Button
-                    disabled={!hasNextPage}
-                    onClick={() =>
-                      updateQueryParams('page', (page + 1).toString())
-                    }
-                  >
-                    <span>{intl.formatMessage(globalMessages.next)}</span>
-                    <ChevronRightIcon />
-                  </Button>
-                </div>
-              </nav>
-            </Table.TD>
-          </tr>
-        </Table.TBody>
-      </Table>
+          </Table.TBody>
+        </Table>
+      )}
     </>
   );
 };

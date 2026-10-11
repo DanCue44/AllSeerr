@@ -10,6 +10,7 @@ import type {
 import BaseScanner from '@server/lib/scanners/baseScanner';
 import type { RadarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { requestErrorLogFields } from '@server/utils/requestError';
 import { uniqWith } from 'lodash';
 
 type SyncStatus = StatusBase & {
@@ -36,7 +37,11 @@ class RadarrScanner
   private server4kReturnedEmpty = false;
 
   constructor() {
-    super('Radarr Scan', { bundleSize: 50 });
+    super('Radarr Scan', {
+      bundleSize: 50,
+      jobId: 'radarr-scan',
+      service: 'radarr',
+    });
   }
 
   public status(): SyncStatus {
@@ -146,8 +151,9 @@ class RadarrScanner
 
       await this.cleanupOrphanedMovies();
       this.log('Radarr scan complete', 'info');
+      this.scanSucceeded();
     } catch (e) {
-      this.log('Scan interrupted', 'error', { errorMessage: e.message });
+      this.scanFailed(e);
     } finally {
       this.endRun(sessionId);
     }
@@ -182,7 +188,7 @@ class RadarrScanner
       });
     } catch (e) {
       this.log('Failed to process Radarr media', 'error', {
-        errorMessage: e.message,
+        ...requestErrorLogFields(e),
         title: radarrMovie.title,
       });
     }
@@ -212,7 +218,7 @@ class RadarrScanner
         this.log(
           `Could not confirm movie ${tmdbId} against Radarr server ${server.name}. Skipping cleanup for it.`,
           'warn',
-          { errorMessage: e.message }
+          requestErrorLogFields(e)
         );
         return true;
       }

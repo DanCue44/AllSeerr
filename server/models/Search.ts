@@ -10,7 +10,15 @@ import type {
 import { MediaType as MainMediaType } from '@server/constants/media';
 import type Media from '@server/entity/Media';
 
-export type MediaType = 'tv' | 'movie' | 'person' | 'collection';
+export type MediaType =
+  | 'tv'
+  | 'movie'
+  | 'person'
+  | 'collection'
+  | 'album'
+  | 'artist'
+  | 'book'
+  | 'author';
 
 interface SearchResult {
   id: number;
@@ -66,7 +74,75 @@ export interface PersonResult {
   knownFor: (MovieResult | TvResult)[];
 }
 
-export type Results = MovieResult | TvResult | PersonResult | CollectionResult;
+// Albums are MusicBrainz release groups, keyed by their MBID
+export interface AlbumResult {
+  id: string;
+  mediaType: 'album';
+  title: string;
+  albumType?: string;
+  secondaryTypes?: string[];
+  releaseDate?: string;
+  artistId?: string;
+  artistName?: string;
+  score?: number;
+  posterPath?: string | null;
+  needsCoverArt?: boolean;
+  /** TheAudioDB fanart of the artist, only on the featured hero albums */
+  artistBackdrop?: string | null;
+  /** Dominant cover colours as hex, only on the featured hero albums */
+  palette?: string[];
+  mediaInfo?: Media;
+}
+
+export interface ArtistResult {
+  id: string;
+  mediaType: 'artist';
+  name: string;
+  type?: string;
+  sortName?: string;
+  country?: string;
+  disambiguation?: string;
+  score?: number;
+  artistThumb?: string | null;
+  artistBackdrop?: string | null;
+}
+
+// Books are OpenLibrary works, keyed by their work id
+export interface BookResult {
+  id: string;
+  mediaType: 'book';
+  title: string;
+  subtitle?: string;
+  authorId?: string;
+  authorName?: string;
+  firstPublishYear?: number;
+  editionCount?: number;
+  posterPath: string | null;
+  /** Dominant cover colours as hex, only on the featured hero books */
+  palette?: string[];
+  mediaInfo?: Media;
+}
+
+export interface AuthorResult {
+  id: string;
+  mediaType: 'author';
+  name: string;
+  birthDate?: string;
+  deathDate?: string;
+  topWork?: string;
+  workCount?: number;
+  profilePath: string | null;
+}
+
+export type Results =
+  | MovieResult
+  | TvResult
+  | PersonResult
+  | CollectionResult
+  | AlbumResult
+  | ArtistResult
+  | BookResult
+  | AuthorResult;
 
 export const mapMovieResult = (
   movieResult: TmdbMovieResult,

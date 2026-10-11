@@ -17,8 +17,10 @@ import {
   ChevronRightIcon,
   CircleStackIcon,
   FunnelIcon,
+  UserIcon,
 } from '@heroicons/react/24/solid';
 import type { RequestResultsResponse } from '@server/interfaces/api/requestInterfaces';
+import type { UserResultsResponse } from '@server/interfaces/api/userInterfaces';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
@@ -31,6 +33,9 @@ const messages = defineMessages('components.RequestList', {
   sortAdded: 'Most Recent',
   sortModified: 'Last Modified',
   sortDirection: 'Toggle Sort Direction',
+  allRequesters: 'All Requesters',
+  removalrequests: 'Removal Requests',
+  removalrequestsCount: 'Removal Requests ({count})',
   unableToConnect:
     'Unable to connect to {services}. Some information may be unavailable.',
 });
@@ -51,7 +56,7 @@ type Sort = 'added' | 'modified';
 
 type SortDirection = 'asc' | 'desc';
 
-type MediaType = 'all' | 'movie' | 'tv';
+type MediaType = 'all' | 'movie' | 'tv' | 'music' | 'book';
 
 const RequestList = () => {
   const router = useRouter();
@@ -87,6 +92,20 @@ const RequestList = () => {
     }`
   );
 
+  const { data: removalCount } = useSWR<{ pending: number }>(
+    hasPermission(Permission.MANAGE_REQUESTS) ? '/api/v1/removal/count' : null
+  );
+
+  // Only users who can see everyone's requests get the requester filter
+  const canFilterByRequester =
+    !router.pathname.startsWith('/profile') &&
+    hasPermission([Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW], {
+      type: 'or',
+    });
+  const { data: requesters } = useSWR<UserResultsResponse>(
+    canFilterByRequester ? '/api/v1/user?take=1000&sort=displayname' : null
+  );
+
   // Restore last set filter values on component mount
   useEffect(() => {
     const filterString = window.localStorage.getItem('rl-filter-settings');
@@ -96,6 +115,13 @@ const RequestList = () => {
 
       setCurrentFilter(filterSettings.currentFilter);
       setCurrentSort(filterSettings.currentSort);
+      if (
+        ['all', 'movie', 'tv', 'music', 'book'].includes(
+          filterSettings.currentMediaType
+        )
+      ) {
+        setCurrentMediaType(filterSettings.currentMediaType);
+      }
       setCurrentPageSize(filterSettings.currentPageSize);
       if (['asc', 'desc'].includes(filterSettings.currentSortDirection)) {
         setCurrentSortDirection(filterSettings.currentSortDirection);
@@ -165,7 +191,50 @@ const RequestList = () => {
         >
           {intl.formatMessage(messages.requests)}
         </Header>
+        {!router.query.userId && !router.pathname.startsWith('/profile') && (
+          <Link
+            href="/requests/removals"
+            className="mb-2 text-sm text-gray-400 hover:text-white hover:underline lg:mb-0 lg:ml-4 lg:mr-auto"
+          >
+            {removalCount?.pending
+              ? intl.formatMessage(messages.removalrequestsCount, {
+                  count: removalCount.pending,
+                })
+              : intl.formatMessage(messages.removalrequests)}
+          </Link>
+        )}
         <div className="mt-2 flex flex-grow flex-col sm:flex-row lg:flex-grow-0">
+          {canFilterByRequester && (
+            <div className="mb-2 flex flex-grow sm:mb-0 sm:mr-2 lg:flex-grow-0">
+              <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-gray-800 px-3 text-sm text-gray-100">
+                <UserIcon className="h-6 w-6" />
+              </span>
+              <select
+                id="requestedBy"
+                name="requestedBy"
+                onChange={(e) => {
+                  router.push({
+                    pathname: router.pathname,
+                    query: e.target.value ? { userId: e.target.value } : {},
+                  });
+                }}
+                value={router.query.userId ? String(router.query.userId) : ''}
+                className="rounded-r-only"
+              >
+                <option value="">
+                  {intl.formatMessage(messages.allRequesters)}
+                </option>
+                {requesters?.results.map((requester) => (
+                  <option
+                    key={`requester-${requester.id}`}
+                    value={requester.id}
+                  >
+                    {requester.displayName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="mb-2 flex flex-grow sm:mb-0 sm:mr-2 lg:flex-grow-0">
             <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-gray-800 px-3 text-sm text-gray-100">
               <CircleStackIcon className="h-6 w-6" />
@@ -193,6 +262,12 @@ const RequestList = () => {
               </option>
               <option value="tv">
                 {intl.formatMessage(globalMessages.tvshows)}
+              </option>
+              <option value="music">
+                {intl.formatMessage(globalMessages.music)}
+              </option>
+              <option value="book">
+                {intl.formatMessage(globalMessages.books)}
               </option>
             </select>
           </div>

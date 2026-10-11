@@ -1,6 +1,7 @@
 import PlexIcon from '@app/assets/services/plex.svg';
 import Button from '@app/components/Common/Button';
 import { SmallLoadingSpinner } from '@app/components/Common/LoadingSpinner';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import usePlexLogin from '@app/hooks/usePlexLogin';
 import defineMessages from '@app/utils/defineMessages';
 import { Fragment } from 'react';
@@ -24,10 +25,16 @@ const PlexLoginButton = ({
   large,
 }: PlexLoginButtonProps) => {
   const { loading, login } = usePlexLogin({ onAuthToken, onError });
+  const [interfaceStyle] = useInterfaceStyle();
 
   return (
     <Button
-      className="relative flex-1 border-[#cc7b19] bg-[rgba(204,123,25,0.3)] hover:border-[#cc7b19] hover:bg-[rgba(204,123,25,0.7)] disabled:opacity-50"
+      className={
+        interfaceStyle === 'ambient'
+          ? // Full width pill in Plex's own gold, with the white Plex mark
+            'relative h-[50px] w-full flex-1 border-[#e5a00d]/70 bg-[#e5a00d]/15 text-[15px] text-as-ink hover:border-[#e5a00d] hover:bg-[#e5a00d]/30 active:bg-[#e5a00d]/30 disabled:opacity-50'
+          : 'relative flex-1 border-[#cc7b19] bg-[rgba(204,123,25,0.3)] hover:border-[#cc7b19] hover:bg-[rgba(204,123,25,0.7)] disabled:opacity-50'
+      }
       onClick={login}
       disabled={loading || isProcessing}
       data-testid="plex-login-button"

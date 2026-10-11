@@ -1,4 +1,5 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events */
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { useLockBodyScroll } from '@app/hooks/useLockBodyScroll';
 import { Transition, TransitionChild } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
@@ -22,6 +23,8 @@ const SlideOver = ({
 }: SlideOverProps) => {
   const [isMounted, setIsMounted] = useState(false);
   const slideoverRef = useRef(null);
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
   useLockBodyScroll(show);
 
   useEffect(() => {
@@ -46,7 +49,9 @@ const SlideOver = ({
     >
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div
-        className={`fixed inset-0 z-50 overflow-hidden bg-gray-800/70`}
+        className={`fixed inset-0 z-50 overflow-hidden ${
+          ambient ? 'bg-as-ground/70' : 'bg-gray-800/70'
+        }`}
         onClick={() => onClose()}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
@@ -71,32 +76,68 @@ const SlideOver = ({
                 ref={slideoverRef}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex h-full flex-col rounded-lg bg-gray-800/80 shadow-xl ring-1 ring-gray-700 backdrop-blur">
-                  <header className="space-y-1 border-b border-gray-700 px-4 py-4">
+                <div
+                  className={
+                    ambient
+                      ? 'flex h-full flex-col rounded-[22px] bg-as-surface shadow-[0_30px_60px_rgba(0,0,0,0.4)] ring-1 ring-as-line'
+                      : 'flex h-full flex-col rounded-lg bg-gray-800/80 shadow-xl ring-1 ring-gray-700 backdrop-blur'
+                  }
+                >
+                  <header
+                    className={
+                      ambient
+                        ? 'space-y-1 border-b border-as-line px-6 py-5'
+                        : 'space-y-1 border-b border-gray-700 px-4 py-4'
+                    }
+                  >
                     <div className="flex items-center justify-between space-x-3">
-                      <h2 className="text-overseerr text-2xl font-bold leading-7">
+                      <h2
+                        className={
+                          ambient
+                            ? 'font-display text-[22px] font-medium leading-7 text-as-ink'
+                            : 'text-overseerr text-2xl font-bold leading-7'
+                        }
+                      >
                         {title}
                       </h2>
                       <div className="flex h-7 items-center">
                         <button
                           aria-label="Close panel"
-                          className="text-gray-200 transition duration-150 ease-in-out hover:text-white"
+                          className={
+                            ambient
+                              ? 'flex h-10 w-10 items-center justify-center rounded-full border border-as-line text-as-ink transition hover:border-as-line-strong hover:bg-as-raised'
+                              : 'text-gray-200 transition duration-150 ease-in-out hover:text-white'
+                          }
                           onClick={() => onClose()}
                         >
-                          <XMarkIcon className="h-6 w-6" />
+                          <XMarkIcon
+                            className={ambient ? 'h-5 w-5' : 'h-6 w-6'}
+                          />
                         </button>
                       </div>
                     </div>
                     {subText && (
                       <div>
-                        <p className="font-semibold leading-5 text-gray-300">
+                        <p
+                          className={
+                            ambient
+                              ? 'text-sm font-semibold leading-5 text-as-ink-faint'
+                              : 'font-semibold leading-5 text-gray-300'
+                          }
+                        >
                           {subText}
                         </p>
                       </div>
                     )}
                   </header>
                   <div className="hide-scrollbar flex flex-1 flex-col overflow-y-auto">
-                    <div className="flex-1 px-4 py-6 text-white">
+                    <div
+                      className={
+                        ambient
+                          ? 'flex-1 px-6 py-6 text-as-ink'
+                          : 'flex-1 px-4 py-6 text-white'
+                      }
+                    >
                       {children}
                     </div>
                   </div>

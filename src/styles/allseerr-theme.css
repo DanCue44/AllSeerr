@@ -1,0 +1,255 @@
+/*
+ * AllSeerr design tokens.
+ *
+ * Colors are stored as space separated RGB channels so Tailwind can apply
+ * opacity (bg-as-surface/80). Pick a palette with data-palette on <html>;
+ * slate is the fallback.
+ */
+
+:root,
+[data-palette='slate'] {
+  --as-ground: 13 27 34;
+  --as-surface: 19 38 47;
+  --as-tile: 15 32 40;
+  --as-line: 34 64 75;
+  --as-line-strong: 47 73 84;
+  --as-raised: 24 48 57;
+  --as-ink: 232 241 242;
+  --as-ink-soft: 211 224 226;
+  --as-ink-muted: 184 203 207;
+  --as-ink-faint: 157 179 184;
+  --as-mid: 102 126 134;
+  --as-accent: 236 112 62;
+  --as-accent-soft: 247 176 145;
+}
+
+[data-palette='plum'] {
+  --as-ground: 26 18 32;
+  --as-surface: 37 26 45;
+  --as-tile: 31 22 38;
+  --as-line: 59 44 70;
+  --as-line-strong: 75 57 88;
+  --as-raised: 45 33 55;
+  --as-ink: 244 237 246;
+  --as-ink-soft: 226 214 231;
+  --as-ink-muted: 199 184 206;
+  --as-ink-faint: 171 155 179;
+  --as-mid: 123 106 134;
+  --as-accent: 236 112 62;
+  --as-accent-soft: 247 176 145;
+}
+
+[data-palette='espresso'] {
+  --as-ground: 23 18 15;
+  --as-surface: 35 27 22;
+  --as-tile: 29 22 18;
+  --as-line: 59 47 39;
+  --as-line-strong: 75 60 51;
+  --as-raised: 43 33 27;
+  --as-ink: 245 238 231;
+  --as-ink-soft: 229 217 205;
+  --as-ink-muted: 200 185 170;
+  --as-ink-faint: 173 157 142;
+  --as-mid: 124 108 96;
+  --as-accent: 240 179 94;
+  --as-accent-soft: 247 220 174;
+}
+
+[data-palette='moss'] {
+  --as-ground: 15 23 18;
+  --as-surface: 24 36 28;
+  --as-tile: 19 29 23;
+  --as-line: 43 62 49;
+  --as-line-strong: 55 80 63;
+  --as-raised: 30 45 35;
+  --as-ink: 237 244 239;
+  --as-ink-soft: 214 227 218;
+  --as-ink-muted: 184 202 189;
+  --as-ink-faint: 157 178 163;
+  --as-mid: 106 129 113;
+  --as-accent: 236 112 62;
+  --as-accent-soft: 247 176 145;
+}
+
+[data-palette='graphite'] {
+  --as-ground: 20 20 22;
+  --as-surface: 30 30 34;
+  --as-tile: 24 24 27;
+  --as-line: 48 48 54;
+  --as-line-strong: 61 61 68;
+  --as-raised: 37 37 42;
+  --as-ink: 242 242 243;
+  --as-ink-soft: 220 220 223;
+  --as-ink-muted: 189 189 195;
+  --as-ink-faint: 162 162 169;
+  --as-mid: 112 112 118;
+  --as-accent: 236 112 62;
+  --as-accent-soft: 247 176 145;
+}
+
+/* Gray palettes */
+
+[data-palette='charcoal'] {
+  --as-ground: 32 33 36;
+  --as-surface: 43 44 48;
+  --as-tile: 37 38 42;
+  --as-line: 61 62 67;
+  --as-line-strong: 75 76 82;
+  --as-raised: 50 51 56;
+  --as-ink: 241 241 242;
+  --as-ink-soft: 221 221 224;
+  --as-ink-muted: 192 192 197;
+  --as-ink-faint: 166 166 172;
+  --as-mid: 120 121 127;
+  --as-accent: 236 112 62;
+  --as-accent-soft: 247 176 145;
+}
+
+[data-palette='steel'] {
+  --as-ground: 31 34 38;
+  --as-surface: 42 46 51;
+  --as-tile: 36 40 44;
+  --as-line: 59 64 71;
+  --as-line-strong: 74 80 88;
+  --as-raised: 49 53 58;
+  --as-ink: 238 241 244;
+  --as-ink-soft: 217 221 226;
+  --as-ink-muted: 188 194 201;
+  --as-ink-faint: 161 168 176;
+  --as-mid: 118 124 132;
+  --as-accent: 236 112 62;
+  --as-accent-soft: 247 176 145;
+}
+
+[data-palette='stone'] {
+  --as-ground: 35 33 32;
+  --as-surface: 46 43 41;
+  --as-tile: 40 38 36;
+  --as-line: 66 62 58;
+  --as-line-strong: 81 76 71;
+  --as-raised: 53 50 47;
+  --as-ink: 243 240 237;
+  --as-ink-soft: 224 219 214;
+  --as-ink-muted: 198 191 184;
+  --as-ink-faint: 170 163 156;
+  --as-mid: 126 120 114;
+  --as-accent: 236 112 62;
+  --as-accent-soft: 247 176 145;
+}
+
+/* Status colors stay the same in every palette so their meaning holds. */
+:root {
+  --as-ok: 168 230 196;
+  --as-ok-bg: 29 59 51;
+  --as-info: 170 200 240;
+  --as-info-bg: 30 50 71;
+  --as-warn: 255 210 192;
+  --as-warn-bg: 59 42 37;
+  --as-bad: 242 176 170;
+  --as-bad-bg: 59 36 39;
+}
+
+/*
+ * Ambient repaint. Tailwind's gray, indigo and purple scales read these
+ * variables (see tailwind.config.js), so pages that still use Seerr's
+ * classes pick up the palette. Only set while the Ambient layout has put a
+ * palette on <html>; the classic interface keeps the stock colors.
+ */
+[data-palette] {
+  --as-accent-strong: 214 96 50;
+  --as-accent-deep: 176 74 36;
+
+  --tw-gray-950: var(--as-ground);
+  --tw-gray-900: var(--as-ground);
+  --tw-gray-800: var(--as-surface);
+  --tw-gray-700: var(--as-line);
+  --tw-gray-600: var(--as-line-strong);
+  --tw-gray-500: var(--as-mid);
+  --tw-gray-400: var(--as-ink-faint);
+  --tw-gray-300: var(--as-ink-muted);
+  --tw-gray-200: var(--as-ink-soft);
+  --tw-gray-100: var(--as-ink);
+  --tw-gray-50: var(--as-ink);
+
+  --tw-indigo-950: var(--as-accent-deep);
+  --tw-indigo-900: var(--as-accent-deep);
+  --tw-indigo-800: var(--as-accent-deep);
+  --tw-indigo-700: var(--as-accent-deep);
+  --tw-indigo-600: var(--as-accent-strong);
+  --tw-indigo-500: var(--as-accent-strong);
+  --tw-indigo-400: var(--as-accent);
+  --tw-indigo-300: var(--as-accent-soft);
+  --tw-indigo-200: var(--as-accent-soft);
+  --tw-indigo-100: var(--as-accent-soft);
+  --tw-indigo-50: var(--as-accent-soft);
+
+  --tw-purple-950: var(--as-accent-deep);
+  --tw-purple-900: var(--as-accent-deep);
+  --tw-purple-800: var(--as-accent-deep);
+  --tw-purple-700: var(--as-accent-deep);
+  --tw-purple-600: var(--as-accent-strong);
+  --tw-purple-500: var(--as-accent-strong);
+  --tw-purple-400: var(--as-accent);
+  --tw-purple-300: var(--as-accent-soft);
+  --tw-purple-200: var(--as-accent-soft);
+  --tw-purple-100: var(--as-accent-soft);
+  --tw-purple-50: var(--as-accent-soft);
+}
+
+:root[data-palette] body {
+  background-color: rgb(var(--as-ground));
+}
+
+/* Section headings on classic pages take the design's heading style */
+[data-palette] .slider-title {
+  font-family: 'Unbounded Variable', sans-serif;
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1.3;
+  color: rgb(var(--as-ink));
+}
+
+[data-palette] a.slider-title svg {
+  color: rgb(var(--as-accent));
+}
+
+/* Seerr's gradient headings (page headers, modal and panel titles) */
+[data-palette] .text-overseerr {
+  background-image: none;
+  color: rgb(var(--as-ink));
+  font-family: 'Unbounded Variable', sans-serif;
+  font-weight: 500;
+}
+
+/* Toasts render outside the interface provider, so they are styled here */
+[data-palette] .toast-panel {
+  border-radius: 22px;
+  background-color: rgb(var(--as-raised));
+  --tw-ring-color: rgb(var(--as-line-strong));
+  box-shadow:
+    0 0 0 1px rgb(var(--as-line-strong)),
+    0 20px 40px rgb(0 0 0 / 0.4);
+}
+
+[data-palette] .toast-panel > div {
+  border-radius: 22px;
+}
+
+/* Floating buttons sit above the Ambient tab bar on phones and tablets */
+@media (max-width: 1023px) {
+  [data-palette] .absolute-bottom-shift {
+    bottom: calc(6.5rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* iOS zooms into any text field under 16px when it is focused and stays
+   zoomed after the keyboard closes, leaving the page scrolling sideways.
+   -webkit-touch-callout only exists on iOS, so other browsers keep their
+   smaller field text. */
+@supports (-webkit-touch-callout: none) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em) !important;
+  }
+}

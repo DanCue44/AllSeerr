@@ -18,6 +18,14 @@ import {
 } from '@heroicons/react/24/solid';
 import type { PlexDevice } from '@server/interfaces/api/plexInterfaces';
 import type { PlexSettings, TautulliSettings } from '@server/lib/settings';
+import type { PlexAddress } from '@server/utils/plexAddress';
+import {
+  PLEX_SUB_PATH_MESSAGE,
+  PlexAddressError,
+  looksLikePlexUrl,
+  parsePlexAddress,
+  plexAddressUrl,
+} from '@server/utils/plexAddress';
 import axios from 'axios';
 import { Field, Formik } from 'formik';
 import { orderBy } from 'lodash';
@@ -30,7 +38,7 @@ const messages = defineMessages('components.Settings', {
   plex: 'Plex',
   plexsettings: 'Plex Settings',
   plexsettingsDescription:
-    'Configure the settings for your Plex server. Seerr scans your Plex libraries to determine content availability.',
+    'Configure the settings for your Plex server. AllSeerr scans your Plex libraries to determine content availability.',
   serverpreset: 'Server',
   serverLocal: 'local',
   serverRemote: 'remote',
@@ -50,16 +58,31 @@ const messages = defineMessages('components.Settings', {
   settingUpPlexDescription:
     'To set up Plex, you can either enter the details manually or select a server retrieved from <RegisterPlexTVLink>plex.tv</RegisterPlexTVLink>. Press the button to the right of the dropdown to fetch the list of available servers.',
   hostname: 'Hostname or IP Address',
+  hostnameTip:
+    'The local address is fastest. A domain works through a reverse proxy on port 443. You can paste a full URL.',
+  validationHostnameSubPath:
+    'Plex cannot be reached under a sub path such as /plex. Use the address of the server itself, or a reverse proxy that serves Plex at the root of its own (sub)domain.',
+  validationHostnameUrl: 'You must provide a valid hostname, IP address or URL',
+  connectionCloudflarePort:
+    "{host} goes through Cloudflare, which does not pass port {port}. Use https on port 443 (through your reverse proxy) or Plex's local address.",
+  connectionNonstandardPort:
+    "{host} did not answer on port {port}. If it points to a reverse proxy or a CDN, use https on port 443 or Plex's local address.",
+  connectionUnauthorized:
+    'Plex did not accept the Plex token. Sign in to AllSeerr with the Plex account that owns the server.',
+  connectionSuggestion: 'AllSeerr connected to {url} instead.',
+  connectionNoSuggestion:
+    'No other address on this host answered. Check that Plex is running, or use its local address.',
+  useSuggestion: 'Use {url}',
   port: 'Port',
   enablessl: 'Use SSL',
   plexlibraries: 'Plex Libraries',
   plexlibrariesDescription:
-    'The libraries Seerr scans for titles. Set up and save your Plex connection settings, then click the button below if no libraries are listed.',
+    'The libraries AllSeerr scans for titles. Set up and save your Plex connection settings, then click the button below if no libraries are listed.',
   scanning: 'Syncing…',
   scan: 'Sync Libraries',
   manualscan: 'Manual Library Scan',
   manualscanDescription:
-    "Normally, this will only be run once every 24 hours. Seerr will check your Plex server's recently added more aggressively. If this is your first time configuring Plex, a one-time full manual library scan is recommended!",
+    "Normally, this will only be run once every 24 hours. AllSeerr will check your Plex server's recently added more aggressively. If this is your first time configuring Plex, a one-time full manual library scan is recommended!",
   notrunning: 'Not Running',
   currentlibrary: 'Current Library: {name}',
   librariesRemaining: 'Libraries Remaining: {count}',
@@ -72,7 +95,7 @@ const messages = defineMessages('components.Settings', {
     'Optionally direct users to the web app on your server instead of https://app.plex.tv/desktop',
   tautulliSettings: 'Tautulli Settings',
   tautulliSettingsDescription:
-    'Optionally configure the settings for your Tautulli server. Seerr fetches watch history data for your Plex media from Tautulli.',
+    'Optionally configure the settings for your Tautulli server. AllSeerr fetches watch history data for your Plex media from Tautulli.',
   urlBase: 'URL Base',
   tautulliApiKey: 'API Key',
   externalUrl: 'External URL',
@@ -110,6 +133,23 @@ interface PresetServerDisplay {
   status?: boolean;
   message?: string;
 }
+interface PlexConnectionError {
+  message: string;
+  reason?: 'cloudflare-port' | 'nonstandard-port-timeout' | 'unauthorized';
+  url?: string;
+  suggestion?: PlexAddress;
+  // The address that failed, read from url
+  address?: PlexAddress;
+}
+
+const readAddress = (url?: string): PlexAddress | undefined => {
+  try {
+    return url ? parsePlexAddress({ ip: url }) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 interface SettingsPlexProps {
   isSetupSettings?: boolean;
 }
@@ -120,6 +160,8 @@ const SettingsPlex = ({ isSetupSettings }: SettingsPlexProps) => {
   const [availableServers, setAvailableServers] = useState<PlexDevice[] | null>(
     null
   );
+  const [connectionError, setConnectionError] =
+    useState<PlexConnectionError | null>(null);
   const {
     data,
     error,
@@ -144,7 +186,28 @@ const SettingsPlex = ({ isSetupSettings }: SettingsPlexProps) => {
   const PlexSettingsSchema = Yup.object().shape({
     hostname: Yup.string()
       .nullable()
-      .required(intl.formatMessage(messages.validationHostnameRequired)),
+      .required(intl.formatMessage(messages.validationHostnameRequired))
+      // A pasted URL is split into the fields on blur. One that cannot be,
+      // such as a URL with a sub path, explains why.
+      .test('plex-address', (value, context) => {
+        if (!value || !looksLikePlexUrl(value)) {
+          return true;
+        }
+
+        try {
+          parsePlexAddress({ ip: value, port: 32400 });
+          return true;
+        } catch (e) {
+          return context.createError({
+            message: intl.formatMessage(
+              e instanceof PlexAddressError &&
+                e.message === PLEX_SUB_PATH_MESSAGE
+                ? messages.validationHostnameSubPath
+                : messages.validationHostnameUrl
+            ),
+          });
+        }
+      }),
     port: Yup.number()
       .nullable()
       .required(intl.formatMessage(messages.validationPortRequired)),
@@ -391,6 +454,7 @@ const SettingsPlex = ({ isSetupSettings }: SettingsPlexProps) => {
         validateOnMount={true}
         onSubmit={async (values) => {
           let toastId: string | null = null;
+          setConnectionError(null);
           try {
             addToast(
               intl.formatMessage(messages.toastPlexConnecting),
@@ -418,10 +482,22 @@ const SettingsPlex = ({ isSetupSettings }: SettingsPlexProps) => {
               autoDismiss: true,
               appearance: 'success',
             });
-          } catch {
+          } catch (e) {
             if (toastId) {
               removeToast(toastId);
             }
+            const data = e?.response?.data;
+            setConnectionError(
+              data?.message
+                ? {
+                    message: data.message,
+                    reason: data.reason,
+                    url: data.url,
+                    suggestion: data.suggestion,
+                    address: readAddress(data.url),
+                  }
+                : null
+            );
             addToast(intl.formatMessage(messages.toastPlexConnectingFailure), {
               autoDismiss: true,
               appearance: 'error',
@@ -434,8 +510,10 @@ const SettingsPlex = ({ isSetupSettings }: SettingsPlexProps) => {
           touched,
           values,
           handleSubmit,
+          handleBlur,
           setFieldValue,
           setValues,
+          submitForm,
           isSubmitting,
           isValid,
         }) => {
@@ -521,6 +599,9 @@ const SettingsPlex = ({ isSetupSettings }: SettingsPlexProps) => {
                 <label htmlFor="hostname" className="text-label">
                   {intl.formatMessage(messages.hostname)}
                   <span className="label-required">*</span>
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.hostnameTip)}
+                  </span>
                 </label>
                 <div className="form-input-area">
                   <div className="form-input-field">
@@ -533,6 +614,28 @@ const SettingsPlex = ({ isSetupSettings }: SettingsPlexProps) => {
                       id="hostname"
                       name="hostname"
                       className="rounded-r-only"
+                      placeholder="192.168.1.5 or https://plex.example.com"
+                      onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                        handleBlur(e);
+                        // Split a pasted URL into host, port and SSL
+                        if (looksLikePlexUrl(e.target.value)) {
+                          try {
+                            const address = parsePlexAddress({
+                              ip: e.target.value,
+                              port: values.port,
+                              useSsl: values.useSsl,
+                            });
+                            setValues({
+                              ...values,
+                              hostname: address.ip,
+                              port: address.port,
+                              useSsl: address.useSsl,
+                            });
+                          } catch {
+                            // Validation explains what is wrong
+                          }
+                        }
+                      }}
                     />
                   </div>
                   {errors.hostname &&
@@ -612,6 +715,79 @@ const SettingsPlex = ({ isSetupSettings }: SettingsPlexProps) => {
                     )}
                 </div>
               </div>
+              {connectionError && (
+                <div className="mt-6" data-testid="plex-connection-error">
+                  <Alert type="error" title={connectionError.message}>
+                    <div className="flex flex-col gap-3">
+                      {connectionError.reason && connectionError.address && (
+                        <p>
+                          {connectionError.reason === 'unauthorized'
+                            ? intl.formatMessage(
+                                messages.connectionUnauthorized
+                              )
+                            : intl.formatMessage(
+                                connectionError.reason === 'cloudflare-port'
+                                  ? messages.connectionCloudflarePort
+                                  : messages.connectionNonstandardPort,
+                                {
+                                  host: connectionError.address.ip,
+                                  port: connectionError.address.port,
+                                }
+                              )}
+                        </p>
+                      )}
+                      {connectionError.url &&
+                        connectionError.reason !== 'unauthorized' &&
+                        (connectionError.suggestion ? (
+                          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+                            <span>
+                              {intl.formatMessage(
+                                messages.connectionSuggestion,
+                                {
+                                  url: plexAddressUrl(
+                                    connectionError.suggestion
+                                  ),
+                                }
+                              )}
+                            </span>
+                            <Button
+                              buttonType="primary"
+                              buttonSize="sm"
+                              type="button"
+                              disabled={isSubmitting}
+                              data-testid="plex-use-suggestion"
+                              onClick={async () => {
+                                const suggestion = connectionError.suggestion;
+
+                                if (!suggestion) {
+                                  return;
+                                }
+
+                                await setValues({
+                                  ...values,
+                                  hostname: suggestion.ip,
+                                  port: suggestion.port,
+                                  useSsl: suggestion.useSsl,
+                                });
+                                submitForm();
+                              }}
+                            >
+                              {intl.formatMessage(messages.useSuggestion, {
+                                url: plexAddressUrl(connectionError.suggestion),
+                              })}
+                            </Button>
+                          </div>
+                        ) : (
+                          <p>
+                            {intl.formatMessage(
+                              messages.connectionNoSuggestion
+                            )}
+                          </p>
+                        ))}
+                    </div>
+                  </Alert>
+                </div>
+              )}
               <div className="actions">
                 <div className="flex justify-end">
                   <span className="ml-3 inline-flex rounded-md shadow-sm">

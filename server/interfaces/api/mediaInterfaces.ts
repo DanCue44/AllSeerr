@@ -20,3 +20,41 @@ export interface MediaWatchDataResponse {
     playCount30Days: number;
   };
 }
+
+export interface MediaFileInfo {
+  id: number;
+  fileName: string;
+  // Only included for users who can manage requests
+  path?: string;
+  size: number;
+  dateAdded: string;
+  quality?: string;
+  resolution?: number;
+  releaseGroup?: string;
+  sceneName?: string;
+  edition?: string;
+  languages: string[];
+  seasonNumber?: number;
+  episodeNumbers?: number[];
+  mediaInfo?: {
+    videoCodec?: string;
+    videoBitDepth?: number;
+    videoBitrate?: number;
+    videoFps?: number;
+    videoDynamicRange?: string;
+    resolution?: string;
+    scanType?: string;
+    runTime?: string;
+    audioCodec?: string;
+    audioChannels?: number;
+    audioBitrate?: number;
+    audioStreamCount?: number;
+    audioLanguages: string[];
+    subtitles: string[];
+  };
+}
+
+export interface MediaFilesResponse {
+  files?: MediaFileInfo[];
+  files4k?: MediaFileInfo[];
+}

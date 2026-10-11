@@ -1,7 +1,11 @@
+import type { BookLanguage } from '@server/constants/bookLanguages';
+import { getEffectiveBookLanguage } from '@server/constants/bookLanguages';
+import type { BookFormatChoice } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import { Permission } from '@server/lib/permissions';
 import { runMigrations } from '@server/lib/settings/migrator';
 import type { AvailableLocale } from '@server/types/languages';
+import { DEFAULT_ACCENT_COLOR } from '@server/utils/accentColor';
 import { randomBytes, randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import { mergeWith } from 'lodash';
@@ -18,7 +22,7 @@ export interface Library {
   id: string;
   name: string;
   enabled: boolean;
-  type: 'show' | 'movie';
+  type: 'show' | 'movie' | 'music';
   lastScan?: number;
 }
 
@@ -65,6 +69,62 @@ export interface TautulliSettings {
   externalUrl?: string;
 }
 
+export interface BazarrSettings {
+  hostname?: string;
+  port?: number;
+  useSsl?: boolean;
+  urlBase?: string;
+  apiKey?: string;
+  externalUrl?: string;
+}
+
+export interface LazyLibrarianSettings {
+  hostname?: string;
+  port?: number;
+  useSsl?: boolean;
+  urlBase?: string;
+  apiKey?: string;
+  externalUrl?: string;
+  /** @deprecated Moved to AudiobookshelfSettings.url, still read when unset */
+  audiobookshelfUrl?: string;
+  /** @deprecated Moved to AudiobookshelfSettings.libraryId */
+  audiobookshelfLibraryId?: string;
+}
+
+export interface AudiobookshelfSettings {
+  // Public Audiobookshelf address, linked from available books
+  url?: string;
+  // Audiobookshelf library searched for a book's title, when set
+  libraryId?: string;
+  // Library holding the ebooks, when they are kept apart from the audiobooks
+  ebookLibraryId?: string;
+  // Lists the libraries in the settings and finds books in them, so links
+  // open the book itself. Never sent to users.
+  apiKey?: string;
+}
+
+/**
+ * The Audiobookshelf link settings. They used to live in the LazyLibrarian
+ * settings, which are still read while the Audiobookshelf block is empty.
+ */
+export const resolveAudiobookshelfSettings = ({
+  audiobookshelf,
+  lazylibrarian,
+}: Partial<
+  Pick<AllSettings, 'audiobookshelf' | 'lazylibrarian'>
+>): AudiobookshelfSettings => {
+  if (audiobookshelf?.url) {
+    return audiobookshelf;
+  }
+
+  return {
+    ...audiobookshelf,
+    url: lazylibrarian?.audiobookshelfUrl || audiobookshelf?.url,
+    libraryId:
+      audiobookshelf?.libraryId || lazylibrarian?.audiobookshelfLibraryId,
+  };
+};
+
 export interface DVRSettings {
   id: number;
   name: string;
@@ -89,6 +149,28 @@ export interface DVRSettings {
 export interface RadarrSettings extends DVRSettings {
   minimumAvailability: string;
 }
+
+export interface LidarrSettings extends DVRSettings {
+  activeMetadataProfileId: number;
+  activeMetadataProfileName: string;
+}
+
+/**
+ * A Chaptarr server, or another Readarr compatible server. Chaptarr keeps
+ * ebooks and audiobooks apart, so each format has its own quality profile,
+ * metadata profile and root folder. The DVR fields hold the ebook settings.
+ */
+export interface ChaptarrSettings extends DVRSettings {
+  activeMetadataProfileId: number;
+  activeMetadataProfileName: string;
+  activeAudiobookProfileId?: number;
+  activeAudiobookProfileName?: string;
+  activeAudiobookMetadataProfileId?: number;
+  activeAudiobookMetadataProfileName?: string;
+  activeAudiobookDirectory?: string;
+}
+
+export type BookService = 'chaptarr' | 'lazylibrarian';
 
 export interface SonarrSettings extends DVRSettings {
   seriesType: 'standard' | 'daily' | 'anime';
@@ -133,11 +215,15 @@ export interface MainSettings {
   apiKey: string;
   applicationTitle: string;
   applicationUrl: string;
+  applicationLogoVersion: string;
+  accentColor: string;
   cacheImages: boolean;
   defaultPermissions: number;
   defaultQuotas: {
     movie: Quota;
     tv: Quota;
+    music: Quota;
+    book: Quota;
   };
   hideAvailable: boolean;
   hideBlocklisted: boolean;
@@ -152,8 +238,18 @@ export interface MainSettings {
   blocklistLanguage: string;
   blocklistedTags: string;
   blocklistedTagsLimit: number;
+  blockedWatchProviders: string;
   mediaServerType: number;
   partialRequestsEnabled: boolean;
+  allowCurrentSeasonRequests: boolean;
+  defaultBookFormat: BookFormatChoice;
+  // Language books are requested in, unless a user picks their own
+  bookLanguage: BookLanguage;
+  // Service book requests go to, picked automatically when not set
+  bookService?: BookService;
+  // Google Books API key, used to check whether books have ebook editions
+  googleBooksApiKey: string;
+  currentSeasonRolloverDelayDays: number;
   enableSpecialEpisodes: boolean;
   locale: string;
   youtubeUrl: string;
@@ -190,9 +286,46 @@ interface PublicSettings {
   initialized: boolean;
 }
 
+/**
+ * The Chaptarr server book requests are sent to: the default one, or the
+ * only one when none is marked as default
+ */
+export const getDefaultChaptarr = (
+  servers: ChaptarrSettings[] = []
+): ChaptarrSettings | undefined =>
+  servers.find((server) => server.isDefault) ??
+  (servers.length === 1 ? servers[0] : undefined);
+
+export const resolveBookService = ({
+  main,
+  chaptarr,
+  lazylibrarian,
+}: Pick<AllSettings, 'main' | 'chaptarr' | 'lazylibrarian'>):
+  | BookService
+  | undefined => {
+  const hasChaptarr = !!getDefaultChaptarr(chaptarr);
+  const hasLazyLibrarian = !!lazylibrarian?.hostname && !!lazylibrarian.apiKey;
+
+  if (main.bookService === 'chaptarr' && hasChaptarr) {
+    return 'chaptarr';
+  }
+
+  if (main.bookService === 'lazylibrarian' && hasLazyLibrarian) {
+    return 'lazylibrarian';
+  }
+
+  return hasChaptarr
+    ? 'chaptarr'
+    : hasLazyLibrarian
+      ? 'lazylibrarian'
+      : undefined;
+};
+
 interface FullPublicSettings extends PublicSettings {
   applicationTitle: string;
   applicationUrl: string;
+  applicationLogoVersion: string;
+  accentColor: string;
   hideAvailable: boolean;
   hideBlocklisted: boolean;
   hideRequested: boolean;
@@ -200,14 +333,22 @@ interface FullPublicSettings extends PublicSettings {
   mediaServerLogin: boolean;
   movie4kEnabled: boolean;
   series4kEnabled: boolean;
+  booksEnabled: boolean;
+  bookService?: BookService;
   discoverRegion: string;
   streamingRegion: string;
+  blockedWatchProviders: string;
+  musicEnabled: boolean;
+  subtitlesEnabled: boolean;
   originalLanguage: string;
   mediaServerType: number;
   jellyfinExternalHost?: string;
   jellyfinForgotPasswordUrl?: string;
   jellyfinServerName?: string;
   partialRequestsEnabled: boolean;
+  allowCurrentSeasonRequests: boolean;
+  defaultBookFormat: BookFormatChoice;
+  bookLanguage: BookLanguage;
   enableSpecialEpisodes: boolean;
   cacheImages: boolean;
   vapidPublic: string;
@@ -263,6 +404,10 @@ export interface NotificationAgentEmail extends NotificationAgentConfig {
     usePublicLogo: boolean;
     pgpPrivateKey?: string;
     pgpPassword?: string;
+    newsletterEnabled: boolean;
+    newsletterDay: number;
+    newsletterHour: number;
+    newsletterInclude4k: boolean;
   };
 }
 
@@ -359,6 +504,10 @@ interface JobSettings {
   schedule: string;
 }
 
+interface NewsletterSettings {
+  lastSentAt?: string;
+}
+
 export type JobId =
   | 'plex-recently-added-scan'
   | 'plex-full-scan'
@@ -366,13 +515,18 @@ export type JobId =
   | 'plex-refresh-token'
   | 'radarr-scan'
   | 'sonarr-scan'
+  | 'lidarr-scan'
+  | 'lazylibrarian-scan'
+  | 'chaptarr-scan'
   | 'download-sync'
   | 'download-sync-reset'
   | 'jellyfin-recently-added-scan'
   | 'jellyfin-full-scan'
   | 'image-cache-cleanup'
   | 'availability-sync'
-  | 'process-blocklisted-tags';
+  | 'process-blocklisted-tags'
+  | 'recently-added-newsletter'
+  | 'followed-releases';
 
 export interface AllSettings {
   clientId: string;
@@ -383,11 +537,17 @@ export interface AllSettings {
   plex: PlexSettings;
   jellyfin: JellyfinSettings;
   tautulli: TautulliSettings;
+  bazarr: BazarrSettings;
+  lazylibrarian: LazyLibrarianSettings;
+  audiobookshelf: AudiobookshelfSettings;
   radarr: RadarrSettings[];
   sonarr: SonarrSettings[];
+  lidarr: LidarrSettings[];
+  chaptarr: ChaptarrSettings[];
   public: PublicSettings;
   notifications: NotificationSettings;
   jobs: Record<JobId, JobSettings>;
+  newsletter: NewsletterSettings;
   network: NetworkSettings;
   metadataSettings: MetadataSettings;
   migrations: string[];
@@ -409,13 +569,17 @@ class Settings {
       vapidPublic: '',
       main: {
         apiKey: '',
-        applicationTitle: 'Seerr',
+        applicationTitle: 'AllSeerr',
         applicationUrl: '',
+        applicationLogoVersion: '',
+        accentColor: DEFAULT_ACCENT_COLOR,
         cacheImages: false,
         defaultPermissions: Permission.REQUEST,
         defaultQuotas: {
           movie: {},
           tv: {},
+          music: {},
+          book: {},
         },
         hideAvailable: false,
         hideBlocklisted: false,
@@ -430,8 +594,14 @@ class Settings {
         blocklistLanguage: '',
         blocklistedTags: '',
         blocklistedTagsLimit: 50,
+        blockedWatchProviders: '',
         mediaServerType: MediaServerType.NOT_CONFIGURED,
         partialRequestsEnabled: true,
+        allowCurrentSeasonRequests: false,
+        defaultBookFormat: 'both',
+        bookLanguage: 'en',
+        googleBooksApiKey: '',
+        currentSeasonRolloverDelayDays: 3,
         enableSpecialEpisodes: false,
         locale: 'en',
         youtubeUrl: '',
@@ -457,12 +627,17 @@ class Settings {
         apiKey: '',
       },
       tautulli: {},
+      bazarr: {},
+      lazylibrarian: {},
+      audiobookshelf: {},
       metadataSettings: {
         tv: MetadataProviderType.TMDB,
         anime: MetadataProviderType.TMDB,
       },
       radarr: [],
       sonarr: [],
+      lidarr: [],
+      chaptarr: [],
       public: {
         initialized: false,
       },
@@ -482,6 +657,10 @@ class Settings {
               allowSelfSigned: false,
               senderName: 'Seerr',
               usePublicLogo: false,
+              newsletterEnabled: false,
+              newsletterDay: 0,
+              newsletterHour: 9,
+              newsletterInclude4k: false,
             },
           },
           discord: {
@@ -593,6 +772,15 @@ class Settings {
         'sonarr-scan': {
           schedule: '0 30 4 * * *',
         },
+        'lidarr-scan': {
+          schedule: '0 45 4 * * *',
+        },
+        'lazylibrarian-scan': {
+          schedule: '0 */30 * * * *',
+        },
+        'chaptarr-scan': {
+          schedule: '0 */15 * * * *',
+        },
         'availability-sync': {
           schedule: '0 0 5 * * *',
         },
@@ -614,7 +802,14 @@ class Settings {
         'process-blocklisted-tags': {
           schedule: '0 30 1 */7 * *',
         },
+        'recently-added-newsletter': {
+          schedule: '0 0 9 * * 0',
+        },
+        'followed-releases': {
+          schedule: '0 15 6 * * *',
+        },
       },
+      newsletter: {},
       network: {
         csrfProtection: false,
         forceIpv4First: false,
@@ -675,6 +870,39 @@ class Settings {
     this.data.tautulli = mergeSettings(this.data.tautulli, data);
   }
 
+  get bazarr(): BazarrSettings {
+    return this.data.bazarr;
+  }
+
+  set bazarr(data: BazarrSettings) {
+    this.data.bazarr = mergeSettings(this.data.bazarr, data);
+  }
+
+  get lazylibrarian(): LazyLibrarianSettings {
+    return this.data.lazylibrarian;
+  }
+
+  set lazylibrarian(data: LazyLibrarianSettings) {
+    this.data.lazylibrarian = mergeSettings(this.data.lazylibrarian, data);
+  }
+
+  get audiobookshelf(): AudiobookshelfSettings {
+    return resolveAudiobookshelfSettings(this.data);
+  }
+
+  set audiobookshelf(data: AudiobookshelfSettings) {
+    this.data.audiobookshelf = mergeSettings(
+      resolveAudiobookshelfSettings(this.data),
+      data
+    );
+
+    // The block is the only home of these settings from now on
+    if (this.data.lazylibrarian) {
+      delete this.data.lazylibrarian.audiobookshelfUrl;
+      delete this.data.lazylibrarian.audiobookshelfLibraryId;
+    }
+  }
+
   get metadataSettings(): MetadataSettings {
     return this.data.metadataSettings;
   }
@@ -702,6 +930,31 @@ class Settings {
     this.data.sonarr = data;
   }
 
+  get lidarr(): LidarrSettings[] {
+    return this.data.lidarr;
+  }
+
+  set lidarr(data: LidarrSettings[]) {
+    this.data.lidarr = data;
+  }
+
+  get chaptarr(): ChaptarrSettings[] {
+    return this.data.chaptarr;
+  }
+
+  set chaptarr(data: ChaptarrSettings[]) {
+    this.data.chaptarr = data;
+  }
+
+  /**
+   * The service book requests are sent to: the one picked in the settings
+   * when it is configured, otherwise Chaptarr when it is configured, then
+   * LazyLibrarian
+   */
+  get bookService(): BookService | undefined {
+    return resolveBookService(this.data);
+  }
+
   get public(): PublicSettings {
     return this.data.public;
   }
@@ -715,6 +968,8 @@ class Settings {
       ...this.data.public,
       applicationTitle: this.data.main.applicationTitle,
       applicationUrl: this.data.main.applicationUrl,
+      applicationLogoVersion: this.data.main.applicationLogoVersion ?? '',
+      accentColor: this.data.main.accentColor || DEFAULT_ACCENT_COLOR,
       hideAvailable: this.data.main.hideAvailable,
       hideBlocklisted: this.data.main.hideBlocklisted,
       hideRequested: this.data.main.hideRequested,
@@ -728,11 +983,27 @@ class Settings {
       series4kEnabled: this.data.sonarr.some(
         (sonarr) => sonarr.is4k && sonarr.isDefault
       ),
+      booksEnabled: !!this.bookService,
+      bookService: this.bookService,
       discoverRegion: this.data.main.discoverRegion,
       streamingRegion: this.data.main.streamingRegion,
+      blockedWatchProviders: this.data.main.blockedWatchProviders,
+      musicEnabled: this.data.lidarr.length > 0,
+      subtitlesEnabled: !!(
+        this.data.bazarr?.hostname &&
+        this.data.bazarr?.port &&
+        this.data.bazarr?.apiKey
+      ),
       originalLanguage: this.data.main.originalLanguage,
       mediaServerType: this.main.mediaServerType,
       partialRequestsEnabled: this.data.main.partialRequestsEnabled,
+      allowCurrentSeasonRequests:
+        this.data.main.allowCurrentSeasonRequests ?? false,
+      defaultBookFormat: this.data.main.defaultBookFormat ?? 'both',
+      bookLanguage: getEffectiveBookLanguage(
+        undefined,
+        this.data.main.bookLanguage
+      ),
       enableSpecialEpisodes: this.data.main.enableSpecialEpisodes,
       cacheImages: this.data.main.cacheImages,
       vapidPublic: this.vapidPublic,
@@ -762,6 +1033,14 @@ class Settings {
 
   set jobs(data: Record<JobId, JobSettings>) {
     this.data.jobs = mergeSettings(this.data.jobs, data);
+  }
+
+  get newsletter(): NewsletterSettings {
+    return this.data.newsletter;
+  }
+
+  set newsletter(data: NewsletterSettings) {
+    this.data.newsletter = mergeSettings(this.data.newsletter, data);
   }
 
   get network(): NetworkSettings {

@@ -2,7 +2,6 @@ name: 🧰 Maintenance / Chore
 description: CI, GitHub Actions, build, dependencies, refactors (non-feature work)
 title: "[Chore]: "
 labels: ["maintenance", "awaiting triage"]
-type: task
 body:
   - type: markdown
     attributes:
@@ -61,5 +60,5 @@ body:
       label: Code of Conduct
       description: By submitting this issue, you agree to follow our Code of Conduct.
       options:
-        - label: I agree to follow Seerr's [Code of Conduct](https://github.com/seerr-team/seerr/blob/develop/CODE_OF_CONDUCT.md).
+        - label: I agree to follow AllSeerr's [Code of Conduct](https://github.com/DanCue44/AllSeerr/blob/main/CODE_OF_CONDUCT.md).
           required: true

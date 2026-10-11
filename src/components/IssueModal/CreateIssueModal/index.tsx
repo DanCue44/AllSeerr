@@ -1,17 +1,25 @@
 import Button from '@app/components/Common/Button';
 import Modal from '@app/components/Common/Modal';
-import { issueOptions } from '@app/components/IssueModal/constants';
+import { getIssueOptions } from '@app/components/IssueModal/constants';
 import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import type { MediaTitle } from '@app/utils/mediaTitleHelpers';
+import {
+  getMediaTitleBackdrop,
+  getMediaTitleName,
+  getTrackLabel,
+  isBookTitle,
+  isMusicTitle,
+  isTvTitle,
+} from '@app/utils/mediaTitleHelpers';
 import { Label, Radio, RadioGroup } from '@headlessui/react';
 import { ArrowRightCircleIcon } from '@heroicons/react/24/solid';
+import type { BookFormat } from '@server/constants/media';
 import { MediaStatus } from '@server/constants/media';
 import type Issue from '@server/entity/Issue';
-import type { MovieDetails } from '@server/models/Movie';
-import type { TvDetails } from '@server/models/Tv';
 import axios from 'axios';
 import { Field, Formik } from 'formik';
 import Link from 'next/link';
@@ -37,19 +45,26 @@ const messages = defineMessages('components.IssueModal.CreateIssueModal', {
   toastviewissue: 'View Issue',
   reportissue: 'Report an Issue',
   submitissue: 'Submit Issue',
+  problemtrack: 'Affected Track',
+  alltracks: 'All Tracks',
+  problemformat: 'Affected Format',
 });
 
-const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
-  return (movie as MovieDetails).title !== undefined;
-};
+const availableStatuses = [
+  MediaStatus.AVAILABLE,
+  MediaStatus.PARTIALLY_AVAILABLE,
+];
 
 const classNames = (...classes: string[]) => {
   return classes.filter(Boolean).join(' ');
 };
 
 interface CreateIssueModalProps {
-  mediaType: 'movie' | 'tv';
+  mediaType: 'movie' | 'tv' | 'music' | 'book';
   tmdbId?: number;
+  // Music is addressed by its MusicBrainz id, books by their work id
+  mbId?: string;
+  olId?: string;
   onCancel?: () => void;
 }
 
@@ -57,18 +72,42 @@ const CreateIssueModal = ({
   onCancel,
   mediaType,
   tmdbId,
+  mbId,
+  olId,
 }: CreateIssueModalProps) => {
   const intl = useIntl();
   const settings = useSettings();
   const { hasPermission } = useUser();
   const { addToast } = useToasts();
-  const { data, error } = useSWR<MovieDetails | TvDetails>(
-    tmdbId ? `/api/v1/${mediaType}/${tmdbId}` : null
+  const mediaId =
+    mediaType === 'music' ? mbId : mediaType === 'book' ? olId : tmdbId;
+  const { data, error } = useSWR<MediaTitle>(
+    mediaId ? `/api/v1/${mediaType}/${mediaId}` : null
   );
+  const issueOptions = getIssueOptions(mediaType);
 
-  if (!tmdbId) {
+  if (!mediaId) {
     return null;
   }
+
+  const tracks = data && isMusicTitle(data) ? data.tracks : [];
+  const multiDisc = new Set(tracks.map((track) => track.disc)).size > 1;
+
+  const availableBookFormats: BookFormat[] =
+    data && isBookTitle(data)
+      ? [
+          ...(availableStatuses.includes(
+            data.mediaInfo?.status ?? MediaStatus.UNKNOWN
+          )
+            ? (['ebook'] as const)
+            : []),
+          ...(availableStatuses.includes(
+            data.mediaInfo?.statusAudio ?? MediaStatus.UNKNOWN
+          )
+            ? (['audiobook'] as const)
+            : []),
+        ]
+      : [];
 
   const availableSeasons = (data?.mediaInfo?.seasons ?? [])
     .filter(
@@ -97,17 +136,37 @@ const CreateIssueModal = ({
         message: '',
         problemSeason: availableSeasons.length === 1 ? availableSeasons[0] : 0,
         problemEpisode: 0,
+        // Album tracks are picked as disc:position, 0 for the whole album
+        problemTrack: '0',
+        bookFormat: availableBookFormats[0] ?? 'ebook',
       }}
       validationSchema={CreateIssueModalSchema}
       onSubmit={async (values) => {
         try {
+          const [trackDisc, trackPosition] = values.problemTrack
+            .split(':')
+            .map(Number);
           const newIssue = await axios.post<Issue>('/api/v1/issue', {
             issueType: values.selectedIssue.issueType,
             message: values.message,
             mediaId: data?.mediaInfo?.id,
-            problemSeason: values.problemSeason,
-            problemEpisode:
-              values.problemSeason > 0 ? values.problemEpisode : 0,
+            ...(mediaType === 'music'
+              ? {
+                  problemSeason: trackPosition ? trackDisc : 0,
+                  problemEpisode: trackPosition || 0,
+                }
+              : mediaType === 'book'
+                ? {
+                    // The formats are only known once the book has loaded
+                    bookFormat: availableBookFormats.includes(values.bookFormat)
+                      ? values.bookFormat
+                      : (availableBookFormats[0] ?? null),
+                  }
+                : {
+                    problemSeason: values.problemSeason,
+                    problemEpisode:
+                      values.problemSeason > 0 ? values.problemEpisode : 0,
+                  }),
           });
 
           if (data) {
@@ -115,7 +174,7 @@ const CreateIssueModal = ({
               <>
                 <div>
                   {intl.formatMessage(messages.toastSuccessCreate, {
-                    title: isMovie(data) ? data.title : data.name,
+                    title: getMediaTitleName(data),
                     strong: (msg: React.ReactNode) => <strong>{msg}</strong>,
                   })}
                 </div>
@@ -152,14 +211,66 @@ const CreateIssueModal = ({
             backgroundClickable
             onCancel={onCancel}
             title={intl.formatMessage(messages.reportissue)}
-            subTitle={data && isMovie(data) ? data?.title : data?.name}
+            subTitle={data ? getMediaTitleName(data) : undefined}
             cancelText={intl.formatMessage(globalMessages.close)}
             onOk={() => handleSubmit()}
             okText={intl.formatMessage(messages.submitissue)}
             loading={!data && !error}
-            backdrop={`https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${data?.backdropPath}`}
+            backdrop={getMediaTitleBackdrop(data)?.src}
           >
-            {mediaType === 'tv' && data && !isMovie(data) && (
+            {mediaType === 'music' && tracks.length > 0 && (
+              <div className="form-row">
+                <label htmlFor="problemTrack" className="text-label">
+                  {intl.formatMessage(messages.problemtrack)}
+                </label>
+                <div className="form-input-area">
+                  <div className="form-input-field">
+                    <Field as="select" id="problemTrack" name="problemTrack">
+                      <option value="0">
+                        {intl.formatMessage(messages.alltracks)}
+                      </option>
+                      {tracks.map((track) => (
+                        <option
+                          value={`${track.disc}:${track.position}`}
+                          key={`problem-track-${track.disc}-${track.position}`}
+                        >
+                          {getTrackLabel(track, multiDisc)}
+                        </option>
+                      ))}
+                    </Field>
+                  </div>
+                </div>
+              </div>
+            )}
+            {mediaType === 'book' && availableBookFormats.length > 0 && (
+              <div className="form-row">
+                <label htmlFor="bookFormat" className="text-label">
+                  {intl.formatMessage(messages.problemformat)}
+                  <span className="label-required">*</span>
+                </label>
+                <div className="form-input-area">
+                  <div className="form-input-field">
+                    <Field
+                      as="select"
+                      id="bookFormat"
+                      name="bookFormat"
+                      disabled={availableBookFormats.length === 1}
+                    >
+                      {availableBookFormats.map((format) => (
+                        <option value={format} key={`problem-format-${format}`}>
+                          {intl.formatMessage(
+                            format === 'audiobook'
+                              ? globalMessages.audiobook
+                              : globalMessages.ebook
+                          )}
+                        </option>
+                      ))}
+                    </Field>
+                  </div>
+                </div>
+              </div>
+            )}
+            {mediaType === 'tv' && data && isTvTitle(data) && (
               <>
                 <div className="form-row">
                   <label htmlFor="problemSeason" className="text-label">

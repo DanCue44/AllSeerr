@@ -8,18 +8,42 @@ import type {
   TmdbTvDetails,
   TmdbTvScanDetails,
 } from '@server/api/themoviedb/interfaces';
-import { MediaStatus, MediaType } from '@server/constants/media';
+import {
+  MediaRequestMonitorMode,
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+  SeasonRolloverStatus,
+} from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
+import { MediaRequest } from '@server/entity/MediaRequest';
+import Season from '@server/entity/Season';
+import SeasonRequest from '@server/entity/SeasonRequest';
+import SeasonRollover from '@server/entity/SeasonRollover';
+import { planCurrentSeasonRollover } from '@server/lib/currentSeasonRollover';
+import { isPartialSeriesRequest } from '@server/lib/episodeRequests';
 import type {
   ProcessableSeason,
   RunnableScanner,
   StatusBase,
 } from '@server/lib/scanners/baseScanner';
 import BaseScanner from '@server/lib/scanners/baseScanner';
+import {
+  decideRolloverAction,
+  getHeldSeasons,
+  getPreexistingSeasons,
+  getRollOffSeasons,
+  getStatusAfterRollOff,
+  limitRollOff,
+  splitRolloverSeasons,
+} from '@server/lib/seasonRollover';
+import { sendSeasonRolloverNotification } from '@server/lib/seasonRolloverActions';
 import type { SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { requestErrorLogFields } from '@server/utils/requestError';
 import { uniqWith } from 'lodash';
+import { In } from 'typeorm';
 
 type SyncStatus = StatusBase & {
   currentServer: SonarrSettings;
@@ -45,7 +69,11 @@ class SonarrScanner
   private server4kReturnedEmpty = false;
 
   constructor() {
-    super('Sonarr Scan', { bundleSize: 50 });
+    super('Sonarr Scan', {
+      bundleSize: 50,
+      jobId: 'sonarr-scan',
+      service: 'sonarr',
+    });
   }
 
   public status(): SyncStatus {
@@ -155,8 +183,9 @@ class SonarrScanner
 
       await this.cleanupOrphanedShows();
       this.log('Sonarr scan complete', 'info');
+      this.scanSucceeded();
     } catch (e) {
-      this.log('Scan interrupted', 'error', { errorMessage: e.message });
+      this.scanFailed(e);
     } finally {
       this.endRun(sessionId);
     }
@@ -200,6 +229,15 @@ class SonarrScanner
 
       const settings = getSettings();
 
+      // Seasons of episode and future only requests leave the Sonarr season
+      // unmonitored, so they count as processing until the files arrive
+      const partialRequests = await this.getPartialRequests(tmdbId, server4k);
+      const partialSeasons = new Set(
+        partialRequests.flatMap((request) =>
+          request.seasons.map((season) => season.seasonNumber)
+        )
+      );
+
       const filteredSeasons = tvShow.seasons
         .filter(
           (sn) => settings.main.enableSpecialEpisodes || sn.season_number !== 0
@@ -231,7 +269,9 @@ class SonarrScanner
           episodes: !server4k ? totalAvailableEpisodes : 0,
           episodes4k: server4k ? totalAvailableEpisodes : 0,
           totalEpisodes: season.statistics?.totalEpisodeCount ?? 0,
-          processing: season.monitored && totalAvailableEpisodes === 0,
+          processing:
+            (season.monitored || partialSeasons.has(season.seasonNumber)) &&
+            totalAvailableEpisodes === 0,
           is4kOverride: server4k,
         });
       }
@@ -251,11 +291,433 @@ class SonarrScanner
         title: sonarrSeries.title,
         is4k: server4k,
       });
+
+      let hasMovedRequests = false;
+
+      if (sonarrSeries.id) {
+        try {
+          hasMovedRequests = await this.rollCurrentSeason(
+            tmdbId,
+            sonarrSeries,
+            server4k
+          );
+        } catch (e) {
+          this.log('Failed to roll over the current season', 'error', {
+            ...requestErrorLogFields(e),
+            title: sonarrSeries.title,
+          });
+        }
+      }
+
+      if ((partialRequests.length > 0 || hasMovedRequests) && sonarrSeries.id) {
+        // Read again, as moving a request to a new season reopens it
+        await this.completePartialRequests(
+          await this.getPartialRequests(tmdbId, server4k),
+          sonarrSeries.id
+        );
+      }
     } catch (e) {
       this.log('Failed to process Sonarr media', 'error', {
-        errorMessage: e.message,
+        ...requestErrorLogFields(e),
         title: sonarrSeries.title,
       });
+    }
+  }
+
+  private async getPartialRequests(
+    tmdbId: number,
+    is4k: boolean
+  ): Promise<MediaRequest[]> {
+    const requests = await getRepository(MediaRequest).find({
+      where: {
+        media: { tmdbId, mediaType: MediaType.TV },
+        is4k,
+        status: MediaRequestStatus.APPROVED,
+      },
+    });
+
+    return requests.filter((request) => isPartialSeriesRequest(request));
+  }
+
+  /**
+   * Seasons only fill up for whole season requests, so episode and future only
+   * requests are completed here from the episode files Sonarr reports.
+   *
+   * - An episode request is done once every requested episode has a file.
+   * - A season of a future only or current season request is done once it
+   *   has finished airing and every monitored episode has a file.
+   */
+  private async completePartialRequests(
+    requests: MediaRequest[],
+    seriesId: number
+  ): Promise<void> {
+    const requestRepository = getRepository(MediaRequest);
+    const seasonRequestRepository = getRepository(SeasonRequest);
+    const episodes = await this.sonarrApi.getEpisodes(seriesId);
+    const now = new Date();
+
+    for (const { id } of requests) {
+      // Read it again, the scan may have completed whole seasons already
+      const request = await requestRepository.findOne({ where: { id } });
+
+      if (!request || request.status !== MediaRequestStatus.APPROVED) {
+        continue;
+      }
+
+      for (const season of request.seasons) {
+        if (season.status === MediaRequestStatus.COMPLETED) {
+          continue;
+        }
+
+        const seasonEpisodes = episodes.filter(
+          (episode) => episode.seasonNumber === season.seasonNumber
+        );
+
+        const isDone = season.episodes?.length
+          ? season.episodes.every((episodeNumber) =>
+              seasonEpisodes.some(
+                (episode) =>
+                  episode.episodeNumber === episodeNumber && episode.hasFile
+              )
+            )
+          : (request.monitorMode === MediaRequestMonitorMode.FUTURE ||
+              request.monitorMode === MediaRequestMonitorMode.CURRENT) &&
+            seasonEpisodes.length > 0 &&
+            seasonEpisodes.every(
+              (episode) =>
+                !!episode.airDateUtc && new Date(episode.airDateUtc) <= now
+            ) &&
+            seasonEpisodes.every(
+              (episode) => !episode.monitored || episode.hasFile
+            );
+
+        if (isDone) {
+          // Saved on its own, as saving an approved request sends it to Sonarr again
+          season.status = MediaRequestStatus.COMPLETED;
+          await seasonRequestRepository.save(season);
+        }
+      }
+
+      if (
+        request.seasons.every(
+          (season) => season.status === MediaRequestStatus.COMPLETED
+        )
+      ) {
+        request.status = MediaRequestStatus.COMPLETED;
+        await requestRepository.save(request);
+        this.log(
+          `Completed request ${request.id} from Sonarr episode files`,
+          'debug'
+        );
+      }
+    }
+  }
+
+  /**
+   * Keeps only the current season of a series that is requested that way:
+   * Sonarr follows the current and later seasons, and once a newer season has
+   * an aired episode with a file, the older seasons are unmonitored and their
+   * files deleted. See planCurrentSeasonRollover for the safety rules.
+   *
+   * Deleting waits for a notice period, during which admins can keep the
+   * seasons, and seasons that were already there before the request are only
+   * deleted once an admin approves it. See decideRolloverAction.
+   *
+   * Returns true when requests were moved to the new season.
+   */
+  private async rollCurrentSeason(
+    tmdbId: number,
+    sonarrSeries: SonarrSeries,
+    is4k: boolean
+  ): Promise<boolean> {
+    const seriesId = sonarrSeries.id;
+    const title = sonarrSeries.title;
+
+    if (!seriesId) {
+      return false;
+    }
+
+    const media = await getRepository(Media).findOne({
+      where: { tmdbId, mediaType: MediaType.TV },
+    });
+
+    if (!media) {
+      return false;
+    }
+
+    const requests = await getRepository(MediaRequest).find({
+      where: { media: { id: media.id }, is4k },
+    });
+
+    if (
+      !requests.some(
+        (request) => request.monitorMode === MediaRequestMonitorMode.CURRENT
+      )
+    ) {
+      return false;
+    }
+
+    const episodes = await this.sonarrApi.getEpisodes(seriesId);
+    const plan = planCurrentSeasonRollover({
+      requests,
+      episodes,
+      sonarrSeasons: sonarrSeries.seasons,
+      mediaSeasons: media.seasons,
+      is4k,
+    });
+
+    if (plan.currentSeason === null) {
+      this.log(`Not following the current season of ${title}`, 'debug', {
+        reason: plan.skipReason,
+      });
+      return false;
+    }
+
+    if (
+      plan.seasonsToMonitor.length > 0 ||
+      plan.seasonsToUnmonitor.length > 0 ||
+      sonarrSeries.monitorNewItems !== 'all'
+    ) {
+      await this.sonarrApi.updateSeasonMonitoring(seriesId, {
+        monitor: plan.seasonsToMonitor,
+        unmonitor: plan.seasonsToUnmonitor,
+        monitorNewSeasons: true,
+      });
+    }
+
+    if (plan.episodeIdsToMonitor.length > 0) {
+      await this.sonarrApi.monitorEpisodes(plan.episodeIdsToMonitor);
+    }
+
+    if (
+      plan.episodeIdsToSearch.length > 0 &&
+      !this.currentServer.preventSearch
+    ) {
+      await this.sonarrApi.searchEpisodes(plan.episodeIdsToSearch);
+    }
+
+    const { rollOff } = plan;
+
+    if (!rollOff) {
+      if (plan.skipReason) {
+        this.log(
+          `Keeping the older seasons of ${title} for now (season ${plan.currentSeason})`,
+          'debug',
+          { reason: plan.skipReason }
+        );
+      }
+      return false;
+    }
+
+    // Unmonitored right away, so Sonarr does not search again for the older
+    // seasons. Deleting them waits for the notice period.
+    if (rollOff.episodeIdsToUnmonitor.length > 0) {
+      await this.sonarrApi.unmonitorEpisodes(rollOff.episodeIdsToUnmonitor);
+    }
+
+    const currentSeason = plan.currentSeason;
+    const rolloverRepository = getRepository(SeasonRollover);
+    const seasons = getRollOffSeasons(rollOff, episodes);
+    let rollover = await rolloverRepository.findOne({
+      where: { media: { id: media.id }, is4k, currentSeason },
+      order: { id: 'DESC' },
+    });
+    let decision = decideRolloverAction({
+      existing: rollover,
+      now: new Date(),
+      seasons,
+    });
+
+    if (decision.action === 'notify') {
+      rollover = await this.createSeasonRollover(
+        media,
+        is4k,
+        currentSeason,
+        seasons,
+        requests
+      );
+      sendSeasonRolloverNotification(rollover, title);
+      this.log(
+        `Season ${currentSeason} of ${title} has started. Season(s) ${seasons.join(', ')} are scheduled for deletion`,
+        'info',
+        {
+          seasons: rollover.seasons,
+          preexistingSeasons: rollover.preexistingSeasons,
+          deleteAfter: rollover.deleteAfter,
+        }
+      );
+      // A notice period of zero days deletes right away
+      decision = decideRolloverAction({
+        existing: rollover,
+        now: new Date(),
+        seasons,
+      });
+    }
+
+    if (decision.action === 'wait' || decision.action === 'notify') {
+      this.log(
+        `Waiting for the notice period before rolling off the older seasons of ${title}`,
+        'debug',
+        { deleteAfter: rollover?.deleteAfter }
+      );
+      return false;
+    }
+
+    const approved = limitRollOff(rollOff, episodes, decision.deleteSeasons);
+
+    if (approved.episodeFileIds.length > 0) {
+      this.log(
+        `Season ${currentSeason} of ${title} has started. Deleting ${approved.episodeFileIds.length} episode file(s) of season(s) ${decision.deleteSeasons.join(', ')}`,
+        'info',
+        {
+          seriesId,
+          is4k,
+          seasons: decision.deleteSeasons,
+          episodeFileIds: approved.episodeFileIds,
+        }
+      );
+      await this.sonarrApi.deleteEpisodeFiles(approved.episodeFileIds);
+    }
+
+    if (approved.seasonsToMarkDeleted.length > 0) {
+      const statusKey = is4k ? 'status4k' : 'status';
+      const markedSeasons = media.seasons.filter((season) =>
+        approved.seasonsToMarkDeleted.includes(season.seasonNumber)
+      );
+
+      for (const season of markedSeasons) {
+        season[statusKey] = MediaStatus.DELETED;
+      }
+
+      await getRepository(Season).save(markedSeasons);
+      this.log(
+        `Marked ${is4k ? '4K ' : ''}season(s) ${approved.seasonsToMarkDeleted.join(', ')} of ${title} as deleted`,
+        'info'
+      );
+    }
+
+    for (const requestId of rollOff.requestIdsToMove) {
+      await this.moveCurrentSeasonRequest(requestId, currentSeason);
+      this.log(
+        `Moved current season request ${requestId} of ${title} to season ${currentSeason}`,
+        'info'
+      );
+    }
+
+    if (rollover?.status === SeasonRolloverStatus.PENDING) {
+      rollover.status = getStatusAfterRollOff(rollover);
+      await rolloverRepository.save(rollover);
+    }
+
+    return rollOff.requestIdsToMove.length > 0;
+  }
+
+  /**
+   * Records a new roll off and when it may go ahead. Seasons that were there
+   * before the request, or that an admin kept on an earlier roll off, are
+   * held for review. An open notice for an earlier season is replaced, as
+   * this one covers its seasons too.
+   */
+  private async createSeasonRollover(
+    media: Media,
+    is4k: boolean,
+    currentSeason: number,
+    seasons: number[],
+    requests: MediaRequest[]
+  ): Promise<SeasonRollover> {
+    const rolloverRepository = getRepository(SeasonRollover);
+    const delayDays = Math.max(
+      0,
+      getSettings().main.currentSeasonRolloverDelayDays ?? 3
+    );
+    const keptRollovers = await rolloverRepository.find({
+      where: {
+        media: { id: media.id },
+        is4k,
+        status: SeasonRolloverStatus.KEPT,
+      },
+    });
+
+    await rolloverRepository.remove(
+      await rolloverRepository.find({
+        where: {
+          media: { id: media.id },
+          is4k,
+          status: In([
+            SeasonRolloverStatus.PENDING,
+            SeasonRolloverStatus.REVIEW,
+          ]),
+        },
+      })
+    );
+
+    return rolloverRepository.save(
+      new SeasonRollover({
+        media,
+        is4k,
+        currentSeason,
+        ...splitRolloverSeasons(
+          seasons,
+          getHeldSeasons(getPreexistingSeasons(requests, is4k), keptRollovers)
+        ),
+        deletePreexisting: false,
+        deleteAfter: new Date(Date.now() + delayDays * 24 * 60 * 60 * 1000),
+        status: SeasonRolloverStatus.PENDING,
+      })
+    );
+  }
+
+  /**
+   * Points a current season request at the new season. A completed request is
+   * reopened until the new season is in. Saved without the request
+   * subscribers, as the scan already did what sending it to Sonarr would do.
+   */
+  private async moveCurrentSeasonRequest(
+    requestId: number,
+    seasonNumber: number
+  ): Promise<void> {
+    const requestRepository = getRepository(MediaRequest);
+    const seasonRequestRepository = getRepository(SeasonRequest);
+    const request = await requestRepository.findOne({
+      where: { id: requestId },
+    });
+
+    if (!request) {
+      return;
+    }
+
+    const staleSeasons = request.seasons.filter(
+      (season) => season.seasonNumber !== seasonNumber
+    );
+
+    if (staleSeasons.length > 0) {
+      await seasonRequestRepository.remove(staleSeasons);
+    }
+
+    if (
+      !request.seasons.some((season) => season.seasonNumber === seasonNumber)
+    ) {
+      await seasonRequestRepository.save(
+        new SeasonRequest({
+          seasonNumber,
+          episodes: null,
+          status:
+            request.status === MediaRequestStatus.PENDING
+              ? MediaRequestStatus.PENDING
+              : MediaRequestStatus.APPROVED,
+          request: { id: request.id } as MediaRequest,
+        })
+      );
+    }
+
+    if (request.status === MediaRequestStatus.COMPLETED) {
+      await requestRepository
+        .createQueryBuilder()
+        .update(MediaRequest)
+        .set({ status: MediaRequestStatus.APPROVED })
+        .where('id = :id', { id: request.id })
+        .callListeners(false)
+        .execute();
     }
   }
 
@@ -283,7 +745,7 @@ class SonarrScanner
         this.log(
           `Could not confirm series ${tvdbId} against Sonarr server ${server.name}. Skipping cleanup for it.`,
           'warn',
-          { errorMessage: e.message }
+          requestErrorLogFields(e)
         );
         return true;
       }

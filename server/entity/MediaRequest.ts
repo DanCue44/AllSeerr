@@ -1,15 +1,53 @@
+import MusicBrainz from '@server/api/musicbrainz';
+import OpenLibrary, { getOlId } from '@server/api/openlibrary';
 import TheMovieDb from '@server/api/themoviedb';
+import type {
+  TmdbMovieDetails,
+  TmdbTvDetails,
+} from '@server/api/themoviedb/interfaces';
 import {
+  getBookLanguageName,
+  isBookLanguage,
+  resolveRequestBookLanguage,
+} from '@server/constants/bookLanguages';
+import {
+  MediaRequestMonitorMode,
   MediaRequestStatus,
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import type { MediaRequestBody } from '@server/interfaces/api/requestInterfaces';
+import {
+  getBookFormatName,
+  getBookNotificationDetails,
+} from '@server/lib/bookNotifications';
+import { getRequestStatusKey } from '@server/lib/bookRequests';
+import {
+  MOVIE_RATINGS,
+  TV_RATINGS,
+  exceedsRatingLimit,
+  getMovieCertification,
+  getTvContentRating,
+} from '@server/lib/contentRatingLimit';
+import type { RequestedSeason } from '@server/lib/episodeRequests';
+import {
+  buildRequestedSeasons,
+  filterRequestableSeasons,
+  formatRequestedSeasons,
+  getCurrentSeasonNumber,
+  getFutureSeasonNumbers,
+  getTmdbSeasonInfo,
+} from '@server/lib/episodeRequests';
+import { getMusicNotificationDetails } from '@server/lib/musicNotifications';
 import notificationManager, { Notification } from '@server/lib/notifications';
-import overrideRules from '@server/lib/overrideRules';
+import overrideRules, {
+  matchesAutoApproveRule,
+} from '@server/lib/overrideRules';
 import { Permission } from '@server/lib/permissions';
+import { getAvailableSeasonNumbers } from '@server/lib/seasonRollover';
 import { getSettings } from '@server/lib/settings';
+import { getBlockingProviders } from '@server/lib/watchProviderBlock';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
 import requestLock, {
@@ -32,6 +70,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import Media from './Media';
+import { episodeNumbersTransformer } from './Season';
 import SeasonRequest from './SeasonRequest';
 import { User } from './User';
 
@@ -40,9 +79,19 @@ export class QuotaRestrictedError extends Error {}
 export class DuplicateMediaRequestError extends Error {}
 export class NoSeasonsAvailableError extends Error {}
 export class BlocklistedMediaError extends Error {}
+export class WatchProviderBlockedError extends Error {}
+export class ContentRatingRestrictedError extends Error {}
+export class InvalidBookLanguageError extends Error {}
 
 type MediaRequestOptions = {
   isAutoRequest?: boolean;
+  // A bulk request sends one summary notification for all of its requests
+  // instead of one per request
+  skipNotification?: boolean;
+  // The caller already found the release group or work, as a bulk request
+  // does in the artist's discography or the author's works, so it is not
+  // looked up again one at a time
+  skipMetadataLookup?: boolean;
 };
 
 @Entity()
@@ -53,7 +102,11 @@ export class MediaRequest {
     options: MediaRequestOptions = {}
   ): Promise<MediaRequest> {
     // is4k is optional, and an undefined one binds as null in the duplicate query
-    const body = { ...requestBody, is4k: !!requestBody.is4k };
+    const body = {
+      ...requestBody,
+      is4k: !!requestBody.is4k,
+      isAudiobook: !!requestBody.isAudiobook,
+    };
 
     // Only a caller allowed to set the request user may queue on their lock
     const lockUserId =
@@ -103,6 +156,28 @@ export class MediaRequest {
     if (!requestUser) {
       throw new Error('User missing from request context.');
     }
+
+    if (requestBody.mediaType === MediaType.MUSIC) {
+      return MediaRequest.createMusicRequest(
+        requestBody,
+        user,
+        requestUser,
+        options
+      );
+    }
+
+    if (requestBody.mediaType === MediaType.BOOK) {
+      return MediaRequest.createBookRequest(
+        requestBody,
+        user,
+        requestUser,
+        options
+      );
+    }
+
+    // Movies and series are keyed on their TMDB id
+    requestBody = { ...requestBody, mediaId: Number(requestBody.mediaId) };
+    const tmdbId = requestBody.mediaId as number;
 
     if (
       requestBody.mediaType === MediaType.MOVIE &&
@@ -168,12 +243,71 @@ export class MediaRequest {
 
     const tmdbMedia =
       requestBody.mediaType === MediaType.MOVIE
-        ? await tmdb.getMovie({ movieId: requestBody.mediaId })
-        : await tmdb.getTvShow({ tvId: requestBody.mediaId });
+        ? await tmdb.getMovie({ movieId: tmdbId })
+        : await tmdb.getTvShow({ tvId: tmdbId });
+
+    // Managers may request blocked titles by hand, but never through an
+    // auto-request such as watchlist sync
+    const canBypassWatchProviderBlock =
+      !options.isAutoRequest && user.hasPermission(Permission.MANAGE_REQUESTS);
+    const blockingProviders = canBypassWatchProviderBlock
+      ? []
+      : getBlockingProviders(tmdbMedia['watch/providers']?.results);
+
+    if (blockingProviders.length > 0) {
+      logger.warn('Request for media blocked due to a streaming provider', {
+        tmdbId: tmdbMedia.id,
+        mediaType: requestBody.mediaType,
+        providers: blockingProviders.map((provider) => provider.name),
+        label: 'Media Request',
+      });
+
+      throw new WatchProviderBlockedError(
+        `This title is streaming on ${blockingProviders
+          .map((provider) => provider.name)
+          .join(', ')} and cannot be requested.`
+      );
+    }
+
+    // Managers may request titles above the rating limit by hand, but never
+    // through an auto-request such as watchlist sync. Titles without a US
+    // rating are allowed.
+    const canBypassRatingLimit =
+      !options.isAutoRequest && user.hasPermission(Permission.MANAGE_REQUESTS);
+    const rating =
+      requestBody.mediaType === MediaType.MOVIE
+        ? getMovieCertification((tmdbMedia as TmdbMovieDetails).release_dates)
+        : getTvContentRating((tmdbMedia as TmdbTvDetails).content_ratings);
+    const ratingLimit =
+      requestBody.mediaType === MediaType.MOVIE
+        ? requestUser.movieRatingLimit
+        : requestUser.tvRatingLimit;
+
+    if (
+      !canBypassRatingLimit &&
+      exceedsRatingLimit(
+        requestBody.mediaType === MediaType.MOVIE ? MOVIE_RATINGS : TV_RATINGS,
+        rating,
+        ratingLimit
+      )
+    ) {
+      logger.warn('Request for media blocked due to the content rating limit', {
+        tmdbId: tmdbMedia.id,
+        mediaType: requestBody.mediaType,
+        rating,
+        ratingLimit,
+        userId: requestUser.id,
+        label: 'Media Request',
+      });
+
+      throw new ContentRatingRestrictedError(
+        `This title is rated ${rating} and exceeds the content rating limit of ${ratingLimit}.`
+      );
+    }
 
     let media = await mediaRepository.findOne({
       where: {
-        tmdbId: requestBody.mediaId,
+        tmdbId,
         mediaType: requestBody.mediaType,
       },
       relations: ['requests'],
@@ -306,41 +440,38 @@ export class MediaRequest {
     }
 
     if (requestBody.mediaType === MediaType.MOVIE) {
+      // If the user is an admin or has the "auto approve" permission, or an
+      // auto-approve rule matches, automatically approve the request
+      const hasAutoApprovePermission = user.hasPermission(
+        [
+          requestBody.is4k
+            ? Permission.AUTO_APPROVE_4K
+            : Permission.AUTO_APPROVE,
+          requestBody.is4k
+            ? Permission.AUTO_APPROVE_4K_MOVIE
+            : Permission.AUTO_APPROVE_MOVIE,
+          Permission.MANAGE_REQUESTS,
+        ],
+        { type: 'or' }
+      );
+      const isAutoApproved =
+        hasAutoApprovePermission ||
+        (await MediaRequest.isAutoApprovedByRule(
+          requestBody,
+          tmdbMedia,
+          requestUser
+        ));
+
       await mediaRepository.save(media);
 
       const request = new MediaRequest({
         type: MediaType.MOVIE,
         media,
         requestedBy: requestUser,
-        // If the user is an admin or has the "auto approve" permission, automatically approve the request
-        status: user.hasPermission(
-          [
-            requestBody.is4k
-              ? Permission.AUTO_APPROVE_4K
-              : Permission.AUTO_APPROVE,
-            requestBody.is4k
-              ? Permission.AUTO_APPROVE_4K_MOVIE
-              : Permission.AUTO_APPROVE_MOVIE,
-            Permission.MANAGE_REQUESTS,
-          ],
-          { type: 'or' }
-        )
+        status: isAutoApproved
           ? MediaRequestStatus.APPROVED
           : MediaRequestStatus.PENDING,
-        modifiedBy: user.hasPermission(
-          [
-            requestBody.is4k
-              ? Permission.AUTO_APPROVE_4K
-              : Permission.AUTO_APPROVE,
-            requestBody.is4k
-              ? Permission.AUTO_APPROVE_4K_MOVIE
-              : Permission.AUTO_APPROVE_MOVIE,
-            Permission.MANAGE_REQUESTS,
-          ],
-          { type: 'or' }
-        )
-          ? user
-          : undefined,
+        modifiedBy: hasAutoApprovePermission ? user : undefined,
         is4k: requestBody.is4k,
         serverId: requestBody.serverId,
         profileId: profileId,
@@ -356,61 +487,81 @@ export class MediaRequest {
       const tmdbMediaShow = tmdbMedia as Awaited<
         ReturnType<typeof tmdb.getTvShow>
       >;
-      let requestedSeasons =
-        requestBody.seasons === 'all'
-          ? tmdbMediaShow.seasons
-              .filter(
-                (season) =>
-                  season.season_number !== 0 && season.episode_count > 0
-              )
-              .map((season) => season.season_number)
-          : (requestBody.seasons as number[]);
-      if (!settings.main.enableSpecialEpisodes) {
-        requestedSeasons = requestedSeasons.filter((sn) => sn > 0);
+      const isFutureOnly =
+        requestBody.monitorMode === MediaRequestMonitorMode.FUTURE;
+      const isCurrentOnly =
+        requestBody.monitorMode === MediaRequestMonitorMode.CURRENT;
+
+      if (
+        !settings.main.partialRequestsEnabled &&
+        (isFutureOnly || (requestBody.episodes ?? []).length > 0)
+      ) {
+        throw new RequestPermissionError(
+          'Partial series requests are disabled.'
+        );
       }
 
-      let existingSeasons: number[] = [];
+      // Managers can always request only the current season, the setting
+      // decides whether everyone else can
+      if (
+        isCurrentOnly &&
+        !settings.main.allowCurrentSeasonRequests &&
+        !user.hasPermission(Permission.MANAGE_REQUESTS)
+      ) {
+        throw new RequestPermissionError(
+          'Current season requests are disabled.'
+        );
+      }
+
+      let requestedSeasons: RequestedSeason[];
+
+      if (isFutureOnly) {
+        // Sonarr decides which episodes are still to come, we only track the
+        // seasons that are airing or announced so availability can follow them
+        requestedSeasons = getFutureSeasonNumbers(
+          getTmdbSeasonInfo(tmdbMediaShow)
+        ).map((seasonNumber) => ({ seasonNumber, episodes: null }));
+      } else if (isCurrentOnly) {
+        // The Sonarr scan moves the request to each new season as it starts
+        const currentSeason = getCurrentSeasonNumber(
+          getTmdbSeasonInfo(tmdbMediaShow)
+        );
+
+        requestedSeasons =
+          currentSeason !== null
+            ? [{ seasonNumber: currentSeason, episodes: null }]
+            : [];
+      } else {
+        requestedSeasons = buildRequestedSeasons(
+          requestBody.seasons === 'all'
+            ? tmdbMediaShow.seasons
+                .filter(
+                  (season) =>
+                    season.season_number !== 0 && season.episode_count > 0
+                )
+                .map((season) => season.season_number)
+            : ((requestBody.seasons as number[] | undefined) ?? []),
+          requestBody.episodes
+        );
+      }
+      if (!settings.main.enableSpecialEpisodes) {
+        requestedSeasons = requestedSeasons.filter(
+          (season) => season.seasonNumber > 0
+        );
+      }
 
       // We need to check existing requests on this title to make sure we don't double up on seasons that were
-      // already requested. In the case they were, we just throw out any duplicates but still approve the request.
+      // already requested, along with seasons that are available/partially available but don't have existing
+      // requests. In the case they were, we just throw out any duplicates but still approve the request.
       // (Unless there are no seasons, in which case we abort)
-      if (media.requests) {
-        existingSeasons = media.requests
-          .filter(
-            (request) =>
-              request.is4k === requestBody.is4k &&
-              request.status !== MediaRequestStatus.DECLINED &&
-              request.status !== MediaRequestStatus.COMPLETED
-          )
-          .reduce((seasons, request) => {
-            const combinedSeasons = request.seasons.map(
-              (season) => season.seasonNumber
-            );
+      const finalSeasons = filterRequestableSeasons({
+        requested: requestedSeasons,
+        requests: media.requests ?? [],
+        seasons: media.seasons ?? [],
+        is4k: !!requestBody.is4k,
+      });
 
-            return [...seasons, ...combinedSeasons];
-          }, [] as number[]);
-      }
-
-      // We should also check seasons that are available/partially available but don't have existing requests
-      if (media.seasons) {
-        existingSeasons = [
-          ...existingSeasons,
-          ...media.seasons
-            .filter(
-              (season) =>
-                season[requestBody.is4k ? 'status4k' : 'status'] !==
-                  MediaStatus.UNKNOWN &&
-                season[requestBody.is4k ? 'status4k' : 'status'] !==
-                  MediaStatus.DELETED
-            )
-            .map((season) => season.seasonNumber),
-        ];
-      }
-
-      const finalSeasons = requestedSeasons.filter(
-        (rs) => !existingSeasons.includes(rs)
-      );
-
+      // An episode request counts as one season against quotas and rules
       if (finalSeasons.length === 0) {
         throw new NoSeasonsAvailableError('No seasons available to request');
       } else if (
@@ -421,41 +572,39 @@ export class MediaRequest {
         throw new QuotaRestrictedError('Series Quota exceeded.');
       }
 
+      // If the user is an admin or has the "auto approve" permission, or an
+      // auto-approve rule matches, automatically approve the request
+      const hasAutoApprovePermission = user.hasPermission(
+        [
+          requestBody.is4k
+            ? Permission.AUTO_APPROVE_4K
+            : Permission.AUTO_APPROVE,
+          requestBody.is4k
+            ? Permission.AUTO_APPROVE_4K_TV
+            : Permission.AUTO_APPROVE_TV,
+          Permission.MANAGE_REQUESTS,
+        ],
+        { type: 'or' }
+      );
+      const isAutoApproved =
+        hasAutoApprovePermission ||
+        (await MediaRequest.isAutoApprovedByRule(
+          requestBody,
+          tmdbMedia,
+          requestUser,
+          finalSeasons.length
+        ));
+
       await mediaRepository.save(media);
 
       const request = new MediaRequest({
         type: MediaType.TV,
         media,
         requestedBy: requestUser,
-        // If the user is an admin or has the "auto approve" permission, automatically approve the request
-        status: user.hasPermission(
-          [
-            requestBody.is4k
-              ? Permission.AUTO_APPROVE_4K
-              : Permission.AUTO_APPROVE,
-            requestBody.is4k
-              ? Permission.AUTO_APPROVE_4K_TV
-              : Permission.AUTO_APPROVE_TV,
-            Permission.MANAGE_REQUESTS,
-          ],
-          { type: 'or' }
-        )
+        status: isAutoApproved
           ? MediaRequestStatus.APPROVED
           : MediaRequestStatus.PENDING,
-        modifiedBy: user.hasPermission(
-          [
-            requestBody.is4k
-              ? Permission.AUTO_APPROVE_4K
-              : Permission.AUTO_APPROVE,
-            requestBody.is4k
-              ? Permission.AUTO_APPROVE_4K_TV
-              : Permission.AUTO_APPROVE_TV,
-            Permission.MANAGE_REQUESTS,
-          ],
-          { type: 'or' }
-        )
-          ? user
-          : undefined,
+        modifiedBy: hasAutoApprovePermission ? user : undefined,
         is4k: requestBody.is4k,
         serverId: requestBody.serverId,
         profileId: profileId,
@@ -463,25 +612,23 @@ export class MediaRequest {
         languageProfileId: requestBody.languageProfileId,
         tags: tags,
         seasons: finalSeasons.map(
-          (sn) =>
+          (season) =>
             new SeasonRequest({
-              seasonNumber: sn,
-              status: user.hasPermission(
-                [
-                  requestBody.is4k
-                    ? Permission.AUTO_APPROVE_4K
-                    : Permission.AUTO_APPROVE,
-                  requestBody.is4k
-                    ? Permission.AUTO_APPROVE_4K_TV
-                    : Permission.AUTO_APPROVE_TV,
-                  Permission.MANAGE_REQUESTS,
-                ],
-                { type: 'or' }
-              )
+              seasonNumber: season.seasonNumber,
+              episodes: season.episodes,
+              status: isAutoApproved
                 ? MediaRequestStatus.APPROVED
                 : MediaRequestStatus.PENDING,
             })
         ),
+        monitorMode: isFutureOnly
+          ? MediaRequestMonitorMode.FUTURE
+          : isCurrentOnly
+            ? MediaRequestMonitorMode.CURRENT
+            : null,
+        preexistingSeasons: isCurrentOnly
+          ? getAvailableSeasonNumbers(media.seasons ?? [], !!requestBody.is4k)
+          : null,
         isAutoRequest: options.isAutoRequest ?? false,
         ignoreQuota,
       });
@@ -489,6 +636,391 @@ export class MediaRequest {
       await requestRepository.save(request);
       return request;
     }
+  }
+
+  /**
+   * Applies the music or book quota of the request user the way movie quotas
+   * are applied, and returns whether the request is exempt from the quota.
+   */
+  private static async checkQuota(
+    requestBody: MediaRequestBody,
+    user: User,
+    requestUser: User,
+    type: MediaType.MUSIC | MediaType.BOOK
+  ): Promise<boolean> {
+    const quotas = await requestUser.getQuota();
+    const quota = type === MediaType.MUSIC ? quotas.music : quotas.book;
+
+    const canBypassQuota = user.hasPermission(Permission.MANAGE_REQUESTS);
+    const ignoreQuota =
+      requestBody.ignoreQuota === true &&
+      canBypassQuota &&
+      (quota.limit ?? 0) > 0;
+
+    if (!ignoreQuota) {
+      if (requestBody.ignoreQuota && !canBypassQuota) {
+        throw new RequestPermissionError(
+          'You do not have permission to bypass user quota limits.'
+        );
+      } else if (quota.restricted) {
+        throw new QuotaRestrictedError(
+          type === MediaType.MUSIC
+            ? 'Music Quota exceeded.'
+            : 'Book Quota exceeded.'
+        );
+      }
+    }
+
+    return ignoreQuota;
+  }
+
+  /**
+   * Albums are requested one at a time and keyed on their MusicBrainz release
+   * group id. There is no 4K or content rating for music.
+   */
+  private static async createMusicRequest(
+    requestBody: MediaRequestBody,
+    user: User,
+    requestUser: User,
+    options: MediaRequestOptions
+  ): Promise<MediaRequest> {
+    const mediaRepository = getRepository(Media);
+    const requestRepository = getRepository(MediaRequest);
+    const mbId = String(requestBody.mediaId);
+
+    if (
+      !requestUser.hasPermission(
+        [Permission.REQUEST, Permission.REQUEST_MUSIC],
+        {
+          type: 'or',
+        }
+      )
+    ) {
+      throw new RequestPermissionError(
+        'You do not have permission to make music requests.'
+      );
+    }
+
+    if (requestBody.is4k) {
+      throw new RequestPermissionError('Music cannot be requested in 4K.');
+    }
+
+    const ignoreQuota = await MediaRequest.checkQuota(
+      requestBody,
+      user,
+      requestUser,
+      MediaType.MUSIC
+    );
+
+    // Makes sure the release group exists before anything is saved
+    const releaseGroup = options.skipMetadataLookup
+      ? { id: mbId }
+      : await new MusicBrainz().getAlbum({ releaseGroupId: mbId });
+
+    let media = await mediaRepository.findOne({
+      where: { mbId: releaseGroup.id, mediaType: MediaType.MUSIC },
+      relations: ['requests'],
+    });
+
+    if (!media) {
+      media = new Media({
+        mbId: releaseGroup.id,
+        status: MediaStatus.PENDING,
+        mediaType: MediaType.MUSIC,
+      });
+    } else {
+      if (media.status === MediaStatus.BLOCKLISTED) {
+        logger.warn('Request for media blocked due to being blocklisted', {
+          mbId: releaseGroup.id,
+          mediaType: requestBody.mediaType,
+          label: 'Media Request',
+        });
+
+        throw new BlocklistedMediaError('This media is blocklisted.');
+      }
+
+      if (
+        media.status === MediaStatus.UNKNOWN ||
+        media.status === MediaStatus.DELETED
+      ) {
+        media.status = MediaStatus.PENDING;
+      }
+    }
+
+    // An album is requested as a whole, like a movie
+    const existing = (media.requests ?? []).find(
+      (request) =>
+        request.status !== MediaRequestStatus.DECLINED &&
+        request.status !== MediaRequestStatus.COMPLETED
+    );
+
+    if (existing) {
+      logger.warn('Duplicate request for media blocked', {
+        mbId: releaseGroup.id,
+        mediaType: requestBody.mediaType,
+        label: 'Media Request',
+      });
+
+      throw new DuplicateMediaRequestError(
+        'Request for this media already exists.'
+      );
+    }
+
+    let rootFolder = requestBody.rootFolder;
+    let profileId = requestBody.profileId;
+    let tags = requestBody.tags;
+
+    const ruleResult = await overrideRules({
+      mediaType: MediaType.MUSIC,
+      is4k: false,
+      requestUser,
+      tags,
+      serviceId: requestBody.serverId ?? undefined,
+    });
+    const isAdvanced = user.hasPermission(
+      [Permission.MANAGE_REQUESTS, Permission.REQUEST_ADVANCED],
+      { type: 'or' }
+    );
+    // Advanced users pick these in the modal, so we don't want to override them if they are set
+    if (ruleResult.rootFolder && (!isAdvanced || !rootFolder)) {
+      rootFolder = ruleResult.rootFolder;
+    }
+    if (ruleResult.profileId && (!isAdvanced || !profileId)) {
+      profileId = ruleResult.profileId;
+    }
+    if (ruleResult.tags && (!isAdvanced || !tags)) {
+      tags = ruleResult.tags;
+    }
+
+    // If the user is an admin or has the "auto approve" permission, or an
+    // auto-approve rule matches, automatically approve the request
+    const hasAutoApprovePermission = user.hasPermission(
+      [Permission.AUTO_APPROVE, Permission.MANAGE_REQUESTS],
+      { type: 'or' }
+    );
+    const isAutoApproved =
+      hasAutoApprovePermission ||
+      (await matchesAutoApproveRule({
+        mediaType: MediaType.MUSIC,
+        is4k: false,
+        requestUser,
+        serviceId: requestBody.serverId ?? undefined,
+      }));
+
+    await mediaRepository.save(media);
+
+    const request = new MediaRequest({
+      type: MediaType.MUSIC,
+      media,
+      requestedBy: requestUser,
+      status: isAutoApproved
+        ? MediaRequestStatus.APPROVED
+        : MediaRequestStatus.PENDING,
+      modifiedBy: hasAutoApprovePermission ? user : undefined,
+      is4k: false,
+      serverId: requestBody.serverId,
+      profileId,
+      rootFolder,
+      tags,
+      isAutoRequest: options.isAutoRequest ?? false,
+      ignoreQuota,
+      skipNotification: options.skipNotification,
+    });
+
+    await requestRepository.save(request);
+    return request;
+  }
+
+  /**
+   * Books are requested per format: an ebook and an audiobook are two
+   * requests on the same media, the way 4K and non-4K requests are. Books are
+   * keyed on their OpenLibrary work id and have no content rating, and
+   * LazyLibrarian takes no request options. Each format counts as one request
+   * against the book quota. Request Books grants book requests on its own,
+   * the way Request Music does for albums.
+   */
+  private static async createBookRequest(
+    requestBody: MediaRequestBody,
+    user: User,
+    requestUser: User,
+    options: MediaRequestOptions
+  ): Promise<MediaRequest> {
+    const mediaRepository = getRepository(Media);
+    const requestRepository = getRepository(MediaRequest);
+    const isAudiobook = !!requestBody.isAudiobook;
+    const statusKey = getRequestStatusKey({ isAudiobook });
+
+    if (
+      !requestUser.hasPermission(
+        [Permission.REQUEST, Permission.REQUEST_BOOK],
+        {
+          type: 'or',
+        }
+      )
+    ) {
+      throw new RequestPermissionError(
+        'You do not have permission to make book requests.'
+      );
+    }
+
+    if (requestBody.is4k) {
+      throw new RequestPermissionError('Books cannot be requested in 4K.');
+    }
+
+    if (
+      requestBody.language !== undefined &&
+      requestBody.language !== null &&
+      !isBookLanguage(requestBody.language)
+    ) {
+      throw new InvalidBookLanguageError('Unknown book language.');
+    }
+
+    // Only managers choose the language, everyone else requests in their
+    // own. A language from anyone else is ignored rather than refused, so
+    // older clients that send one keep working.
+    const canChooseLanguage = user.hasPermission(Permission.MANAGE_REQUESTS);
+    const language = resolveRequestBookLanguage({
+      requested: requestBody.language,
+      canManage: canChooseLanguage,
+      userLanguage: requestUser.settings?.bookLanguage,
+      serverLanguage: getSettings().main.bookLanguage,
+    });
+
+    if (
+      requestBody.language &&
+      !canChooseLanguage &&
+      requestBody.language !== language
+    ) {
+      logger.debug('Ignored the language of a book request', {
+        label: 'Media Request',
+        userId: user.id,
+        requested: requestBody.language,
+        language,
+      });
+    }
+
+    const ignoreQuota = await MediaRequest.checkQuota(
+      requestBody,
+      user,
+      requestUser,
+      MediaType.BOOK
+    );
+
+    // Makes sure the work exists before anything is saved. A merged work is
+    // requested as the work it was merged into.
+    const olId = options.skipMetadataLookup
+      ? String(requestBody.mediaId)
+      : getOlId(
+          (await new OpenLibrary().getWork(String(requestBody.mediaId))).key
+        );
+
+    let media = await mediaRepository.findOne({
+      where: { olId, mediaType: MediaType.BOOK },
+      relations: ['requests'],
+    });
+
+    if (!media) {
+      media = new Media({
+        olId,
+        mediaType: MediaType.BOOK,
+        status: isAudiobook ? MediaStatus.UNKNOWN : MediaStatus.PENDING,
+        statusAudio: isAudiobook ? MediaStatus.PENDING : MediaStatus.UNKNOWN,
+      });
+    } else {
+      if (media.status === MediaStatus.BLOCKLISTED) {
+        logger.warn('Request for media blocked due to being blocklisted', {
+          olId,
+          mediaType: requestBody.mediaType,
+          label: 'Media Request',
+        });
+
+        throw new BlocklistedMediaError('This media is blocklisted.');
+      }
+
+      if (
+        media[statusKey] === MediaStatus.UNKNOWN ||
+        media[statusKey] === MediaStatus.DELETED
+      ) {
+        media[statusKey] = MediaStatus.PENDING;
+      }
+    }
+
+    // Each format is requested as a whole, like a movie
+    const existing = (media.requests ?? []).find(
+      (request) =>
+        request.isAudiobook === isAudiobook &&
+        request.status !== MediaRequestStatus.DECLINED &&
+        request.status !== MediaRequestStatus.COMPLETED
+    );
+
+    if (existing) {
+      logger.warn('Duplicate request for media blocked', {
+        olId,
+        mediaType: requestBody.mediaType,
+        isAudiobook,
+        label: 'Media Request',
+      });
+
+      throw new DuplicateMediaRequestError(
+        'Request for this media already exists.'
+      );
+    }
+
+    // If the user is an admin or has the "auto approve" permission,
+    // automatically approve the request
+    const hasAutoApprovePermission = user.hasPermission(
+      [Permission.AUTO_APPROVE, Permission.MANAGE_REQUESTS],
+      { type: 'or' }
+    );
+
+    await mediaRepository.save(media);
+
+    const request = new MediaRequest({
+      type: MediaType.BOOK,
+      media,
+      requestedBy: requestUser,
+      status: hasAutoApprovePermission
+        ? MediaRequestStatus.APPROVED
+        : MediaRequestStatus.PENDING,
+      modifiedBy: hasAutoApprovePermission ? user : undefined,
+      is4k: false,
+      isAudiobook,
+      language,
+      isAutoRequest: options.isAutoRequest ?? false,
+      ignoreQuota,
+      skipNotification: options.skipNotification,
+    });
+
+    await requestRepository.save(request);
+    return request;
+  }
+
+  private static async isAutoApprovedByRule(
+    requestBody: MediaRequestBody,
+    tmdbMedia: TmdbMovieDetails | TmdbTvDetails,
+    requestUser: User,
+    seasonCount?: number
+  ): Promise<boolean> {
+    const isAutoApproved = await matchesAutoApproveRule({
+      mediaType: requestBody.mediaType,
+      is4k: requestBody.is4k || false,
+      tmdbMedia,
+      requestUser,
+      serviceId: requestBody.serverId ?? undefined,
+      seasonCount,
+    });
+
+    if (isAutoApproved) {
+      logger.debug('Auto-approve rule applied.', {
+        label: 'Override Rules',
+        tmdbId: tmdbMedia.id,
+        mediaType: requestBody.mediaType,
+        is4k: requestBody.is4k,
+        userId: requestUser.id,
+      });
+    }
+
+    return isAutoApproved;
   }
 
   @PrimaryGeneratedColumn()
@@ -544,6 +1076,17 @@ export class MediaRequest {
   @Column({ default: false })
   public is4k: boolean;
 
+  // Book requests are made per format, like 4K and non-4K requests: an
+  // audiobook request follows the media's statusAudio, an ebook its status
+  @Column({ default: false })
+  public isAudiobook: boolean;
+
+  // Books only, the language the book is requested in (an ISO 639-1 code
+  // or 'any'). Null for requests made before languages could be chosen,
+  // which use the requester's language.
+  @Column({ type: 'varchar', nullable: true })
+  public language?: string | null;
+
   @Column({ nullable: true })
   public serverId: number;
 
@@ -590,8 +1133,32 @@ export class MediaRequest {
   @Column({ default: false })
   public isAutoRequest: boolean;
 
+  // Future only requests monitor the episodes that have not aired yet, without
+  // searching for the ones that have. Current season requests keep only the
+  // airing season and delete older ones when a new season starts.
+  @Column({ type: 'varchar', nullable: true })
+  public monitorMode?: MediaRequestMonitorMode | null;
+
+  // Seasons of a current season request that were already available when it
+  // was made. They are kept when a new season starts unless an admin approves
+  // deleting them. Null for requests made before this was recorded, which
+  // keeps every older season.
+  @Column({
+    type: 'text',
+    nullable: true,
+    transformer: episodeNumbersTransformer,
+  })
+  public preexistingSeasons?: number[] | null;
+
   @Column({ default: false })
   public ignoreQuota: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  public declineReason?: string | null;
+
+  // Not stored. Set on a request made as part of a bulk request, which
+  // sends one summary notification instead of one per request.
+  public skipNotification?: boolean;
 
   constructor(init?: Partial<MediaRequest>) {
     Object.assign(this, init);
@@ -599,6 +1166,10 @@ export class MediaRequest {
 
   @AfterInsert()
   public async notifyNewRequest(): Promise<void> {
+    if (this.skipNotification) {
+      return;
+    }
+
     if (this.status === MediaRequestStatus.PENDING) {
       const mediaRepository = getRepository(Media);
       const media = await mediaRepository.findOne({
@@ -652,7 +1223,7 @@ export class MediaRequest {
 
       if (
         this.status === MediaRequestStatus.APPROVED &&
-        media[this.is4k ? 'status4k' : 'status'] === MediaStatus.AVAILABLE
+        media[getRequestStatusKey(this)] === MediaStatus.AVAILABLE
       ) {
         logger.info(
           'Media is already available. Sending availability notification instead of approval.',
@@ -692,7 +1263,7 @@ export class MediaRequest {
 
   @AfterInsert()
   public async autoapprovalNotification(): Promise<void> {
-    if (this.status === MediaRequestStatus.APPROVED) {
+    if (this.status === MediaRequestStatus.APPROVED && !this.skipNotification) {
       this.notifyApprovedOrDeclined(true);
     }
   }
@@ -712,7 +1283,14 @@ export class MediaRequest {
     const tmdb = new TheMovieDb();
 
     try {
-      const mediaType = entity.type === MediaType.MOVIE ? 'Movie' : 'Series';
+      const mediaType =
+        entity.type === MediaType.MOVIE
+          ? 'Movie'
+          : entity.type === MediaType.MUSIC
+            ? 'Album'
+            : entity.type === MediaType.BOOK
+              ? getBookFormatName(entity.isAudiobook)
+              : 'Series';
       let event: string | undefined;
       let notifyAdmin = true;
       let notifySystem = true;
@@ -750,6 +1328,11 @@ export class MediaRequest {
           break;
       }
 
+      const declineReasonExtra =
+        type === Notification.MEDIA_DECLINED && entity.declineReason
+          ? [{ name: 'Reason', value: entity.declineReason }]
+          : undefined;
+
       if (entity.type === MediaType.MOVIE) {
         const movie = await tmdb.getMovie({ movieId: media.tmdbId });
         notificationManager.sendNotification(type, {
@@ -768,6 +1351,7 @@ export class MediaRequest {
             omission: '…',
           }),
           image: `https://image.tmdb.org/t/p/w600_and_h900_bestv2${movie.poster_path}`,
+          extra: declineReasonExtra,
         });
       } else if (entity.type === MediaType.TV) {
         const tv = await tmdb.getTvShow({ tvId: media.tmdbId });
@@ -790,10 +1374,53 @@ export class MediaRequest {
           extra: [
             {
               name: 'Requested Seasons',
-              value: entity.seasons
-                .map((season) => season.seasonNumber)
-                .join(', '),
+              value: formatRequestedSeasons(entity.seasons),
             },
+            ...(entity.monitorMode === MediaRequestMonitorMode.FUTURE
+              ? [{ name: 'Monitoring', value: 'Future episodes only' }]
+              : entity.monitorMode === MediaRequestMonitorMode.CURRENT
+                ? [{ name: 'Monitoring', value: 'Current season only' }]
+                : []),
+            ...(declineReasonExtra ?? []),
+          ],
+        });
+      } else if (entity.type === MediaType.MUSIC && media.mbId) {
+        const album = await getMusicNotificationDetails(media.mbId);
+        notificationManager.sendNotification(type, {
+          media,
+          request: entity,
+          notifyAdmin,
+          notifySystem,
+          notifyUser: notifyAdmin ? undefined : entity.requestedBy,
+          event,
+          subject: album.subject,
+          message: album.message,
+          image: album.image,
+          extra: declineReasonExtra,
+        });
+      } else if (entity.type === MediaType.BOOK && media.olId) {
+        const book = await getBookNotificationDetails(media.olId);
+        notificationManager.sendNotification(type, {
+          media,
+          request: entity,
+          notifyAdmin,
+          notifySystem,
+          notifyUser: notifyAdmin ? undefined : entity.requestedBy,
+          event,
+          subject: book.subject,
+          message: book.message,
+          image: book.image,
+          extra: [
+            { name: 'Format', value: getBookFormatName(entity.isAudiobook) },
+            ...(isBookLanguage(entity.language)
+              ? [
+                  {
+                    name: 'Language',
+                    value: getBookLanguageName(entity.language),
+                  },
+                ]
+              : []),
+            ...(declineReasonExtra ?? []),
           ],
         });
       }

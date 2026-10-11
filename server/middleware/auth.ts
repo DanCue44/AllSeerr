@@ -5,12 +5,22 @@ import type {
   PermissionCheckOptions,
 } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { hashUserApiKey, isUserApiKey } from '@server/lib/userApiKey';
 
 export const checkUser: Middleware = async (req, _res, next) => {
   const settings = getSettings();
   let user: User | undefined | null;
 
-  if (req.header('X-API-Key') === settings.main.apiKey) {
+  const apiKey = req.header('X-API-Key');
+
+  if (isUserApiKey(apiKey)) {
+    // A personal key always acts as its owner; X-API-User is ignored
+    const userRepository = getRepository(User);
+
+    user = await userRepository.findOne({
+      where: { apiKeyHash: hashUserApiKey(apiKey) },
+    });
+  } else if (apiKey && apiKey === settings.main.apiKey) {
     const userRepository = getRepository(User);
 
     let userId = 1; // Work on original administrator account

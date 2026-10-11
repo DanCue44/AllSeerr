@@ -2,6 +2,7 @@ import ExternalAPI from '@server/api/externalapi';
 import type { AvailableCacheIds } from '@server/lib/cache';
 import cacheManager from '@server/lib/cache';
 import { getSettings, type DVRSettings } from '@server/lib/settings';
+import logger from '@server/logger';
 
 export interface SystemStatus {
   version: string;
@@ -68,6 +69,102 @@ export interface Tag {
   id: number;
   label: string;
 }
+
+/**
+ * A release an indexer search returned, as the arr lists it. Only the fields
+ * read here are typed; each arr adds its own.
+ */
+export interface ServarrRelease {
+  [key: string]: unknown;
+  guid: string;
+  indexerId: number;
+  title?: string;
+  size?: number;
+  ageHours?: number;
+  indexer?: string;
+  protocol?: string;
+  seeders?: number | null;
+  leechers?: number | null;
+  quality?: {
+    [key: string]: unknown;
+    quality?: { [key: string]: unknown; name?: string };
+  };
+  qualityWeight?: number;
+  languages?: { id?: number; name?: string }[];
+  approved?: boolean;
+  temporarilyRejected?: boolean;
+  rejected?: boolean;
+  // Strings on most arrs, objects with a reason on some versions
+  rejections?: (
+    | string
+    | { [key: string]: unknown; reason?: string; message?: string }
+  )[];
+  customFormatScore?: number;
+  releaseGroup?: string | null;
+  infoUrl?: string | null;
+  publishDate?: string;
+}
+
+/**
+ * An event in an arr's history, such as a grab or an import
+ */
+export interface ServarrHistoryRecord {
+  id: number;
+  eventType: string;
+  date: string;
+  downloadId?: string | null;
+  sourceTitle?: string;
+  movieId?: number;
+  seriesId?: number;
+  episodeId?: number;
+  albumId?: number;
+  bookId?: number;
+  data?: Record<string, string | null | undefined>;
+}
+
+// An indexer search for releases runs while the request waits, and with
+// many indexers it takes minutes
+export const RELEASE_SEARCH_TIMEOUT_MS = 180_000;
+// Sending a release to the download client
+const GRAB_TIMEOUT_MS = 60_000;
+
+/**
+ * The message an arr gave for a failed call, such as "Couldn't find
+ * requested release in cache", or the error's own message
+ */
+export const getArrErrorMessage = (e: unknown): string => {
+  const error = e as {
+    message?: string;
+    response?: { data?: unknown };
+  };
+  const data = error?.response?.data;
+
+  if (typeof data === 'string' && data.trim()) {
+    return data.trim().slice(0, 300);
+  }
+  if (Array.isArray(data)) {
+    const messages = data
+      .map((item) =>
+        typeof item === 'object' && item
+          ? ((item as { errorMessage?: string }).errorMessage ?? '')
+          : String(item)
+      )
+      .filter(Boolean);
+    if (messages.length) {
+      return messages.join(', ');
+    }
+  }
+  if (typeof data === 'object' && data) {
+    const message =
+      (data as { message?: string }).message ??
+      (data as { error?: string }).error;
+    if (message) {
+      return message;
+    }
+  }
+
+  return error?.message ?? String(e);
+};
 
 interface QueueResponse<QueueItemAppendT> {
   page: number;
@@ -228,6 +325,99 @@ class ServarrBase<QueueItemAppendT> extends ExternalAPI {
       });
     }
   };
+
+  /**
+   * Searches the indexers for releases, as the arr's interactive search
+   * does. The arr waits for every indexer before it answers.
+   */
+  protected async fetchReleases<T>(
+    params: Record<string, unknown>
+  ): Promise<T> {
+    try {
+      const response = await this.axios.get<T>('/release', {
+        params,
+        timeout: RELEASE_SEARCH_TIMEOUT_MS,
+      });
+
+      return response.data;
+    } catch (e) {
+      throw new Error(
+        `[${this.apiName}] Failed to search for releases: ${getArrErrorMessage(e)}`,
+        { cause: e }
+      );
+    }
+  }
+
+  /**
+   * Sends a release from the last search to the download client. The arr
+   * keeps search results for about half an hour, an older release has to be
+   * searched for again.
+   */
+  public async grabRelease(
+    release: { guid: string; indexerId: number } & Record<string, unknown>
+  ): Promise<void> {
+    try {
+      await this.axios.post('/release', release, { timeout: GRAB_TIMEOUT_MS });
+    } catch (e) {
+      throw new Error(
+        `[${this.apiName}] Failed to grab the release: ${getArrErrorMessage(e)}`,
+        { cause: e }
+      );
+    }
+  }
+
+  protected async fetchHistory(
+    path: string,
+    params: Record<string, unknown>
+  ): Promise<ServarrHistoryRecord[]> {
+    try {
+      const response = await this.axios.get<
+        ServarrHistoryRecord[] | { records?: ServarrHistoryRecord[] }
+      >(path, { params });
+
+      return Array.isArray(response.data)
+        ? response.data
+        : (response.data.records ?? []);
+    } catch (e) {
+      throw new Error(
+        `[${this.apiName}] Failed to retrieve history: ${getArrErrorMessage(e)}`,
+        { cause: e }
+      );
+    }
+  }
+
+  /**
+   * Marks the download of a grab as failed. The arr adds the release to its
+   * blocklist, and when its Redownload Failed setting is on, it searches
+   * again by itself.
+   */
+  public async markHistoryFailed(historyId: number): Promise<void> {
+    try {
+      await this.axios.post(`/history/failed/${historyId}`);
+    } catch (e) {
+      throw new Error(
+        `[${this.apiName}] Failed to mark the download as failed: ${getArrErrorMessage(e)}`,
+        { cause: e }
+      );
+    }
+  }
+
+  /**
+   * Runs a search command, such as MoviesSearch, failing when the arr does
+   * not accept it
+   */
+  public async startSearch(
+    commandName: string,
+    options: Record<string, unknown>
+  ): Promise<void> {
+    logger.info('Executing search command', {
+      label: `${this.apiName} API`,
+      commandName,
+      ...options,
+    });
+
+    await this.runCommand(commandName, options);
+  }
 
   async refreshMonitoredDownloads(): Promise<void> {
     await this.runCommand('RefreshMonitoredDownloads', {});

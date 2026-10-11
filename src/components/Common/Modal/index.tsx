@@ -3,6 +3,7 @@ import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import useClickOutside from '@app/hooks/useClickOutside';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { useLockBodyScroll } from '@app/hooks/useLockBodyScroll';
 import globalMessages from '@app/i18n/globalMessages';
 import { Transition, TransitionChild } from '@headlessui/react';
@@ -75,6 +76,8 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
     parentRef
   ) => {
     const intl = useIntl();
+    const [interfaceStyle] = useInterfaceStyle();
+    const ambient = interfaceStyle === 'ambient';
     const modalRef = useRef<HTMLDivElement>(null);
     const backgroundClickableRef = useRef(backgroundClickable); // This ref is used to detect state change inside the useClickOutside hook
     useEffect(() => {
@@ -90,7 +93,12 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
     return ReactDOM.createPortal(
       <TransitionChild
         as="div"
-        className="fixed bottom-0 left-0 right-0 top-0 z-50 flex h-full w-full items-center justify-center bg-gray-800/70"
+        className={`fixed bottom-0 left-0 right-0 top-0 z-50 flex h-full w-full items-center justify-center ${
+          ambient
+            ? // Phones get a sheet along the bottom edge, matching its corners
+              'bg-as-ground/75 backdrop-blur-sm max-sm:items-end'
+            : 'bg-gray-800/70'
+        }`}
         enter="transition-opacity duration-300"
         enterFrom="opacity-0"
         enterTo="opacity-100"
@@ -115,7 +123,11 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
           </div>
         </Transition>
         <Transition
-          className={`hide-scrollbar relative inline-block w-full overflow-auto bg-gray-800 px-4 pb-4 pt-4 text-left align-bottom shadow-xl ring-1 ring-gray-700 transition-all sm:my-8 sm:max-w-3xl sm:rounded-lg sm:align-middle ${dialogClass}`}
+          className={`hide-scrollbar relative inline-block w-full overflow-auto text-left align-bottom transition-all sm:my-8 sm:max-w-3xl sm:align-middle ${
+            ambient
+              ? 'rounded-t-[28px] bg-as-surface px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-6 shadow-[0_30px_60px_rgba(0,0,0,0.45)] ring-1 ring-as-line sm:rounded-[28px] sm:pb-6'
+              : 'bg-gray-800 px-4 pb-4 pt-4 shadow-xl ring-1 ring-gray-700 sm:rounded-lg'
+          } ${dialogClass}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-headline"
@@ -147,12 +159,16 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
                 className="absolute inset-0"
                 style={{
                   backgroundImage:
-                    'linear-gradient(180deg, rgba(31, 41, 55, 0.75) 0%, rgba(31, 41, 55, 1) 100%)',
+                    'linear-gradient(180deg, rgb(var(--tw-gray-800, 31 41 55) / 0.75) 0%, rgb(var(--tw-gray-800, 31 41 55) / 1) 100%)',
                 }}
               />
             </div>
           )}
-          <div className="relative -mx-4 overflow-x-hidden px-4 pt-0.5 sm:flex sm:items-center">
+          <div
+            className={`relative overflow-x-hidden pt-0.5 sm:flex sm:items-center ${
+              ambient ? '-mx-6 px-6' : '-mx-4 px-4'
+            }`}
+          >
             <div
               className={`mt-3 truncate text-center text-white sm:mt-0 sm:text-left`}
             >
@@ -160,7 +176,11 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
                 <div className="flex flex-col space-y-1">
                   {title && (
                     <span
-                      className="text-overseerr truncate pb-0.5 text-2xl font-bold leading-6"
+                      className={
+                        ambient
+                          ? 'truncate pb-0.5 font-display text-[22px] font-medium leading-7 text-as-ink'
+                          : 'text-overseerr truncate pb-0.5 text-2xl font-bold leading-6'
+                      }
                       id="modal-headline"
                       data-testid="modal-title"
                     >
@@ -169,7 +189,11 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
                   )}
                   {subTitle && (
                     <span
-                      className="truncate text-lg font-semibold leading-6 text-gray-200"
+                      className={
+                        ambient
+                          ? 'truncate text-base font-medium leading-6 text-as-ink-faint'
+                          : 'truncate text-lg font-semibold leading-6 text-gray-200'
+                      }
                       id="modal-headline"
                       data-testid="modal-title"
                     >
@@ -182,7 +206,9 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
           </div>
           {children && (
             <div
-              className={`relative mt-4 text-sm leading-5 text-gray-300 ${
+              className={`relative mt-4 text-sm leading-5 ${
+                ambient ? 'text-as-ink-muted' : 'text-gray-300'
+              } ${
                 !(onCancel || onOk || onSecondary || onTertiary) ? 'mb-3' : ''
               }`}
             >
@@ -190,7 +216,11 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
             </div>
           )}
           {(onCancel || onOk || onSecondary || onTertiary) && (
-            <div className="relative mt-5 flex flex-row-reverse justify-center sm:mt-4 sm:justify-start">
+            <div
+              className={`relative flex flex-row-reverse justify-center sm:justify-start ${
+                ambient ? 'mt-6 flex-wrap gap-y-2' : 'mt-5 sm:mt-4'
+              }`}
+            >
               {typeof onOk === 'function' && (
                 <Button
                   buttonType={okButtonType}

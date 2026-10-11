@@ -7,6 +7,7 @@ import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import { Watchlist } from '@server/entity/Watchlist';
+import { getSeasonEpisodeAvailability } from '@server/lib/episodeAvailability';
 import logger from '@server/logger';
 import { mapTvResult } from '@server/models/Search';
 import { mapSeasonWithEpisodes, mapTvDetails } from '@server/models/Tv';
@@ -97,6 +98,15 @@ tvRoutes.get('/:id/season/:seasonNumber', async (req, res, next) => {
       message: 'Unable to retrieve season.',
     });
   }
+});
+
+tvRoutes.get('/:id/season/:seasonNumber/availability', async (req, res) => {
+  const episodes = await getSeasonEpisodeAvailability(
+    Number(req.params.id),
+    Number(req.params.seasonNumber)
+  );
+
+  return res.status(200).json({ episodes });
 });
 
 tvRoutes.get('/:id/recommendations', async (req, res, next) => {

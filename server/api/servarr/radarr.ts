@@ -1,6 +1,7 @@
 import logger from '@server/logger';
 import type { AxiosResponse } from 'axios';
-import ServarrBase from './base';
+import type { ServarrHistoryRecord, ServarrRelease } from './base';
+import ServarrBase, { getArrErrorMessage } from './base';
 
 export interface RadarrMovieOptions {
   title: string;
@@ -41,6 +42,17 @@ export interface RadarrMovie {
     releaseGroup?: string;
     edition?: string;
     indexerFlags?: number;
+    quality?: {
+      quality: {
+        id: number;
+        name: string;
+        resolution: number;
+      };
+    };
+    languages?: {
+      id: number;
+      name: string;
+    }[];
     mediaInfo: {
       id: number;
       audioBitrate: number;
@@ -64,6 +76,18 @@ export interface RadarrMovie {
   };
 }
 
+export interface RadarrCalendarMovie extends RadarrMovie {
+  year: number;
+  inCinemas?: string;
+  digitalRelease?: string;
+  physicalRelease?: string;
+  images: {
+    coverType: string;
+    url?: string;
+    remoteUrl?: string;
+  }[];
+}
+
 class RadarrAPI extends ServarrBase<{ movieId: number }> {
   constructor({ url, apiKey }: { url: string; apiKey: string }) {
     super({ url, apiKey, cacheName: 'radarr', apiName: 'Radarr' });
@@ -76,6 +100,30 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
       return response.data;
     } catch (e) {
       throw new Error(`[Radarr] Failed to retrieve movies: ${e.message}`, {
+        cause: e,
+      });
+    }
+  };
+
+  public getCalendar = async ({
+    start,
+    end,
+  }: {
+    start: string;
+    end: string;
+  }): Promise<RadarrCalendarMovie[]> => {
+    try {
+      const data = await this.get<RadarrCalendarMovie[]>(
+        '/calendar',
+        {
+          params: { start, end, unmonitored: false },
+        },
+        300
+      );
+
+      return data;
+    } catch (e) {
+      throw new Error(`[Radarr] Failed to retrieve calendar: ${e.message}`, {
         cause: e,
       });
     }
@@ -314,6 +362,27 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
       throw e;
     }
   };
+
+  public async getReleases(movieId: number): Promise<ServarrRelease[]> {
+    return this.fetchReleases<ServarrRelease[]>({ movieId });
+  }
+
+  public async getMovieHistory(
+    movieId: number
+  ): Promise<ServarrHistoryRecord[]> {
+    return this.fetchHistory('/history/movie', { movieId });
+  }
+
+  public async deleteMovieFile(movieFileId: number): Promise<void> {
+    try {
+      await this.axios.delete(`/moviefile/${movieFileId}`);
+    } catch (e) {
+      throw new Error(
+        `[Radarr] Failed to delete the movie file: ${getArrErrorMessage(e)}`,
+        { cause: e }
+      );
+    }
+  }
 
   public clearCache = ({
     tmdbId,

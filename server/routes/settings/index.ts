@@ -1,8 +1,12 @@
+import BazarrAPI from '@server/api/bazarr';
+import GoogleBooks from '@server/api/googlebooks';
 import type { JellyfinLibrary } from '@server/api/jellyfin';
 import JellyfinAPI from '@server/api/jellyfin';
-import PlexAPI from '@server/api/plexapi';
+import LazyLibrarianAPI from '@server/api/lazylibrarian';
+import PlexAPI, { plexStatusProbe } from '@server/api/plexapi';
 import PlexTvAPI from '@server/api/plextv';
 import TautulliAPI from '@server/api/tautulli';
+import { isBookLanguage } from '@server/constants/bookLanguages';
 import { ApiErrorCode } from '@server/constants/error';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
@@ -15,20 +19,39 @@ import type {
   SettingsAboutResponse,
 } from '@server/interfaces/api/settingsInterfaces';
 import { scheduledJobs } from '@server/job/schedule';
+import {
+  LogoValidationError,
+  removeApplicationLogo,
+  saveApplicationLogo,
+} from '@server/lib/branding';
 import type { AvailableCacheIds } from '@server/lib/cache';
 import cacheManager from '@server/lib/cache';
 import ImageProxy from '@server/lib/imageproxy';
 import { Permission } from '@server/lib/permissions';
+import type { PlexAddress } from '@server/lib/plexConnection';
+import {
+  PlexAddressError,
+  explainPlexConnection,
+  parsePlexAddress,
+  plexAddressUrl,
+  testPlexConnection,
+} from '@server/lib/plexConnection';
 import { jellyfinFullScanner } from '@server/lib/scanners/jellyfin';
 import { plexFullScanner } from '@server/lib/scanners/plex';
+import scanHealth, {
+  SCAN_FAILURE_THRESHOLD,
+  SCAN_SERVICE_PATHS,
+  scanServiceName,
+} from '@server/lib/scanners/scanHealth';
 import type { JobId, Library, MainSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import discoverSettingRoutes from '@server/routes/settings/discover';
 import { ApiError } from '@server/types/error';
+import { normalizeHexColor } from '@server/utils/accentColor';
 import { appDataPath } from '@server/utils/appDataVolume';
-import { getAppVersion } from '@server/utils/appVersion';
+import { getAppVersion, isReleaseBuild } from '@server/utils/appVersion';
 import { dnsCache } from '@server/utils/dnsCache';
 import { getHostname } from '@server/utils/getHostname';
 import type { DnsEntries, DnsStats } from 'dns-caching';
@@ -41,6 +64,9 @@ import path from 'path';
 import semver from 'semver';
 import { URL } from 'url';
 import { z } from 'zod';
+import audiobookshelfRoutes from './audiobookshelf';
+import chaptarrRoutes from './chaptarr';
+import lidarrRoutes from './lidarr';
 import metadataRoutes from './metadata';
 import notificationRoutes from './notifications';
 import radarrRoutes from './radarr';
@@ -51,6 +77,9 @@ const settingsRoutes = Router();
 settingsRoutes.use('/notifications', notificationRoutes);
 settingsRoutes.use('/radarr', radarrRoutes);
 settingsRoutes.use('/sonarr', sonarrRoutes);
+settingsRoutes.use('/lidarr', lidarrRoutes);
+settingsRoutes.use('/chaptarr', chaptarrRoutes);
+settingsRoutes.use('/audiobookshelf', audiobookshelfRoutes);
 settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 
@@ -63,7 +92,7 @@ const filteredMainSettings = (
   main: MainSettings
 ): Partial<MainSettings> => {
   if (!user?.hasPermission(Permission.ADMIN)) {
-    return omit(main, 'apiKey');
+    return omit(main, ['apiKey', 'googleBooksApiKey']);
   }
 
   return main;
@@ -79,13 +108,65 @@ settingsRoutes.get('/main', (req, res, next) => {
   res.status(200).json(filteredMainSettings(req.user, settings.main));
 });
 
-settingsRoutes.post('/main', async (req, res) => {
+settingsRoutes.post('/main', async (req, res, next) => {
   const settings = getSettings();
 
-  settings.main = merge(settings.main, req.body);
+  // The logo version only changes with an upload or reset
+  const body = omit(req.body, 'applicationLogoVersion');
+
+  if (body.accentColor !== undefined) {
+    const accentColor = normalizeHexColor(body.accentColor);
+
+    if (!accentColor) {
+      return next({ status: 400, message: 'Invalid accent color.' });
+    }
+
+    body.accentColor = accentColor;
+  }
+
+  if (body.bookLanguage !== undefined && !isBookLanguage(body.bookLanguage)) {
+    return next({ status: 400, message: 'Unknown book language.' });
+  }
+
+  settings.main = merge(settings.main, body);
   await settings.save();
 
   return res.status(200).json(settings.main);
+});
+
+settingsRoutes.post<never, unknown, { file?: string }>(
+  '/main/logo',
+  async (req, res, next) => {
+    try {
+      const applicationLogoVersion = await saveApplicationLogo(req.body.file);
+
+      return res.status(200).json({ applicationLogoVersion });
+    } catch (e) {
+      if (e instanceof LogoValidationError) {
+        return next({ status: 400, message: e.message });
+      }
+
+      logger.error('Failed to save the application logo', {
+        label: 'Branding',
+        errorMessage: e.message,
+      });
+      return next({ status: 500, message: 'Unable to save the logo.' });
+    }
+  }
+);
+
+settingsRoutes.delete('/main/logo', async (_req, res, next) => {
+  try {
+    await removeApplicationLogo();
+
+    return res.status(200).json({ applicationLogoVersion: '' });
+  } catch (e) {
+    logger.error('Failed to remove the application logo', {
+      label: 'Branding',
+      errorMessage: e.message,
+    });
+    return next({ status: 500, message: 'Unable to remove the logo.' });
+  }
 });
 
 settingsRoutes.get('/network', (req, res) => {
@@ -115,6 +196,37 @@ settingsRoutes.post('/main/regenerate', async (req, res, next) => {
   return res.status(200).json(filteredMainSettings(req.user, main));
 });
 
+settingsRoutes.post<never, Record<string, never>, { apiKey?: unknown }>(
+  '/googlebooks/test',
+  async (req, res, next) => {
+    const apiKey = (
+      typeof req.body.apiKey === 'string' && req.body.apiKey.trim()
+        ? req.body.apiKey
+        : (getSettings().main.googleBooksApiKey ?? '')
+    ).trim();
+
+    if (!apiKey) {
+      return next({ status: 400, message: 'No Google Books API key is set.' });
+    }
+
+    try {
+      await GoogleBooks.testApiKey(apiKey);
+
+      return res.status(200).json({});
+    } catch (e) {
+      logger.error('Failed to test Google Books', {
+        label: 'Google Books',
+        errorMessage: e.response?.data?.error?.message ?? e.message,
+      });
+
+      return next({
+        status: 500,
+        message: 'Failed to connect to Google Books',
+      });
+    }
+  }
+);
+
 settingsRoutes.get('/plex', (_req, res) => {
   const settings = getSettings();
 
@@ -124,24 +236,64 @@ settingsRoutes.get('/plex', (_req, res) => {
 settingsRoutes.post('/plex', async (req, res, next) => {
   const userRepository = getRepository(User);
   const settings = getSettings();
+
+  // The hostname field may hold a full URL, which sets the port and SSL too
+  let address: PlexAddress;
+
+  try {
+    address = parsePlexAddress({
+      ip: req.body.ip ?? settings.plex.ip,
+      port: req.body.port ?? settings.plex.port,
+      useSsl: req.body.useSsl ?? settings.plex.useSsl,
+    });
+  } catch (e) {
+    if (e instanceof PlexAddressError) {
+      return next({ status: 400, message: e.message });
+    }
+
+    throw e;
+  }
+
   try {
     const admin = await userRepository.findOneOrFail({
       select: { id: true, plexToken: true },
       where: { id: 1 },
     });
 
-    Object.assign(settings.plex, req.body);
+    const result = await testPlexConnection(address, {
+      probe: plexStatusProbe(admin.plexToken),
+    });
 
-    const plexClient = new PlexAPI({ plexToken: admin.plexToken });
+    if (!result.ok || !result.identity) {
+      const explanation = explainPlexConnection(result);
 
-    const result = await plexClient.getStatus();
+      logger.error('Something went wrong testing Plex connection', {
+        label: 'API',
+        errorMessage: result.message,
+        explanation,
+        suggestion: result.suggestion
+          ? plexAddressUrl(result.suggestion)
+          : undefined,
+      });
 
-    if (!result?.MediaContainer?.machineIdentifier) {
-      throw new Error('Server not found');
+      // Nothing is saved. The admin chooses whether to use the suggestion.
+      return res.status(500).json({
+        message: result.message ?? 'Unable to connect to Plex.',
+        explanation,
+        reason: result.reason,
+        url: result.url,
+        suggestion: result.suggestion,
+        attempts: result.attempts,
+      });
     }
 
-    settings.plex.machineId = result.MediaContainer.machineIdentifier;
-    settings.plex.name = result.MediaContainer.friendlyName;
+    Object.assign(settings.plex, omit(req.body, ['name', 'machineId']), {
+      ip: address.ip,
+      port: address.port,
+      useSsl: address.useSsl,
+      machineId: result.identity.machineId,
+      name: result.identity.name,
+    });
 
     await settings.save();
   } catch (e) {
@@ -494,6 +646,118 @@ settingsRoutes.post('/jellyfin/sync', (req, res) => {
   }
   return res.status(200).json(jellyfinFullScanner.status());
 });
+settingsRoutes.get('/bazarr', (_req, res) => {
+  const settings = getSettings();
+
+  res.status(200).json(settings.bazarr);
+});
+
+settingsRoutes.post('/bazarr', async (req, res, next) => {
+  const settings = getSettings();
+
+  Object.assign(settings.bazarr, req.body);
+
+  if (settings.bazarr.hostname) {
+    try {
+      const bazarrClient = new BazarrAPI(settings.bazarr);
+
+      await bazarrClient.getVersion();
+    } catch (e) {
+      logger.error('Something went wrong testing Bazarr connection', {
+        label: 'API',
+        errorMessage: e.message,
+      });
+      return next({
+        status: 500,
+        message: 'Unable to connect to Bazarr.',
+      });
+    }
+  }
+
+  await settings.save();
+
+  return res.status(200).json(settings.bazarr);
+});
+
+settingsRoutes.post('/bazarr/test', async (req, res, next) => {
+  try {
+    const bazarrClient = new BazarrAPI({
+      hostname: req.body.hostname,
+      port: req.body.port,
+      useSsl: req.body.useSsl,
+      urlBase: req.body.urlBase,
+      apiKey: req.body.apiKey,
+    });
+
+    const version = await bazarrClient.getVersion();
+
+    return res.status(200).json({ version });
+  } catch (e) {
+    logger.error('Failed to test Bazarr', {
+      label: 'Bazarr',
+      message: e.message,
+    });
+
+    next({ status: 500, message: 'Failed to connect to Bazarr' });
+  }
+});
+
+settingsRoutes.get('/lazylibrarian', (_req, res) => {
+  const settings = getSettings();
+
+  res.status(200).json(settings.lazylibrarian);
+});
+
+settingsRoutes.post('/lazylibrarian', async (req, res, next) => {
+  const settings = getSettings();
+
+  Object.assign(settings.lazylibrarian, req.body);
+
+  if (settings.lazylibrarian.hostname) {
+    try {
+      const lazyLibrarianClient = new LazyLibrarianAPI(settings.lazylibrarian);
+
+      await lazyLibrarianClient.getVersion();
+    } catch (e) {
+      logger.error('Something went wrong testing LazyLibrarian connection', {
+        label: 'API',
+        errorMessage: e.message,
+      });
+      return next({
+        status: 500,
+        message: 'Unable to connect to LazyLibrarian.',
+      });
+    }
+  }
+
+  await settings.save();
+
+  return res.status(200).json(settings.lazylibrarian);
+});
+
+settingsRoutes.post('/lazylibrarian/test', async (req, res, next) => {
+  try {
+    const lazyLibrarianClient = new LazyLibrarianAPI({
+      hostname: req.body.hostname,
+      port: req.body.port,
+      useSsl: req.body.useSsl,
+      urlBase: req.body.urlBase,
+      apiKey: req.body.apiKey,
+    });
+
+    const version = await lazyLibrarianClient.getVersion();
+
+    return res.status(200).json({ version });
+  } catch (e) {
+    logger.error('Failed to test LazyLibrarian', {
+      label: 'LazyLibrarian',
+      message: e.message,
+    });
+
+    next({ status: 500, message: 'Failed to connect to LazyLibrarian' });
+  }
+});
+
 settingsRoutes.get('/tautulli', (_req, res) => {
   const settings = getSettings();
 
@@ -716,16 +980,40 @@ settingsRoutes.get(
   }
 );
 
+// A job with the health of its last runs. Only scan jobs track health.
+const serializeJob = (job: (typeof scheduledJobs)[number]) => {
+  const health = scanHealth.get(job.id);
+
+  return {
+    id: job.id,
+    name: job.name,
+    type: job.type,
+    interval: job.interval,
+    cronSchedule: job.cronSchedule,
+    nextExecutionTime: job.job.nextInvocation(),
+    running: job.running ? job.running() : false,
+    lastSuccess: health?.lastSuccess ?? null,
+    lastError: health?.lastError ?? null,
+    consecutiveFailures: health?.consecutiveFailures ?? 0,
+    failing: (health?.consecutiveFailures ?? 0) >= SCAN_FAILURE_THRESHOLD,
+  };
+};
+
 settingsRoutes.get('/jobs', (_req, res) => {
+  return res.status(200).json(scheduledJobs.map(serializeJob));
+});
+
+// Scans that keep failing, one per service, for the admin banner
+settingsRoutes.get('/jobs/alerts', (_req, res) => {
   return res.status(200).json(
-    scheduledJobs.map((job) => ({
-      id: job.id,
-      name: job.name,
-      type: job.type,
-      interval: job.interval,
-      cronSchedule: job.cronSchedule,
-      nextExecutionTime: job.job.nextInvocation(),
-      running: job.running ? job.running() : false,
+    scanHealth.alerts().map((alert) => ({
+      service: alert.service,
+      serviceName: scanServiceName(alert.service),
+      jobId: alert.jobId,
+      reason: alert.reason,
+      lastSuccess: alert.lastSuccess ?? null,
+      consecutiveFailures: alert.consecutiveFailures,
+      settingsPath: SCAN_SERVICE_PATHS[alert.service],
     }))
   );
 });
@@ -739,15 +1027,7 @@ settingsRoutes.post<{ jobId: string }>('/jobs/:jobId/run', (req, res, next) => {
 
   scheduledJob.job.invoke();
 
-  return res.status(200).json({
-    id: scheduledJob.id,
-    name: scheduledJob.name,
-    type: scheduledJob.type,
-    interval: scheduledJob.interval,
-    cronSchedule: scheduledJob.cronSchedule,
-    nextExecutionTime: scheduledJob.job.nextInvocation(),
-    running: scheduledJob.running ? scheduledJob.running() : false,
-  });
+  return res.status(200).json(serializeJob(scheduledJob));
 });
 
 settingsRoutes.post<{ jobId: JobId }>(
@@ -765,15 +1045,7 @@ settingsRoutes.post<{ jobId: JobId }>(
       scheduledJob.cancelFn();
     }
 
-    return res.status(200).json({
-      id: scheduledJob.id,
-      name: scheduledJob.name,
-      type: scheduledJob.type,
-      interval: scheduledJob.interval,
-      cronSchedule: scheduledJob.cronSchedule,
-      nextExecutionTime: scheduledJob.job.nextInvocation(),
-      running: scheduledJob.running ? scheduledJob.running() : false,
-    });
+    return res.status(200).json(serializeJob(scheduledJob));
   }
 );
 
@@ -797,15 +1069,7 @@ settingsRoutes.post<{ jobId: JobId }>(
 
       scheduledJob.cronSchedule = req.body.schedule;
 
-      return res.status(200).json({
-        id: scheduledJob.id,
-        name: scheduledJob.name,
-        type: scheduledJob.type,
-        interval: scheduledJob.interval,
-        cronSchedule: scheduledJob.cronSchedule,
-        nextExecutionTime: scheduledJob.job.nextInvocation(),
-        running: scheduledJob.running ? scheduledJob.running() : false,
-      });
+      return res.status(200).json(serializeJob(scheduledJob));
     } else {
       return next({ status: 400, message: 'Invalid job schedule.' });
     }
@@ -890,6 +1154,7 @@ settingsRoutes.get('/about', async (req, res) => {
 
   return res.status(200).json({
     version: getAppVersion(),
+    releaseBuild: isReleaseBuild(),
     totalMediaItems,
     totalRequests,
     tz: process.env.TZ,

@@ -4,11 +4,13 @@ import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import {
   BlocklistedMediaError,
+  ContentRatingRestrictedError,
   DuplicateMediaRequestError,
   MediaRequest,
   NoSeasonsAvailableError,
   QuotaRestrictedError,
   RequestPermissionError,
+  WatchProviderBlockedError,
 } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import logger from '@server/logger';
@@ -182,6 +184,8 @@ class WatchlistSync {
             break;
           // Blocklisted media should be silently ignored during watchlist sync to avoid spam
           case BlocklistedMediaError:
+          case WatchProviderBlockedError:
+          case ContentRatingRestrictedError:
             break;
           default:
             logger.error('Failed to create media request from watchlist', {

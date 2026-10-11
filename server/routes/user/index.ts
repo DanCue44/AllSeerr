@@ -19,6 +19,11 @@ import type {
 } from '@server/interfaces/api/userInterfaces';
 import { Permission, hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import {
+  getPlexUserWatchlist,
+  hasLocalMovieOrSeriesWatchlist,
+  withFollowImages,
+} from '@server/lib/watchlistPage';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { getHostname } from '@server/utils/getHostname';
@@ -959,51 +964,30 @@ router.get<{ id: string }, WatchlistResponse>(
       select: ['id', 'plexToken'],
     });
 
-    if (user) {
-      const [result, total] = await getRepository(Watchlist).findAndCount({
-        where: { requestedBy: { id: user?.id } },
-        relations: {
-          /*requestedBy: true,media:true*/
-        },
-        // loadRelationIds: true,
-        take: itemsPerPage,
-        skip: offset,
-      });
-      if (total) {
-        return res.json({
-          page: page,
-          totalPages: Math.ceil(total / itemsPerPage),
-          totalResults: total,
-          results: result,
-        });
-      }
+    // A Plex user's watchlist comes from Plex, with the albums and books
+    // watchlisted here in front, unless they keep movies or series here
+    if (user.plexToken && !(await hasLocalMovieOrSeriesWatchlist(user.id))) {
+      return res.json(
+        await getPlexUserWatchlist({
+          userId: user.id,
+          plexToken: user.plexToken,
+          page,
+          itemsPerPage,
+        })
+      );
     }
 
-    // We will just return an empty array if the user has no Plex token
-    if (!user.plexToken) {
-      return res.json({
-        page: 1,
-        totalPages: 1,
-        totalResults: 0,
-        results: [],
-      });
-    }
-
-    const plexTV = new PlexTvAPI(user.plexToken);
-
-    const watchlist = await plexTV.getWatchlist({ offset });
+    const [result, total] = await getRepository(Watchlist).findAndCount({
+      where: { requestedBy: { id: user.id } },
+      take: itemsPerPage,
+      skip: offset,
+    });
 
     return res.json({
-      page,
-      totalPages: Math.ceil(watchlist.totalSize / itemsPerPage),
-      totalResults: watchlist.totalSize,
-      results: watchlist.items.map((item) => ({
-        id: item.tmdbId,
-        ratingKey: item.ratingKey,
-        title: item.title,
-        mediaType: item.type === 'show' ? 'tv' : 'movie',
-        tmdbId: item.tmdbId,
-      })),
+      page: total ? page : 1,
+      totalPages: total ? Math.ceil(total / itemsPerPage) : 1,
+      totalResults: total,
+      results: await withFollowImages(result),
     });
   }
 );

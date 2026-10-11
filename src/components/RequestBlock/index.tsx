@@ -2,7 +2,10 @@ import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import Tooltip from '@app/components/Common/Tooltip';
+import DeclineRequestModal from '@app/components/DeclineRequestModal';
 import RequestModal from '@app/components/RequestModal';
+import RequestSeasonBadges from '@app/components/RequestSeasonBadges';
+import useBookLanguages from '@app/hooks/useBookLanguages';
 import useRequestOverride from '@app/hooks/useRequestOverride';
 import { useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -31,6 +34,7 @@ const messages = defineMessages('components.RequestBlock', {
   profilechanged: 'Quality Profile',
   rootfolder: 'Root Folder',
   languageprofile: 'Language Profile',
+  language: 'Language',
   requestdate: 'Request Date',
   requestedby: 'Requested By',
   lastmodifiedby: 'Last Modified By',
@@ -50,12 +54,23 @@ const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
   const intl = useIntl();
   const [isUpdating, setIsUpdating] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeclineModal, setShowDeclineModal] = useState(false);
   const { profile, rootFolder, server, languageProfile } =
     useRequestOverride(request);
+  const { getLanguageName } = useBookLanguages();
+  const bookLanguage =
+    request.type === 'book' ? getLanguageName(request.language) : undefined;
 
-  const updateRequest = async (type: 'approve' | 'decline'): Promise<void> => {
+  const updateRequest = async (
+    type: 'approve' | 'decline',
+    reason?: string
+  ): Promise<void> => {
     setIsUpdating(true);
-    await axios.post(`/api/v1/request/${request.id}/${type}`);
+    await axios.post(
+      `/api/v1/request/${request.id}/${type}`,
+      reason ? { reason } : undefined
+    );
+    setShowDeclineModal(false);
 
     if (onUpdate) {
       onUpdate();
@@ -78,9 +93,17 @@ const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
 
   return (
     <div className="block">
+      <DeclineRequestModal
+        show={showDeclineModal}
+        isUpdating={isUpdating}
+        onDecline={(reason) => updateRequest('decline', reason)}
+        onCancel={() => setShowDeclineModal(false)}
+      />
       <RequestModal
         show={showEditModal}
         tmdbId={request.media.tmdbId}
+        mbId={request.media.mbId}
+        olId={request.media.olId}
         type={request.type}
         is4k={request.is4k}
         editRequest={request}
@@ -171,7 +194,7 @@ const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
                   <Button
                     buttonType="danger"
                     className="mr-1"
-                    onClick={() => updateRequest('decline')}
+                    onClick={() => setShowDeclineModal(true)}
                     disabled={isUpdating}
                   >
                     <XMarkIcon />
@@ -209,16 +232,34 @@ const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
                   <Badge badgeType="warning">4K</Badge>
                 </span>
               )}
+              {request.type === 'book' && (
+                <span className="mr-1">
+                  <Badge badgeType="primary">
+                    {intl.formatMessage(
+                      request.isAudiobook
+                        ? globalMessages.audiobook
+                        : globalMessages.ebook
+                    )}
+                  </Badge>
+                </span>
+              )}
               {request.status === MediaRequestStatus.APPROVED && (
                 <Badge badgeType="success">
                   {intl.formatMessage(globalMessages.approved)}
                 </Badge>
               )}
-              {request.status === MediaRequestStatus.DECLINED && (
-                <Badge badgeType="danger">
-                  {intl.formatMessage(globalMessages.declined)}
-                </Badge>
-              )}
+              {request.status === MediaRequestStatus.DECLINED &&
+                (request.declineReason ? (
+                  <Tooltip content={request.declineReason}>
+                    <Badge badgeType="danger">
+                      {intl.formatMessage(globalMessages.declined)}
+                    </Badge>
+                  </Tooltip>
+                ) : (
+                  <Badge badgeType="danger">
+                    {intl.formatMessage(globalMessages.declined)}
+                  </Badge>
+                ))}
               {request.status === MediaRequestStatus.PENDING && (
                 <Badge badgeType="warning">
                   {intl.formatMessage(globalMessages.pending)}
@@ -268,22 +309,18 @@ const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
               })}
             </div>
             <div>
-              {request.seasons.map((season) => (
-                <span
-                  key={`season-${season.id}`}
-                  className="mb-1 mr-2 inline-block"
-                >
-                  <Badge>
-                    {season.seasonNumber === 0
-                      ? intl.formatMessage(globalMessages.specials)
-                      : season.seasonNumber}
-                  </Badge>
-                </span>
-              ))}
+              <RequestSeasonBadges
+                request={request}
+                className="mb-1 mr-2 inline-block"
+              />
             </div>
           </div>
         )}
-        {(server || profile || rootFolder || languageProfile) && (
+        {(server ||
+          profile ||
+          rootFolder ||
+          languageProfile ||
+          bookLanguage) && (
           <>
             <div className="mb-1 mt-4 text-sm">
               {intl.formatMessage(messages.requestoverrides)}
@@ -319,6 +356,14 @@ const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
                     {intl.formatMessage(messages.languageprofile)}
                   </span>
                   <span>{languageProfile}</span>
+                </li>
+              )}
+              {bookLanguage && (
+                <li className="flex justify-between px-1 py-2">
+                  <span className="mr-2 font-bold">
+                    {intl.formatMessage(messages.language)}
+                  </span>
+                  <span>{bookLanguage}</span>
                 </li>
               )}
             </ul>

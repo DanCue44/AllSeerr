@@ -1,13 +1,21 @@
+import {
+  AuthBackdrop,
+  authCard,
+  authInput,
+  authPage,
+  authPrimary,
+} from '@app/components/AllSeerr/Auth';
+import AppLogo from '@app/components/Common/AppLogo';
 import Button from '@app/components/Common/Button';
 import ImageFader from '@app/components/Common/ImageFader';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
 import LanguagePicker from '@app/components/Layout/LanguagePicker';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { LifebuoyIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { Form, Formik } from 'formik';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
@@ -27,8 +35,19 @@ const messages = defineMessages('components.ResetPassword', {
   resetpasswordsuccessmessage: 'Password reset successfully!',
 });
 
+const rotateImages = [
+  '/images/rotate1.jpg',
+  '/images/rotate2.jpg',
+  '/images/rotate3.jpg',
+  '/images/rotate4.jpg',
+  '/images/rotate5.jpg',
+  '/images/rotate6.jpg',
+];
+
 const ResetPassword = () => {
   const intl = useIntl();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
   const router = useRouter();
   const [hasSubmitted, setSubmitted] = useState(false);
 
@@ -50,38 +69,50 @@ const ResetPassword = () => {
   });
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-gray-900 py-14">
-      <ImageFader
-        forceOptimize
-        backgroundImages={[
-          '/images/rotate1.jpg',
-          '/images/rotate2.jpg',
-          '/images/rotate3.jpg',
-          '/images/rotate4.jpg',
-          '/images/rotate5.jpg',
-          '/images/rotate6.jpg',
-        ]}
-      />
+    <div
+      className={
+        ambient
+          ? authPage
+          : 'relative flex min-h-screen flex-col bg-gray-900 py-14'
+      }
+    >
+      {ambient ? (
+        <AuthBackdrop images={rotateImages} />
+      ) : (
+        <ImageFader forceOptimize backgroundImages={rotateImages} />
+      )}
       <div className="absolute right-4 top-4 z-50">
         <LanguagePicker />
       </div>
       <div className="relative z-40 mt-10 flex flex-col items-center px-4 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="relative h-48 w-full max-w-full">
-          <Image src="/logo_stacked.svg" alt="Logo" fill />
+        <div
+          className={`relative w-full max-w-full ${ambient ? 'h-40' : 'h-48'}`}
+        >
+          <AppLogo variant="stacked" />
         </div>
-        <h2 className="mt-12 text-center text-3xl font-extrabold leading-9 text-gray-100">
+        <h2
+          className={
+            ambient
+              ? 'mt-10 text-center font-display text-[26px] font-medium leading-9 text-as-ink'
+              : 'mt-12 text-center text-3xl font-extrabold leading-9 text-gray-100'
+          }
+        >
           {intl.formatMessage(messages.resetpassword)}
         </h2>
       </div>
       <div className="relative z-50 mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div
-          className="bg-gray-800/50 shadow sm:rounded-lg"
-          style={{ backdropFilter: 'blur(5px)' }}
+          className={ambient ? authCard : 'bg-gray-800/50 shadow sm:rounded-lg'}
+          style={ambient ? undefined : { backdropFilter: 'blur(5px)' }}
         >
-          <div className="px-10 py-8">
+          <div className={ambient ? 'px-6 py-8 sm:px-10' : 'px-10 py-8'}>
             {hasSubmitted ? (
               <>
-                <p className="text-md text-gray-300">
+                <p
+                  className={`text-md ${
+                    ambient ? 'text-as-ink-muted' : 'text-gray-300'
+                  }`}
+                >
                   {intl.formatMessage(messages.resetpasswordsuccessmessage)}
                 </p>
                 <span className="mt-4 flex justify-center rounded-md shadow-sm">
@@ -130,7 +161,11 @@ const ResetPassword = () => {
                               name="password"
                               type="password"
                               autoComplete="new-password"
-                              className="form-input-area block w-full min-w-0 flex-1 rounded-md border border-gray-500 bg-gray-700 text-white transition duration-150 ease-in-out sm:text-sm sm:leading-5"
+                              className={
+                                ambient
+                                  ? `form-input-area ${authInput}`
+                                  : 'form-input-area block w-full min-w-0 flex-1 rounded-md border border-gray-500 bg-gray-700 text-white transition duration-150 ease-in-out sm:text-sm sm:leading-5'
+                              }
                             />
                           </div>
                           {errors.password &&
@@ -153,7 +188,11 @@ const ResetPassword = () => {
                               name="confirmPassword"
                               type="password"
                               autoComplete="new-password"
-                              className="form-input-area block w-full min-w-0 flex-1 rounded-md border border-gray-500 bg-gray-700 text-white transition duration-150 ease-in-out sm:text-sm sm:leading-5"
+                              className={
+                                ambient
+                                  ? `form-input-area ${authInput}`
+                                  : 'form-input-area block w-full min-w-0 flex-1 rounded-md border border-gray-500 bg-gray-700 text-white transition duration-150 ease-in-out sm:text-sm sm:leading-5'
+                              }
                             />
                           </div>
                           {errors.confirmPassword &&
@@ -164,11 +203,16 @@ const ResetPassword = () => {
                             )}
                         </div>
                       </div>
-                      <div className="mt-4 border-t border-gray-700 pt-5">
+                      <div
+                        className={`mt-4 border-t pt-5 ${
+                          ambient ? 'border-as-line' : 'border-gray-700'
+                        }`}
+                      >
                         <div className="flex justify-end">
                           <span className="inline-flex rounded-md shadow-sm">
                             <Button
                               buttonType="primary"
+                              className={ambient ? authPrimary : undefined}
                               type="submit"
                               disabled={isSubmitting || !isValid}
                             >

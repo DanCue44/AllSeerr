@@ -5,31 +5,25 @@ sidebar_position: 1
 
 # Introduction
 
-Welcome to the Seerr Documentation.
+Welcome to the AllSeerr documentation.
 
-**Seerr** is a free and open source software application for managing requests for your media library. It integrates with the media server of your choice: [Jellyfin](https://jellyfin.org), [Plex](https://plex.tv), and [Emby](https://emby.media/). In addition, it integrates with your existing services, such as **[Sonarr](https://sonarr.tv/)**, **[Radarr](https://radarr.video/)**.
+**AllSeerr** is a free and open source request manager for your media library. It is a fork of [Seerr](https://github.com/seerr-team/seerr) that adds **music**, **books** and **audiobooks** next to movies and series, plus a **subtitles** panel. It works with the media server of your choice ([Jellyfin](https://jellyfin.org), [Plex](https://plex.tv) or [Emby](https://emby.media/)) and sends requests to **[Sonarr](https://sonarr.tv/)**, **[Radarr](https://radarr.video/)**, **[Lidarr](https://lidarr.audio/)** and **Chaptarr**.
 
 ## Features
 
-- **Full Jellyfin/Emby/Plex integration**. Login and manage user access with Jellyfin/Emby/Plex.
-- **Syncs to your Jellyfin/Emby/Plex library** to show what titles you already have.
-- Supports Movies, Shows and Mixed Libraries.
-- **Integrates with Sonarr and Radarr**. With more services to come in the future.
-- Optionally set **Override rules** for requests to match with your defined conditions.
-- **Easy to use request system** allowing users to request individual seasons or movies in a friendly, clean UI.
-- **Simple request management UI**. Don't dig through the app to approve recent requests.
-- **Mobile-friendly design**, for when you need to approve requests on the go.
-- Granular permission system.
-- Localization into other languages.
-- Support for **PostgreSQL** and **SQLite** databases.
-- Support for various notification agents.
-- Easily **Watchlist** or **Blocklist** media.
-- More features to come!
+Everything Seerr does, plus:
 
-## We need your help!
+- **Music** through [Lidarr](/using-seerr/services/lidarr): album and artist pages, similar and popular artists, genre shelves, new releases and discography requests.
+- **Books and audiobooks** through [Chaptarr](/using-seerr/services/chaptarr) ([LazyLibrarian](/using-seerr/services/lazylibrarian) is supported as a legacy service): one title with two formats, so users can ask for the ebook, the audiobook or both.
+- **[Audiobookshelf](/using-seerr/services/audiobookshelf) links** that open the book itself, with separate ebook and audiobook libraries.
+- **Ebook and audiobook checks** before requesting ([Google Books](/using-seerr/services/google-books) with an optional API key, and the public Audible catalog), plus narrators and length for audiobooks.
+- **Subtitles** through [Bazarr](/using-seerr/services/bazarr): see which languages are downloaded, wanted or missing, and request another language.
+- **Ambient**, a redesigned interface (the default), with the classic interface one click away, and a [guided tour](/using-seerr/features/guided-tour) for new users.
+- **More request options**: single episodes, future seasons only, [current season only](/using-seerr/features/current-season-requests), [removal requests](/using-seerr/features/removal-requests) and decline reasons.
+- **More control**: auto-approve rules, per-user age rating limits, blocking requests for titles on chosen streaming services, and personal API keys.
+- **More to discover**: a release calendar, following artists and authors, custom book subject rows and a weekly [newsletter](/using-seerr/features/newsletter).
+- **Your own branding**: a [custom name, logo and accent color](/using-seerr/features/custom-branding), with generated icons.
 
-[Seerr](https://github.com/seerr-team/seerr) is an ambitious project developers/contributors poured a lot of work into, and we still have a lot more to do. Seerr is the result of a collaborative effort between the original Overseerr project and the Jellyseerr fork, created to deliver an excellent request management solution for Plex, Jellyfin and Emby users.
+## Credits
 
-We value your feedback and support in identifying and fixing bugs to make Seerr even better. As an open-source project, we welcome contributions from everyone. Contribution includes building new features, patching bugs, translating the application, or even just writing documentation.
-
-If you would like to contribute, please be sure to review our [contribution guidelines](https://github.com/seerr-team/seerr/blob/develop/CONTRIBUTING.md).
+AllSeerr is based on [Seerr](https://github.com/seerr-team/seerr) by the Seerr team, which brought the Overseerr and Jellyseerr projects together. Seerr is MIT licensed. AllSeerr is not affiliated with or endorsed by the Seerr team, so please report AllSeerr problems at [github.com/DanCue44/AllSeerr](https://github.com/DanCue44/AllSeerr/issues) and not to Seerr.

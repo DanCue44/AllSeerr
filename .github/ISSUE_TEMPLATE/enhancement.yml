@@ -1,14 +1,13 @@
 name: ✨ Feature Request
 description: Suggest an idea
 labels: ['awaiting triage']
-type: feature
 body:
   - type: markdown
     attributes:
       value: |
         Thanks for taking the time to fill out this feature request!
 
-        Please note that we use GitHub issues exclusively for bug reports and feature requests. For support requests, please use our other support channels to get help.
+        Please note that we use GitHub issues exclusively for bug reports and feature requests. For questions and support, please use GitHub Discussions.
   - type: textarea
     id: description
     attributes:
@@ -40,7 +39,7 @@ body:
     id: terms
     attributes:
       label: Code of Conduct
-      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/seerr-team/seerr/blob/develop/CODE_OF_CONDUCT.md)
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/DanCue44/AllSeerr/blob/main/CODE_OF_CONDUCT.md)
       options:
-        - label: I agree to follow Seerr's Code of Conduct
+        - label: I agree to follow AllSeerr's Code of Conduct
           required: true

@@ -19,12 +19,15 @@ export const refreshIntervalHelper = (
   downloadItem: {
     downloadStatus: DownloadingItem[] | undefined;
     downloadStatus4k: DownloadingItem[] | undefined;
+    // Books only, the downloads of the audiobook
+    downloadStatusAudio?: DownloadingItem[];
   },
   timer: number
 ) => {
   if (
     (downloadItem.downloadStatus ?? []).length > 0 ||
-    (downloadItem.downloadStatus4k ?? []).length > 0
+    (downloadItem.downloadStatus4k ?? []).length > 0 ||
+    (downloadItem.downloadStatusAudio ?? []).length > 0
   ) {
     return timer;
   } else {

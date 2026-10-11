@@ -1,5 +1,8 @@
 import type { User } from '@server/entity/User';
 import { defineMessages, getIntl } from '@server/i18n';
+import recentlyAddedNewsletter from '@server/job/newsletter';
+import { scheduledJobs } from '@server/job/schedule';
+import { getNewsletterSchedule } from '@server/lib/newsletter';
 import { Notification } from '@server/lib/notifications';
 import type { NotificationAgent } from '@server/lib/notifications/agents/agent';
 import DiscordAgent from '@server/lib/notifications/agents/discord';
@@ -15,6 +18,7 @@ import WebPushAgent from '@server/lib/notifications/agents/webpush';
 import { getSettings } from '@server/lib/settings';
 import type { AvailableLocale } from '@server/types/languages';
 import { Router } from 'express';
+import { rescheduleJob } from 'node-schedule';
 
 const notificationRoutes = Router();
 
@@ -215,6 +219,21 @@ notificationRoutes.post('/email', async (req, res) => {
   const settings = getSettings();
 
   settings.notifications.agents.email = req.body;
+
+  // Keep the newsletter job in sync with the configured day and hour
+  const newsletterSchedule = getNewsletterSchedule(
+    req.body.options?.newsletterDay,
+    req.body.options?.newsletterHour
+  );
+  const newsletterJob = scheduledJobs.find(
+    (job) => job.id === 'recently-added-newsletter'
+  );
+
+  if (newsletterJob && rescheduleJob(newsletterJob.job, newsletterSchedule)) {
+    newsletterJob.cronSchedule = newsletterSchedule;
+  }
+
+  settings.jobs['recently-added-newsletter'].schedule = newsletterSchedule;
   await settings.save();
 
   res.status(200).json(settings.notifications.agents.email);
@@ -235,6 +254,31 @@ notificationRoutes.post('/email/test', async (req, res, next) => {
     return next({
       status: 500,
       message: 'Failed to send email notification.',
+    });
+  }
+});
+
+notificationRoutes.post('/email/newsletter/test', async (req, res, next) => {
+  if (!req.user) {
+    return next({
+      status: 500,
+      message: 'User information is missing from the request.',
+    });
+  }
+
+  if (!new EmailAgent().shouldSend()) {
+    return next({
+      status: 400,
+      message: 'The email agent is not enabled.',
+    });
+  }
+
+  if (await recentlyAddedNewsletter.sendTest(req.user)) {
+    return res.status(204).send();
+  } else {
+    return next({
+      status: 500,
+      message: 'Failed to send newsletter.',
     });
   }
 });

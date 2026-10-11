@@ -132,3 +132,178 @@ describe('POST /user/:id/settings/linked-accounts/jellyfin/quickconnect', () => 
     assert.strictEqual(user.jellyfinUserId, null);
   });
 });
+
+describe('personal API keys', () => {
+  it('generates a key that authenticates as its owner', async () => {
+    const { agent, userId } = await loginAs('demo@seerr.dev', 'test1234');
+
+    const created = await agent.post(`/user/${userId}/settings/api-key`);
+    assert.strictEqual(created.status, 201);
+    assert.match(created.body.apiKey, /^asu_/);
+
+    const status = await agent.get(`/user/${userId}/settings/api-key`);
+    assert.strictEqual(status.body.hasApiKey, true);
+    assert.strictEqual(status.body.apiKey, undefined);
+
+    const me = await request(app)
+      .get(`/user/${userId}`)
+      .set('X-API-Key', created.body.apiKey)
+      .set('X-API-User', '1');
+    assert.strictEqual(me.status, 200);
+    assert.strictEqual(me.body.id, userId);
+  });
+
+  it('stores only a hash of the key', async () => {
+    const { agent, userId } = await loginAs('demo@seerr.dev', 'test1234');
+    const created = await agent.post(`/user/${userId}/settings/api-key`);
+
+    const stored = await getRepository(User).findOneOrFail({
+      where: { id: userId },
+      select: ['id', 'apiKeyHash'],
+    });
+    assert.ok(stored.apiKeyHash);
+    assert.notStrictEqual(stored.apiKeyHash, created.body.apiKey);
+  });
+
+  it('rejects a revoked or replaced key', async () => {
+    const { agent, userId } = await loginAs('demo@seerr.dev', 'test1234');
+    const first = await agent.post(`/user/${userId}/settings/api-key`);
+    await agent.post(`/user/${userId}/settings/api-key`);
+
+    const replaced = await request(app)
+      .get(`/user/${userId}`)
+      .set('X-API-Key', first.body.apiKey);
+    assert.strictEqual(replaced.status, 403);
+
+    const second = await agent.post(`/user/${userId}/settings/api-key`);
+    const revoke = await agent.delete(`/user/${userId}/settings/api-key`);
+    assert.strictEqual(revoke.status, 204);
+
+    const revoked = await request(app)
+      .get(`/user/${userId}`)
+      .set('X-API-Key', second.body.apiKey);
+    assert.strictEqual(revoked.status, 403);
+  });
+
+  it("does not let an admin create another user's key", async () => {
+    const { userId } = await loginAs('demo@seerr.dev', 'test1234');
+    const { agent: admin } = await loginAs('admin@seerr.dev', 'test1234');
+
+    const res = await admin.post(`/user/${userId}/settings/api-key`);
+    assert.strictEqual(res.status, 403);
+  });
+
+  it("does not let a user read another user's key status", async () => {
+    const { agent } = await loginAs('demo@seerr.dev', 'test1234');
+
+    const res = await agent.get('/user/1/settings/api-key');
+    assert.strictEqual(res.status, 403);
+  });
+});
+
+describe('content rating limits', () => {
+  it('lets an admin set the rating limits of a user', async () => {
+    const { userId } = await loginAs('demo@seerr.dev', 'test1234');
+    const { agent: admin } = await loginAs('admin@seerr.dev', 'test1234');
+
+    const res = await admin.post(`/user/${userId}/settings/main`).send({
+      username: 'demo',
+      movieRatingLimit: 'PG-13',
+      tvRatingLimit: 'not-a-rating',
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.movieRatingLimit, 'PG-13');
+    assert.strictEqual(res.body.tvRatingLimit, null);
+
+    const settings = await admin.get(`/user/${userId}/settings/main`);
+    assert.strictEqual(settings.body.movieRatingLimit, 'PG-13');
+  });
+
+  it('does not let a user change their own rating limits', async () => {
+    const { agent, userId } = await loginAs('demo@seerr.dev', 'test1234');
+    const userRepo = getRepository(User);
+    const user = await userRepo.findOneOrFail({ where: { id: userId } });
+    user.movieRatingLimit = 'PG';
+    await userRepo.save(user);
+
+    const res = await agent.post(`/user/${userId}/settings/main`).send({
+      username: 'demo',
+      movieRatingLimit: null,
+      tvRatingLimit: 'TV-MA',
+    });
+    assert.strictEqual(res.status, 200);
+
+    const stored = await userRepo.findOneOrFail({ where: { id: userId } });
+    assert.strictEqual(stored.movieRatingLimit, 'PG');
+    assert.strictEqual(stored.tvRatingLimit, null);
+  });
+});
+
+describe('book language', () => {
+  it('lets a user pick their book language and go back to the default', async () => {
+    const { agent, userId } = await loginAs('demo@seerr.dev', 'test1234');
+
+    const saved = await agent
+      .post(`/user/${userId}/settings/main`)
+      .send({ username: 'demo', bookLanguage: 'es' });
+    assert.strictEqual(saved.status, 200);
+    assert.strictEqual(saved.body.bookLanguage, 'es');
+
+    const settings = await agent.get(`/user/${userId}/settings/main`);
+    assert.strictEqual(settings.body.bookLanguage, 'es');
+
+    const me = await agent.get('/auth/me');
+    assert.strictEqual(me.body.settings.bookLanguage, 'es');
+
+    const cleared = await agent
+      .post(`/user/${userId}/settings/main`)
+      .send({ username: 'demo', bookLanguage: null });
+    assert.strictEqual(cleared.body.bookLanguage, null);
+  });
+
+  it('refuses an unknown book language', async () => {
+    const { agent, userId } = await loginAs('demo@seerr.dev', 'test1234');
+
+    const res = await agent
+      .post(`/user/${userId}/settings/main`)
+      .send({ username: 'demo', bookLanguage: 'xx' });
+    assert.strictEqual(res.status, 400);
+  });
+});
+
+describe('guided tour', () => {
+  it('stores the seen tour version and returns it from /auth/me', async () => {
+    const { agent, userId } = await loginAs('demo@seerr.dev', 'test1234');
+
+    const before = await agent.get('/auth/me');
+    assert.strictEqual(before.body.settings?.tourVersion ?? null, null);
+
+    const res = await agent
+      .post(`/user/${userId}/settings/tour`)
+      .send({ version: 1 });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.tourVersion, 1);
+
+    const after = await agent.get('/auth/me');
+    assert.strictEqual(after.body.settings.tourVersion, 1);
+  });
+
+  it('refuses an invalid version', async () => {
+    const { agent, userId } = await loginAs('demo@seerr.dev', 'test1234');
+
+    const res = await agent
+      .post(`/user/${userId}/settings/tour`)
+      .send({ version: 'soon' });
+    assert.strictEqual(res.status, 400);
+  });
+
+  it("does not let another user mark someone's tour", async () => {
+    const { userId } = await loginAs('demo@seerr.dev', 'test1234');
+    const { agent: admin } = await loginAs('admin@seerr.dev', 'test1234');
+
+    const res = await admin
+      .post(`/user/${userId}/settings/tour`)
+      .send({ version: 1 });
+    assert.strictEqual(res.status, 403);
+  });
+});

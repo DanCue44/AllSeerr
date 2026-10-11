@@ -9,8 +9,12 @@ import type {
   TmdbTvDetails,
   TmdbTvScanDetails,
 } from '@server/api/themoviedb/interfaces';
+import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import Media from '@server/entity/Media';
 import { User } from '@server/entity/User';
+import { normalizeEpisodeNumbers } from '@server/lib/episodeNotifications';
+import type { LibraryReconcileResult } from '@server/lib/plexLibraries';
 import type {
   MediaIds,
   ProcessableSeason,
@@ -20,6 +24,7 @@ import type {
 import BaseScanner from '@server/lib/scanners/baseScanner';
 import type { Library } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { requestErrorLogFields } from '@server/utils/requestError';
 import { uniqWith } from 'lodash';
 
 const imdbRegex = new RegExp(/imdb:\/\/(tt[0-9]+)/);
@@ -36,6 +41,9 @@ const hamaTvdbRegex = new RegExp(/hama:\/\/tvdb[0-9]?-([0-9]+)/);
 const hamaAnidbRegex = new RegExp(/hama:\/\/anidb[0-9]?-([0-9]+)/);
 const HAMA_AGENT = 'com.plexapp.agents.hama';
 
+const isNotFound = (e: unknown): boolean =>
+  (e as { response?: { status?: number } })?.response?.status === 404;
+
 type SyncStatus = StatusBase & {
   currentLibrary: Library;
   libraries: Library[];
@@ -50,8 +58,16 @@ class PlexScanner
   private currentLibrary: Library;
   private isRecentOnly = false;
 
+  // Where each enabled library went after Plex renumbered its sections. Null
+  // marks a library with no clear match.
+  private libraryIdMap?: Map<string, Library | null>;
+
   public constructor(isRecentOnly = false) {
-    super('Plex Scan', { bundleSize: 50 });
+    super('Plex Scan', {
+      bundleSize: 50,
+      jobId: isRecentOnly ? 'plex-recently-added-scan' : 'plex-full-scan',
+      service: 'plex',
+    });
     this.isRecentOnly = isRecentOnly;
   }
 
@@ -80,6 +96,7 @@ class PlexScanner
       }
 
       this.plexClient = new PlexAPI({ plexToken: admin.plexToken });
+      this.libraryIdMap = undefined;
 
       this.libraries = settings.plex.libraries.filter(
         (library) => library.enabled
@@ -90,93 +107,194 @@ class PlexScanner
         await animeList.sync();
       }
 
-      if (this.isRecentOnly) {
-        for (const library of this.libraries) {
-          this.currentLibrary = library;
-          this.log(
-            `Beginning to process recently added for library: ${library.name}`,
-            'info',
-            { lastScan: library.lastScan }
-          );
-          const libraryItems = await this.plexClient.getRecentlyAdded(
-            library.id,
-            library.lastScan
-              ? {
-                  // We remove 10 minutes from the last scan as a buffer
-                  addedAt: library.lastScan - 1000 * 60 * 10,
-                }
-              : undefined,
-            library.type
-          );
+      // Libraries that could not be scanned, while the others carry on
+      const problems: string[] = [];
 
-          // Bundle items up by rating keys
-          this.items = uniqWith(libraryItems, (mediaA, mediaB) => {
-            if (mediaA.grandparentRatingKey && mediaB.grandparentRatingKey) {
-              return (
-                mediaA.grandparentRatingKey === mediaB.grandparentRatingKey
-              );
-            }
+      for (const saved of [...this.libraries]) {
+        const library = this.mappedLibrary(saved);
 
-            if (mediaA.parentRatingKey && mediaB.parentRatingKey) {
-              return mediaA.parentRatingKey === mediaB.parentRatingKey;
-            }
-
-            return mediaA.ratingKey === mediaB.ratingKey;
-          });
-
-          await this.loop(this.processItem.bind(this), { sessionId });
-
-          // After run completes, update last scan time
-          const newLibraries = settings.plex.libraries.map((lib) => {
-            if (lib.id === library.id) {
-              return {
-                ...lib,
-                lastScan: Date.now(),
-              };
-            }
-            return lib;
-          });
-
-          settings.plex.libraries = newLibraries;
-          await settings.save();
+        if (!library) {
+          problems.push(this.missingLibraryMessage(saved));
+          continue;
         }
-      } else {
-        for (const library of this.libraries) {
-          this.currentLibrary = library;
-          this.log(`Beginning to process library: ${library.name}`, 'info');
-          await this.paginateLibrary(library, { sessionId });
+
+        try {
+          await this.scanLibrary(library, sessionId);
+        } catch (e) {
+          if (!isNotFound(e)) {
+            throw e;
+          }
+
+          // Plex renumbers its sections after a database restore. Reload the
+          // list once, move enabled libraries over and retry this one.
+          if (!this.recovered()) {
+            this.log(
+              `Plex returned 404 for library "${library.name}" (id ${library.id}). Reloading the library list from Plex.`,
+              'warn'
+            );
+            await this.recoverLibraryIds(e);
+            const moved = this.mappedLibrary(saved);
+
+            if (moved) {
+              try {
+                await this.scanLibrary(moved, sessionId);
+                continue;
+              } catch (retryError) {
+                if (!isNotFound(retryError)) {
+                  throw retryError;
+                }
+              }
+            }
+          }
+
+          problems.push(this.missingLibraryMessage(saved));
         }
       }
+
       this.log(
         this.isRecentOnly
           ? 'Recently Added Scan Complete'
           : 'Full Scan Complete',
         'info'
       );
+
+      if (problems.length > 0) {
+        this.scanFailed(new Error(problems.join('; ')), {
+          reason: problems.join('; '),
+          logMessage: 'Some Plex libraries could not be scanned',
+        });
+      } else {
+        this.scanSucceeded();
+      }
     } catch (e) {
-      this.log('Scan interrupted', 'error', {
-        errorMessage: e.message,
-      });
+      this.scanFailed(e);
     } finally {
       this.endRun(sessionId);
     }
+  }
+
+  // The library to scan for a saved one, after any remapping
+  private mappedLibrary(saved: Library): Library | null | undefined {
+    return this.libraryIdMap ? this.libraryIdMap.get(saved.id) : saved;
+  }
+
+  private recovered(): boolean {
+    return this.libraryIdMap !== undefined;
+  }
+
+  private missingLibraryMessage(library: Library): string {
+    return `Plex library "${library.name}" (id ${library.id}) was not found in Plex. Choose it again in the Plex settings`;
+  }
+
+  /**
+   * Reloads the library list and records where each enabled library went.
+   * Broken libraries stay enabled in the settings, so the scan keeps
+   * reporting them until an admin chooses the library again.
+   */
+  private async recoverLibraryIds(original: unknown): Promise<void> {
+    let result: LibraryReconcileResult;
+
+    try {
+      result = await this.plexClient.syncLibraries({ keepBroken: true });
+    } catch {
+      // The reload failing says less than the 404 that started it
+      throw original;
+    }
+
+    this.libraryIdMap = new Map();
+
+    for (const saved of this.libraries) {
+      const remap = result.remapped.find((entry) => entry.from.id === saved.id);
+
+      if (remap) {
+        this.log(
+          `Remapped Plex library "${saved.name}" (id ${saved.id}) to "${remap.to.name}" (id ${remap.to.id})`,
+          'info',
+          { match: remap.match }
+        );
+        this.libraryIdMap.set(saved.id, remap.to);
+      } else if (result.broken.some((library) => library.id === saved.id)) {
+        this.log(
+          `Plex library "${saved.name}" (id ${saved.id}) was not found in Plex and has no clear match. Skipping it.`,
+          'error'
+        );
+        this.libraryIdMap.set(saved.id, null);
+      } else {
+        this.libraryIdMap.set(
+          saved.id,
+          result.libraries.find((library) => library.id === saved.id) ?? saved
+        );
+      }
+    }
+
+    this.libraries = getSettings().plex.libraries.filter(
+      (library) => library.enabled
+    );
+  }
+
+  private async scanLibrary(library: Library, sessionId: string) {
+    const settings = getSettings();
+    this.currentLibrary = library;
+
+    if (!this.isRecentOnly) {
+      this.log(`Beginning to process library: ${library.name}`, 'info');
+      await this.paginateLibrary(library, { sessionId });
+      return;
+    }
+
+    this.log(
+      `Beginning to process recently added for library: ${library.name}`,
+      'info',
+      { lastScan: library.lastScan }
+    );
+    const libraryItems = await this.plexClient.getRecentlyAdded(
+      library.id,
+      library.lastScan
+        ? {
+            // We remove 10 minutes from the last scan as a buffer
+            addedAt: library.lastScan - 1000 * 60 * 10,
+          }
+        : undefined,
+      library.type
+    );
+
+    // Bundle items up by rating keys. Albums share their artist as
+    // parent, so each album stays on its own.
+    this.items = uniqWith(libraryItems, (mediaA, mediaB) => {
+      if (library.type === 'music') {
+        return mediaA.ratingKey === mediaB.ratingKey;
+      }
+
+      if (mediaA.grandparentRatingKey && mediaB.grandparentRatingKey) {
+        return mediaA.grandparentRatingKey === mediaB.grandparentRatingKey;
+      }
+
+      if (mediaA.parentRatingKey && mediaB.parentRatingKey) {
+        return mediaA.parentRatingKey === mediaB.parentRatingKey;
+      }
+
+      return mediaA.ratingKey === mediaB.ratingKey;
+    });
+
+    await this.loop(this.processItem.bind(this), { sessionId });
+
+    // After run completes, update last scan time
+    settings.plex.libraries = settings.plex.libraries.map((lib) =>
+      lib.id === library.id ? { ...lib, lastScan: Date.now() } : lib
+    );
+    await settings.save();
   }
 
   private async paginateLibrary(
     library: Library,
     { start = 0, sessionId }: { start?: number; sessionId: string }
   ) {
-    if (!this.running) {
-      throw new Error('Sync was aborted.');
-    }
-
-    if (this.sessionId !== sessionId) {
-      throw new Error('New session was started. Old session aborted.');
-    }
+    this.checkSession(sessionId);
 
     const response = await this.plexClient.getLibraryContents(library.id, {
       size: this.protectedBundleSize,
       offset: start,
+      type: library.type === 'music' ? 'album' : undefined,
     });
 
     this.progress = start;
@@ -203,7 +321,8 @@ class PlexScanner
           sessionId,
         })
           .then(() => resolve())
-          .catch((e) => reject(new Error(e.message)));
+          // Passed on as it is, so a 404 or timeout keeps its details
+          .catch(reject);
       }, this.protectedUpdateRate)
     );
   }
@@ -218,13 +337,47 @@ class PlexScanner
         plexitem.type === 'season'
       ) {
         await this.processPlexShow(plexitem);
+      } else if (plexitem.type === 'album') {
+        await this.processPlexAlbum(plexitem);
       }
     } catch (e) {
       this.log('Failed to process Plex media', 'error', {
-        errorMessage: e.message,
+        ...requestErrorLogFields(e),
         title: plexitem.title,
       });
     }
+  }
+
+  private async processPlexAlbum(plexitem: PlexLibraryItem) {
+    // Albums seen before keep their release group, saving a MusicBrainz lookup
+    const existing = await getRepository(Media).findOne({
+      where: { ratingKey: plexitem.ratingKey, mediaType: MediaType.MUSIC },
+    });
+
+    if (existing?.mbId && existing.status === MediaStatus.AVAILABLE) {
+      this.log(`Album already exists: ${plexitem.title}`);
+      return;
+    }
+
+    const mbId = plexitem.Guid?.find((guid) =>
+      guid.id.toLowerCase().startsWith('mbid://')
+    )?.id.slice('mbid://'.length);
+
+    if (!mbId) {
+      this.log('No MusicBrainz ID found for album. Skipping.', 'debug', {
+        title: plexitem.title,
+      });
+      return;
+    }
+
+    const releaseGroupId =
+      existing?.mbId ?? (await this.resolveReleaseGroupId(mbId));
+
+    await this.processMusic(releaseGroupId, {
+      mediaAddedAt: new Date(plexitem.addedAt * 1000),
+      ratingKey: plexitem.ratingKey,
+      title: plexitem.title,
+    });
   }
 
   private async processPlexMovie(plexitem: PlexLibraryItem) {
@@ -340,25 +493,31 @@ class PlexScanner
         const episodes = await this.plexClient.getChildrenMetadata(
           matchedPlexSeason.ratingKey
         );
-        // Total episodes that are in standard definition (not 4k)
-        const totalStandard = episodes.filter((episode) =>
+        // Episodes that are in standard definition (not 4k)
+        const standardEpisodes = episodes.filter((episode) =>
           !this.enable4kShow
             ? true
             : episode.Media.some((media) => media.videoResolution !== '4k')
-        ).length;
+        );
 
-        // Total episodes that are in 4k
-        const total4k = this.enable4kShow
+        // Episodes that are in 4k
+        const episodes4k = this.enable4kShow
           ? episodes.filter((episode) =>
               episode.Media.some((media) => media.videoResolution === '4k')
-            ).length
-          : 0;
+            )
+          : [];
 
         processableSeasons.push({
           seasonNumber: season.season_number,
-          episodes: totalStandard,
-          episodes4k: total4k,
+          episodes: standardEpisodes.length,
+          episodes4k: episodes4k.length,
           totalEpisodes: season.episode_count,
+          episodeNumbers: normalizeEpisodeNumbers(
+            standardEpisodes.map((episode) => episode.index)
+          ),
+          episodeNumbers4k: normalizeEpisodeNumbers(
+            episodes4k.map((episode) => episode.index)
+          ),
         });
       } else {
         processableSeasons.push({
@@ -366,6 +525,9 @@ class PlexScanner
           episodes: 0,
           episodes4k: 0,
           totalEpisodes: season.episode_count,
+          // Recorded as empty so the first episodes can be told apart later
+          episodeNumbers: [],
+          episodeNumbers4k: [],
         });
       }
     }

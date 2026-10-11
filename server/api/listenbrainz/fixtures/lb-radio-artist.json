@@ -1,0 +1,34 @@
+{
+  "a74b1b7f-71a5-4011-9441-d0b5e4122711": [
+    {
+      "recording_mbid": "60bb7934-ef43-489b-8a4d-f19979e6ff9b",
+      "similar_artist_mbid": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "similar_artist_name": "Radiohead",
+      "total_listen_count": 4
+    }
+  ],
+  "52074ba6-e495-4ef3-9bb4-0703888a9f68": [
+    {
+      "recording_mbid": "276f53c7-8fe1-49b7-af73-8b93c8682fd4",
+      "similar_artist_mbid": "52074ba6-e495-4ef3-9bb4-0703888a9f68",
+      "similar_artist_name": "Arcade Fire",
+      "total_listen_count": 21779
+    }
+  ],
+  "f181961b-20f7-459e-89de-920ef03c7ed0": [
+    {
+      "recording_mbid": "dbf2301e-734c-4e12-92e5-d47bc27999fe",
+      "similar_artist_mbid": "f181961b-20f7-459e-89de-920ef03c7ed0",
+      "similar_artist_name": "The Strokes",
+      "total_listen_count": 18229
+    }
+  ],
+  "63aa26c3-d59b-4da4-84ac-716b54f1ef4d": [
+    {
+      "recording_mbid": "19cd3d2f-a586-464e-9611-ee1076d9ab08",
+      "similar_artist_mbid": "63aa26c3-d59b-4da4-84ac-716b54f1ef4d",
+      "similar_artist_name": "Tame Impala",
+      "total_listen_count": 413
+    }
+  ]
+}

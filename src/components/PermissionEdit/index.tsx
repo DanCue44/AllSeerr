@@ -25,6 +25,11 @@ export const messages = defineMessages('components.PermissionEdit', {
   requestTv: 'Request Series',
   requestTvDescription:
     'Grant permission to submit requests for non-4K series.',
+  requestMusic: 'Request Music',
+  requestMusicDescription: 'Grant permission to submit requests for albums.',
+  requestBooks: 'Request Books',
+  requestBooksDescription:
+    'Grant permission to submit requests for ebooks and audiobooks.',
   autoapprove: 'Auto-Approve',
   autoapproveDescription:
     'Grant automatic approval for all non-4K media requests.',
@@ -181,6 +186,18 @@ export const PermissionEdit = ({
           name: intl.formatMessage(messages.requestTv),
           description: intl.formatMessage(messages.requestTvDescription),
           permission: Permission.REQUEST_TV,
+        },
+        {
+          id: 'request-music',
+          name: intl.formatMessage(messages.requestMusic),
+          description: intl.formatMessage(messages.requestMusicDescription),
+          permission: Permission.REQUEST_MUSIC,
+        },
+        {
+          id: 'request-books',
+          name: intl.formatMessage(messages.requestBooks),
+          description: intl.formatMessage(messages.requestBooksDescription),
+          permission: Permission.REQUEST_BOOK,
         },
       ],
     },

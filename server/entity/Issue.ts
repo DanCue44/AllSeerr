@@ -1,5 +1,6 @@
 import type { IssueType } from '@server/constants/issue';
 import { IssueStatus } from '@server/constants/issue';
+import type { BookFormat } from '@server/constants/media';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
 import {
   AfterLoad,
@@ -32,6 +33,10 @@ class Issue {
 
   @Column({ type: 'int', default: 0 })
   public problemEpisode: number;
+
+  // Books only: the format the problem is in, null when not given
+  @Column({ type: 'varchar', nullable: true })
+  public bookFormat?: BookFormat | null;
 
   @ManyToOne(() => Media, (media) => media.issues, {
     eager: true,

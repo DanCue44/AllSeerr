@@ -1,3 +1,8 @@
+import LazyLibrarianAPI, {
+  isLazyLibrarianConfigured,
+} from '@server/api/lazylibrarian';
+import ChaptarrAPI from '@server/api/servarr/chaptarr';
+import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import {
@@ -13,7 +18,7 @@ import { Watchlist } from '@server/entity/Watchlist';
 import type { DownloadingItem } from '@server/lib/downloadtracker';
 import downloadTracker from '@server/lib/downloadtracker';
 import { Permission } from '@server/lib/permissions';
-import { getSettings } from '@server/lib/settings';
+import { getDefaultChaptarr, getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
 import { getHostname } from '@server/utils/getHostname';
@@ -21,6 +26,7 @@ import {
   AfterLoad,
   Column,
   Entity,
+  In,
   Index,
   OneToMany,
   OneToOne,
@@ -95,15 +101,62 @@ class Media {
     }
   }
 
+  /**
+   * Music counterpart of getRelatedMedia, matching albums on their
+   * MusicBrainz release group ids
+   */
+  public static async getRelatedMusic(mbIds: string[]): Promise<Media[]> {
+    const mediaRepository = getRepository(Media);
+
+    try {
+      if (mbIds.length === 0) {
+        return [];
+      }
+
+      return await mediaRepository.find({
+        where: { mbId: In([...new Set(mbIds)]), mediaType: MediaType.MUSIC },
+      });
+    } catch (e) {
+      logger.error(e.message);
+      return [];
+    }
+  }
+
+  /**
+   * Book counterpart of getRelatedMedia, matching books on their OpenLibrary
+   * work ids
+   */
+  public static async getRelatedBooks(olIds: string[]): Promise<Media[]> {
+    const mediaRepository = getRepository(Media);
+
+    try {
+      if (olIds.length === 0) {
+        return [];
+      }
+
+      return await mediaRepository.find({
+        where: { olId: In([...new Set(olIds)]), mediaType: MediaType.BOOK },
+      });
+    } catch (e) {
+      logger.error(e.message);
+      return [];
+    }
+  }
+
   public static async getMedia(
-    id: number,
+    id: number | string,
     mediaType: MediaType
   ): Promise<Media | undefined> {
     const mediaRepository = getRepository(Media);
 
     try {
       const media = await mediaRepository.findOne({
-        where: { tmdbId: id, mediaType: mediaType },
+        where:
+          mediaType === MediaType.MUSIC
+            ? { mbId: String(id), mediaType }
+            : mediaType === MediaType.BOOK
+              ? { olId: String(id), mediaType }
+              : { tmdbId: Number(id), mediaType },
         relations: { requests: true, issues: true },
       });
 
@@ -120,7 +173,8 @@ class Media {
   @Column({ type: 'varchar' })
   public mediaType: MediaType;
 
-  @Column()
+  // Music and books have no TMDB id, they are keyed on mbId and olId
+  @Column({ type: 'int', nullable: true })
   @Index()
   public tmdbId: number;
 
@@ -132,6 +186,15 @@ class Media {
   @Index()
   public imdbId?: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  @Index()
+  public mbId?: string | null;
+
+  // Books are keyed on their OpenLibrary work id, such as OL45804W
+  @Column({ type: 'varchar', nullable: true })
+  @Index()
+  public olId?: string | null;
+
   @Column({ type: 'int', default: MediaStatus.UNKNOWN })
   @Index()
   public status: MediaStatus;
@@ -139,6 +202,11 @@ class Media {
   @Column({ type: 'int', default: MediaStatus.UNKNOWN })
   @Index()
   public status4k: MediaStatus;
+
+  // A book tracks its ebook in `status` and its audiobook here
+  @Column({ type: 'int', default: MediaStatus.UNKNOWN })
+  @Index()
+  public statusAudio: MediaStatus;
 
   @OneToMany(() => MediaRequest, (request) => request.media, {
     cascade: ['insert', 'remove'],
@@ -203,6 +271,16 @@ class Media {
   @Column({ nullable: true, type: 'varchar' })
   public externalServiceSlug?: string | null;
 
+  // Chaptarr keeps the ebook and the audiobook of a book as two books. The
+  // ebook's id is in externalServiceId, the audiobook's here.
+  @Column({ nullable: true, type: 'int' })
+  public externalServiceIdAudio?: number | null;
+
+  // Work id of a book in Chaptarr, such as gr:3060926, shared by its formats
+  @Column({ nullable: true, type: 'varchar' })
+  @Index()
+  public foreignBookId?: string | null;
+
   @Column({ nullable: true, type: 'varchar' })
   public externalServiceSlug4k?: string | null;
 
@@ -223,6 +301,8 @@ class Media {
   public hasActiveRequest?: boolean;
   public downloadStatus?: DownloadingItem[] = [];
   public downloadStatus4k?: DownloadingItem[] = [];
+  // A book's ebook downloads are in downloadStatus, its audiobook ones here
+  public downloadStatusAudio?: DownloadingItem[] = [];
 
   public mediaUrl?: string;
   public mediaUrl4k?: string;
@@ -370,6 +450,67 @@ class Media {
         }
       }
     }
+
+    if (this.mediaType === MediaType.MUSIC) {
+      if (this.serviceId !== null && this.externalServiceSlug !== null) {
+        const settings = getSettings();
+        const server = settings.lidarr.find(
+          (lidarr) => lidarr.id === this.serviceId
+        );
+
+        if (server) {
+          this.serviceUrl = server.externalUrl
+            ? `${server.externalUrl}/album/${this.externalServiceSlug}`
+            : LidarrAPI.buildUrl(server, `/album/${this.externalServiceSlug}`);
+        }
+      }
+    }
+
+    if (
+      this.mediaType === MediaType.BOOK &&
+      getSettings().bookService === 'chaptarr'
+    ) {
+      this.setChaptarrServiceUrl();
+      return;
+    }
+
+    // Books keep their LazyLibrarian book id in externalServiceSlug
+    if (this.mediaType === MediaType.BOOK && this.externalServiceSlug) {
+      const settings = getSettings().lazylibrarian;
+
+      if (isLazyLibrarianConfigured(settings)) {
+        const path = `/edit_book?bookid=${encodeURIComponent(
+          this.externalServiceSlug
+        )}`;
+
+        this.serviceUrl = settings.externalUrl
+          ? `${settings.externalUrl.replace(/\/+$/, '')}${path}`
+          : LazyLibrarianAPI.buildUrl(settings, path);
+      }
+    }
+  }
+
+  /**
+   * Links a book to its ebook in Chaptarr, or to its audiobook when only
+   * that was requested
+   */
+  private setChaptarrServiceUrl(): void {
+    const settings = getSettings();
+    const server =
+      settings.chaptarr.find((chaptarr) => chaptarr.id === this.serviceId) ??
+      getDefaultChaptarr(settings.chaptarr);
+    const [mediaType, bookId] = this.externalServiceId
+      ? ['ebook', this.externalServiceId]
+      : ['audiobook', this.externalServiceIdAudio];
+
+    if (!server || !bookId) {
+      return;
+    }
+
+    const path = `/${mediaType}/book/${bookId}`;
+    this.serviceUrl = server.externalUrl
+      ? `${server.externalUrl}${path}`
+      : ChaptarrAPI.buildUrl(server, path);
   }
 
   @AfterLoad()
@@ -422,6 +563,43 @@ class Media {
         this.downloadStatus4k = downloadTracker.getSeriesProgress(
           this.serviceId4k,
           this.externalServiceId4k
+        );
+      }
+    }
+
+    if (this.mediaType === MediaType.MUSIC) {
+      if (
+        this.externalServiceId !== undefined &&
+        this.externalServiceId !== null &&
+        this.serviceId !== undefined &&
+        this.serviceId !== null
+      ) {
+        this.downloadStatus = downloadTracker.getMusicProgress(
+          this.serviceId,
+          this.externalServiceId
+        );
+      }
+    }
+
+    // Each format of a book is its own book in Chaptarr
+    if (
+      this.mediaType === MediaType.BOOK &&
+      this.serviceId !== undefined &&
+      this.serviceId !== null
+    ) {
+      if (this.externalServiceId) {
+        this.downloadStatus = downloadTracker.getBookProgress(
+          this.serviceId,
+          this.externalServiceId,
+          'ebook'
+        );
+      }
+
+      if (this.externalServiceIdAudio) {
+        this.downloadStatusAudio = downloadTracker.getBookProgress(
+          this.serviceId,
+          this.externalServiceIdAudio,
+          'audiobook'
         );
       }
     }

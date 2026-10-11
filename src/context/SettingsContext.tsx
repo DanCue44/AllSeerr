@@ -1,5 +1,6 @@
 import { MediaServerType } from '@server/constants/server';
 import type { PublicSettingsResponse } from '@server/interfaces/api/settingsInterfaces';
+import { DEFAULT_ACCENT_COLOR } from '@server/utils/accentColor';
 import React from 'react';
 import useSWR from 'swr';
 
@@ -8,10 +9,12 @@ export interface SettingsContextProps {
   children?: React.ReactNode;
 }
 
-const defaultSettings = {
+const defaultSettings: PublicSettingsResponse = {
   initialized: false,
-  applicationTitle: 'Seerr',
+  applicationTitle: 'AllSeerr',
   applicationUrl: '',
+  applicationLogoVersion: '',
+  accentColor: DEFAULT_ACCENT_COLOR,
   hideAvailable: false,
   hideBlocklisted: false,
   hideRequested: false,
@@ -19,11 +22,18 @@ const defaultSettings = {
   mediaServerLogin: true,
   movie4kEnabled: false,
   series4kEnabled: false,
+  booksEnabled: false,
   discoverRegion: '',
   streamingRegion: '',
+  blockedWatchProviders: '',
+  musicEnabled: false,
+  subtitlesEnabled: false,
   originalLanguage: '',
   mediaServerType: MediaServerType.NOT_CONFIGURED,
   partialRequestsEnabled: true,
+  allowCurrentSeasonRequests: false,
+  defaultBookFormat: 'both',
+  bookLanguage: 'en',
   enableSpecialEpisodes: false,
   cacheImages: false,
   vapidPublic: '',

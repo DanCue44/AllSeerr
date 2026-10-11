@@ -3,16 +3,22 @@ import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
 
+import type { BookDetails } from '@server/models/Book';
 import type { Collection } from '@server/models/Collection';
 import type { MovieDetails } from '@server/models/Movie';
+import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
 
 interface BlocklistModalProps {
-  tmdbId: number;
-  type: 'movie' | 'tv' | 'collection';
+  tmdbId?: number;
+  // Albums are named by MusicBrainz release group id, books by OpenLibrary
+  // work id
+  mbId?: string;
+  olId?: string;
+  type: 'movie' | 'tv' | 'collection' | 'music' | 'book';
   show: boolean;
   onComplete?: () => void;
   onCancel?: () => void;
@@ -23,9 +29,14 @@ const messages = defineMessages('component.BlocklistModal', {
   blocklisting: 'Blocklisting',
 });
 
-const isCollection = (
-  data: MovieDetails | TvDetails | Collection | null
-): data is Collection => {
+type BlocklistModalData =
+  | MovieDetails
+  | TvDetails
+  | Collection
+  | MusicDetails
+  | BookDetails;
+
+const isCollection = (data: BlocklistModalData | null): data is Collection => {
   return (
     data !== null &&
     data !== undefined &&
@@ -33,15 +44,15 @@ const isCollection = (
   );
 };
 
-const isMovie = (
-  movie: MovieDetails | TvDetails | Collection | null
-): movie is MovieDetails => {
+const isMovie = (movie: BlocklistModalData | null): movie is MovieDetails => {
   if (!movie) return false;
   return (movie as MovieDetails).title !== undefined;
 };
 
 const BlocklistModal = ({
   tmdbId,
+  mbId,
+  olId,
   type,
   show,
   onComplete,
@@ -49,9 +60,7 @@ const BlocklistModal = ({
   isUpdating,
 }: BlocklistModalProps) => {
   const intl = useIntl();
-  const [data, setData] = useState<
-    TvDetails | MovieDetails | Collection | null
-  >(null);
+  const [data, setData] = useState<BlocklistModalData | null>(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -59,13 +68,35 @@ const BlocklistModal = ({
       if (!show) return;
       try {
         setError(null);
-        const response = await axios.get(`/api/v1/${type}/${tmdbId}`);
+        const response = await axios.get(
+          `/api/v1/${type}/${
+            type === 'music' ? mbId : type === 'book' ? olId : tmdbId
+          }`
+        );
         setData(response.data);
       } catch (err) {
         setError(err);
       }
     })();
-  }, [show, tmdbId, type]);
+  }, [show, tmdbId, mbId, olId, type]);
+
+  const mediaTypeName =
+    type === 'collection'
+      ? intl.formatMessage(globalMessages.collection)
+      : type === 'music'
+        ? intl.formatMessage(globalMessages.album)
+        : type === 'book'
+          ? intl.formatMessage(globalMessages.book)
+          : isMovie(data)
+            ? intl.formatMessage(globalMessages.movie)
+            : intl.formatMessage(globalMessages.tvshow);
+
+  const backdrop =
+    data && 'backdropPath' in data
+      ? `https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${data.backdropPath}`
+      : data && 'artistBackdrop' in data
+        ? (data.artistBackdrop ?? undefined)
+        : undefined;
 
   return (
     <Transition
@@ -81,17 +112,11 @@ const BlocklistModal = ({
       <Modal
         loading={!data && !error}
         backgroundClickable
-        title={`${intl.formatMessage(globalMessages.blocklist)} ${
-          type === 'collection'
-            ? intl.formatMessage(globalMessages.collection)
-            : isMovie(data)
-              ? intl.formatMessage(globalMessages.movie)
-              : intl.formatMessage(globalMessages.tvshow)
-        }`}
+        title={`${intl.formatMessage(globalMessages.blocklist)} ${mediaTypeName}`}
         subTitle={`${
           isCollection(data)
             ? data.name
-            : isMovie(data)
+            : data && 'title' in data
               ? data.title
               : data?.name
         }`}
@@ -104,7 +129,7 @@ const BlocklistModal = ({
         }
         okButtonType="danger"
         okDisabled={isUpdating}
-        backdrop={`https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${data?.backdropPath}`}
+        backdrop={backdrop}
       />
     </Transition>
   );

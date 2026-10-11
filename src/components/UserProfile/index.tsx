@@ -5,7 +5,10 @@ import ProgressCircle from '@app/components/Common/ProgressCircle';
 import RequestCard from '@app/components/RequestCard';
 import Slider from '@app/components/Slider';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
+import FavoritesSlider from '@app/components/UserProfile/FavoritesSlider';
 import ProfileHeader from '@app/components/UserProfile/ProfileHeader';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
+import useSettings from '@app/hooks/useSettings';
 import { Permission, UserType, useUser } from '@app/hooks/useUser';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
@@ -13,10 +16,13 @@ import { ArrowRightCircleIcon } from '@heroicons/react/24/outline';
 import type { WatchlistResponse } from '@server/interfaces/api/discoverInterfaces';
 import type {
   QuotaResponse,
+  QuotaStatus,
   UserRequestsResponse,
   UserWatchDataResponse,
 } from '@server/interfaces/api/userInterfaces';
+import type { BookDetails } from '@server/models/Book';
 import type { MovieDetails } from '@server/models/Movie';
+import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -33,6 +39,8 @@ const messages = defineMessages('components.UserProfile', {
   pastdays: '{type} (past {days} days)',
   movierequests: 'Movie Requests',
   seriesrequest: 'Series Requests',
+  musicrequests: 'Music Requests',
+  bookrequests: 'Book Requests',
   recentlywatched: 'Recently Watched',
   plexwatchlist: 'Plex Watchlist',
   localWatchlist: "{username}'s Watchlist",
@@ -40,7 +48,7 @@ const messages = defineMessages('components.UserProfile', {
     'Media added to your <PlexWatchlistSupportLink>Plex Watchlist</PlexWatchlistSupportLink> will appear here.',
 });
 
-type MediaTitle = MovieDetails | TvDetails;
+type MediaTitle = MovieDetails | TvDetails | MusicDetails | BookDetails;
 
 const UserProfile = () => {
   const intl = useIntl();
@@ -49,6 +57,9 @@ const UserProfile = () => {
     id: Number(router.query.userId),
   });
   const { user: currentUser, hasPermission: currentHasPermission } = useUser();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
+  const { currentSettings } = useSettings();
   const [availableTitles, setAvailableTitles] = useState<
     Record<number, MediaTitle>
   >({});
@@ -119,6 +130,132 @@ const UserProfile = () => {
     return <ErrorPage statusCode={404} />;
   }
 
+  // Stat tiles: soft surface tiles under Ambient, Seerr's cards otherwise
+  const statTile = (restricted = false) =>
+    ambient
+      ? `overflow-hidden rounded-[22px] px-5 py-4 sm:px-6 sm:py-[22px] ${
+          restricted ? 'bg-as-bad-bg' : 'bg-as-surface'
+        }`
+      : `overflow-hidden rounded-lg bg-gray-800/50 px-4 py-5 shadow ring-1 ${
+          restricted
+            ? 'bg-gradient-to-t from-red-900 to-transparent ring-red-500'
+            : 'ring-gray-700'
+        } sm:p-6`;
+  const statLabel = (restricted = false) =>
+    ambient
+      ? `truncate text-[12px] font-semibold uppercase tracking-wide sm:text-[13px] ${
+          restricted ? 'text-as-bad' : 'text-as-ink-faint'
+        }`
+      : `truncate text-sm font-bold ${
+          restricted ? 'text-red-500' : 'text-gray-300'
+        }`;
+  const statValue = (restricted = false) =>
+    ambient
+      ? `mt-2 flex items-center text-sm ${
+          restricted ? 'text-as-bad' : 'text-as-ink-muted'
+        }`
+      : `mt-1 flex items-center text-sm ${
+          restricted ? 'text-red-500' : 'text-white'
+        }`;
+  const statNumber = ambient
+    ? 'font-display text-[21px] font-medium leading-tight text-as-ink sm:text-[28px]'
+    : 'text-3xl font-semibold';
+
+  // Music and book tiles only show once Lidarr or LazyLibrarian is set up
+  const quotaTiles = quota
+    ? [
+        {
+          key: 'movie',
+          label: messages.movierequests,
+          status: quota.movie,
+        },
+        { key: 'tv', label: messages.seriesrequest, status: quota.tv },
+        ...(currentSettings.musicEnabled
+          ? [
+              {
+                key: 'music',
+                label: messages.musicrequests,
+                status: quota.music,
+              },
+            ]
+          : []),
+        ...(currentSettings.booksEnabled
+          ? [{ key: 'book', label: messages.bookrequests, status: quota.book }]
+          : []),
+      ]
+    : [];
+
+  // Total and the media tiles: one row on wide screens, otherwise two columns
+  // (one on classic phones) with Total full width whenever the count is odd
+  const statGrid =
+    quotaTiles.length === 2
+      ? ambient
+        ? 'grid-cols-2 gap-3 sm:grid-cols-3'
+        : 'grid-cols-1 gap-5 lg:grid-cols-3'
+      : quotaTiles.length === 3
+        ? ambient
+          ? 'grid-cols-2 gap-3 xl:grid-cols-4'
+          : 'grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4'
+        : ambient
+          ? 'grid-cols-2 gap-3 xl:grid-cols-5'
+          : 'grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5';
+  const totalTileSpan =
+    quotaTiles.length === 2
+      ? ambient
+        ? 'col-span-2 sm:col-span-1'
+        : ''
+      : quotaTiles.length === 4
+        ? ambient
+          ? 'col-span-2 xl:col-span-1'
+          : 'sm:col-span-2 xl:col-span-1'
+        : '';
+
+  const renderQuotaTile = (
+    key: string,
+    label: (typeof messages)[keyof typeof messages],
+    status?: QuotaStatus
+  ) => (
+    <div key={key} className={statTile(status?.restricted)}>
+      <dt className={statLabel(status?.restricted)}>
+        {status?.limit
+          ? intl.formatMessage(messages.pastdays, {
+              type: intl.formatMessage(label),
+              days: status.days,
+            })
+          : intl.formatMessage(label)}
+      </dt>
+      <dd className={statValue(status?.restricted)}>
+        {status?.limit ? (
+          <>
+            <ProgressCircle
+              progress={Math.round(
+                ((status.remaining ?? 0) / (status.limit ?? 1)) * 100
+              )}
+              useHeatLevel
+              className="mr-2 h-8 w-8"
+            />
+            <div>
+              {intl.formatMessage(messages.requestsperdays, {
+                limit: (
+                  <span className={statNumber}>
+                    {intl.formatMessage(messages.limit, {
+                      remaining: status.remaining,
+                      limit: status.limit,
+                    })}
+                  </span>
+                ),
+              })}
+            </div>
+          </>
+        ) : (
+          <span className={statNumber}>
+            {intl.formatMessage(messages.unlimited)}
+          </span>
+        )}
+      </dd>
+    </div>
+  );
+
   const watchlistSliderTitle = intl.formatMessage(
     user.userType === UserType.PLEX
       ? messages.plexwatchlist
@@ -135,7 +272,10 @@ const UserProfile = () => {
             key={user.id}
             isDarker
             backgroundImages={Object.values(availableTitles)
-              .filter((media) => media.backdropPath)
+              .filter(
+                (media): media is MovieDetails | TvDetails =>
+                  'backdropPath' in media && !!media.backdropPath
+              )
               .map(
                 (media) =>
                   `https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${media.backdropPath}`
@@ -152,12 +292,18 @@ const UserProfile = () => {
             { type: 'and' }
           )) && (
           <div className="relative z-40">
-            <dl className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
-              <div className="overflow-hidden rounded-lg bg-gray-800/50 px-4 py-5 shadow ring-1 ring-gray-700 sm:p-6">
-                <dt className="truncate text-sm font-bold text-gray-300">
+            <dl className={`mt-5 grid ${statGrid}`}>
+              <div className={`${statTile()} ${totalTileSpan}`}>
+                <dt className={statLabel()}>
                   {intl.formatMessage(messages.totalrequests)}
                 </dt>
-                <dd className="mt-1 text-3xl font-semibold text-white">
+                <dd
+                  className={
+                    ambient
+                      ? `mt-2 ${statNumber} hover:text-as-accent-soft`
+                      : 'mt-1 text-3xl font-semibold text-white'
+                  }
+                >
                   <Link
                     href={
                       currentHasPermission(
@@ -172,116 +318,9 @@ const UserProfile = () => {
                   </Link>
                 </dd>
               </div>
-              <div
-                className={`overflow-hidden rounded-lg bg-gray-800/50 px-4 py-5 shadow ring-1 ${
-                  quota.movie.restricted
-                    ? 'bg-gradient-to-t from-red-900 to-transparent ring-red-500'
-                    : 'ring-gray-700'
-                } sm:p-6`}
-              >
-                <dt
-                  className={`truncate text-sm font-bold ${
-                    quota.movie.restricted ? 'text-red-500' : 'text-gray-300'
-                  }`}
-                >
-                  {quota.movie.limit
-                    ? intl.formatMessage(messages.pastdays, {
-                        type: intl.formatMessage(messages.movierequests),
-                        days: quota?.movie.days,
-                      })
-                    : intl.formatMessage(messages.movierequests)}
-                </dt>
-                <dd
-                  className={`mt-1 flex items-center text-sm ${
-                    quota.movie.restricted ? 'text-red-500' : 'text-white'
-                  }`}
-                >
-                  {quota.movie.limit ? (
-                    <>
-                      <ProgressCircle
-                        progress={Math.round(
-                          ((quota?.movie.remaining ?? 0) /
-                            (quota?.movie.limit ?? 1)) *
-                            100
-                        )}
-                        useHeatLevel
-                        className="mr-2 h-8 w-8"
-                      />
-                      <div>
-                        {intl.formatMessage(messages.requestsperdays, {
-                          limit: (
-                            <span className="text-3xl font-semibold">
-                              {intl.formatMessage(messages.limit, {
-                                remaining: quota.movie.remaining,
-                                limit: quota.movie.limit,
-                              })}
-                            </span>
-                          ),
-                        })}
-                      </div>
-                    </>
-                  ) : (
-                    <span className="text-3xl font-semibold">
-                      {intl.formatMessage(messages.unlimited)}
-                    </span>
-                  )}
-                </dd>
-              </div>
-              <div
-                className={`overflow-hidden rounded-lg bg-gray-800/50 px-4 py-5 shadow ring-1 ${
-                  quota.tv.restricted
-                    ? 'bg-gradient-to-t from-red-900 to-transparent ring-red-500'
-                    : 'ring-gray-700'
-                } sm:p-6`}
-              >
-                <dt
-                  className={`truncate text-sm font-bold ${
-                    quota.tv.restricted ? 'text-red-500' : 'text-gray-300'
-                  }`}
-                >
-                  {quota.tv.limit
-                    ? intl.formatMessage(messages.pastdays, {
-                        type: intl.formatMessage(messages.seriesrequest),
-                        days: quota?.tv.days,
-                      })
-                    : intl.formatMessage(messages.seriesrequest)}
-                </dt>
-                <dd
-                  className={`mt-1 flex items-center text-sm ${
-                    quota.tv.restricted ? 'text-red-500' : 'text-white'
-                  }`}
-                >
-                  {quota.tv.limit ? (
-                    <>
-                      <ProgressCircle
-                        progress={Math.round(
-                          ((quota?.tv.remaining ?? 0) /
-                            (quota?.tv.limit ?? 1)) *
-                            100
-                        )}
-                        useHeatLevel
-                        className="mr-2 h-8 w-8"
-                      />
-                      <div>
-                        {intl.formatMessage(messages.requestsperdays, {
-                          limit: (
-                            <span className="text-3xl font-semibold">
-                              {intl.formatMessage(messages.limit, {
-                                remaining: quota.tv.remaining,
-                                limit: quota.tv.limit,
-                              })}
-                            </span>
-                          ),
-                        })}
-                      </div>
-                    </>
-                  ) : (
-                    <span className="text-3xl font-semibold">
-                      {intl.formatMessage(messages.unlimited)}
-                    </span>
-                  )}
-                </dd>
-              </div>
+              {quotaTiles.map(({ key, label, status }) =>
+                renderQuotaTile(key, label, status)
+              )}
             </dl>
           </div>
         )}
@@ -367,14 +406,19 @@ const UserProfile = () => {
               items={watchlistItems?.results.map((item) => (
                 <TmdbTitleCard
                   id={item.tmdbId}
-                  key={`watchlist-slider-item-${item.ratingKey}`}
+                  key={`watchlist-slider-item-${item.ratingKey || `${item.mediaType}-${item.id}`}`}
                   tmdbId={item.tmdbId}
+                  mbId={item.mbId}
+                  olId={item.olId}
                   type={item.mediaType}
+                  title={item.title}
+                  image={item.image}
                 />
               ))}
             />
           </>
         )}
+      <FavoritesSlider user={user} />
       {user.userType === UserType.PLEX &&
         (user.id === currentUser?.id ||
           currentHasPermission(Permission.ADMIN)) &&

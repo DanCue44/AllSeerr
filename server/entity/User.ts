@@ -2,7 +2,11 @@ import { MediaRequestStatus, MediaType } from '@server/constants/media';
 import { UserType } from '@server/constants/user';
 import { getRepository } from '@server/datasource';
 import { Watchlist } from '@server/entity/Watchlist';
-import type { QuotaResponse } from '@server/interfaces/api/userInterfaces';
+import type {
+  QuotaResponse,
+  QuotaStatus,
+} from '@server/interfaces/api/userInterfaces';
+import { getEmailLogo } from '@server/lib/branding';
 import PreparedEmail from '@server/lib/email';
 import type { PermissionCheckOptions } from '@server/lib/permissions';
 import { Permission, hasPermission } from '@server/lib/permissions';
@@ -18,6 +22,7 @@ import {
   AfterLoad,
   Column,
   Entity,
+  Index,
   Not,
   OneToMany,
   OneToOne,
@@ -48,6 +53,7 @@ export class User {
     'jellyfinDeviceId',
     'jellyfinAuthToken',
     'plexToken',
+    'apiKeyHash',
     'settings',
   ];
 
@@ -103,6 +109,13 @@ export class User {
   @Column({ type: 'varchar', nullable: true, select: false })
   public plexToken?: string | null;
 
+  @Index()
+  @Column({ type: 'varchar', nullable: true, select: false })
+  public apiKeyHash?: string | null;
+
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public apiKeyCreatedAt?: Date | null;
+
   @Column({ type: 'integer', default: 0 })
   public permissions = 0;
 
@@ -135,6 +148,24 @@ export class User {
 
   @Column({ nullable: true })
   public tvQuotaDays?: number;
+
+  @Column({ nullable: true })
+  public musicQuotaLimit?: number;
+
+  @Column({ nullable: true })
+  public musicQuotaDays?: number;
+
+  @Column({ nullable: true })
+  public bookQuotaLimit?: number;
+
+  @Column({ nullable: true })
+  public bookQuotaDays?: number;
+
+  @Column({ type: 'varchar', nullable: true })
+  public movieRatingLimit?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  public tvRatingLimit?: string | null;
 
   @OneToOne(() => UserSettings, (settings) => settings.user, {
     cascade: true,
@@ -227,6 +258,7 @@ export class User {
           password: password,
           applicationUrl,
           applicationTitle,
+          ...getEmailLogo(),
           recipientName: this.username,
         },
       });
@@ -264,6 +296,7 @@ export class User {
           resetPasswordLink,
           applicationUrl,
           applicationTitle,
+          ...getEmailLogo(),
           recipientName: this.displayName,
           recipientEmail: this.email,
         },
@@ -291,30 +324,77 @@ export class User {
       type: 'or',
     });
 
+    // Movies, albums and books are counted one request at a time. A book
+    // requested in both formats is two requests, one per format.
+    const countRequests = async (
+      type: MediaType,
+      quotaLimit?: number,
+      quotaDays?: number
+    ): Promise<number> => {
+      if (!quotaLimit) {
+        return 0;
+      }
+
+      const date = new Date();
+      if (quotaDays) {
+        date.setDate(date.getDate() - quotaDays);
+      }
+
+      return requestRepository.count({
+        where: {
+          requestedBy: {
+            id: this.id,
+          },
+          ...(quotaDays ? { createdAt: AfterDate(date) } : {}),
+          type,
+          status: Not(MediaRequestStatus.DECLINED),
+          ignoreQuota: false,
+        },
+      });
+    };
+
+    const getStatus = (
+      days: number | undefined,
+      limit: number | undefined,
+      used: number
+    ): QuotaStatus => ({
+      days,
+      limit,
+      used,
+      remaining: limit ? Math.max(0, limit - used) : undefined,
+      restricted: !!(limit && limit - used <= 0),
+    });
+
     const movieQuotaLimit = !canBypass
       ? (this.movieQuotaLimit ?? defaultQuotas.movie.quotaLimit)
       : 0;
     const movieQuotaDays = this.movieQuotaDays ?? defaultQuotas.movie.quotaDays;
+    const movieQuotaUsed = await countRequests(
+      MediaType.MOVIE,
+      movieQuotaLimit,
+      movieQuotaDays
+    );
 
-    // Count movie requests made during quota period
-    const movieDate = new Date();
-    if (movieQuotaDays) {
-      movieDate.setDate(movieDate.getDate() - movieQuotaDays);
-    }
-
-    const movieQuotaUsed = movieQuotaLimit
-      ? await requestRepository.count({
-          where: {
-            requestedBy: {
-              id: this.id,
-            },
-            ...(movieQuotaDays ? { createdAt: AfterDate(movieDate) } : {}),
-            type: MediaType.MOVIE,
-            status: Not(MediaRequestStatus.DECLINED),
-            ignoreQuota: false,
-          },
-        })
+    const musicQuotaLimit = !canBypass
+      ? (this.musicQuotaLimit ?? defaultQuotas.music?.quotaLimit)
       : 0;
+    const musicQuotaDays =
+      this.musicQuotaDays ?? defaultQuotas.music?.quotaDays;
+    const musicQuotaUsed = await countRequests(
+      MediaType.MUSIC,
+      musicQuotaLimit,
+      musicQuotaDays
+    );
+
+    const bookQuotaLimit = !canBypass
+      ? (this.bookQuotaLimit ?? defaultQuotas.book?.quotaLimit)
+      : 0;
+    const bookQuotaDays = this.bookQuotaDays ?? defaultQuotas.book?.quotaDays;
+    const bookQuotaUsed = await countRequests(
+      MediaType.BOOK,
+      bookQuotaLimit,
+      bookQuotaDays
+    );
 
     const tvQuotaLimit = !canBypass
       ? (this.tvQuotaLimit ?? defaultQuotas.tv.quotaLimit)
@@ -364,26 +444,10 @@ export class User {
       : 0;
 
     return {
-      movie: {
-        days: movieQuotaDays,
-        limit: movieQuotaLimit,
-        used: movieQuotaUsed,
-        remaining: movieQuotaLimit
-          ? Math.max(0, movieQuotaLimit - movieQuotaUsed)
-          : undefined,
-        restricted: !!(
-          movieQuotaLimit && movieQuotaLimit - movieQuotaUsed <= 0
-        ),
-      },
-      tv: {
-        days: tvQuotaDays,
-        limit: tvQuotaLimit,
-        used: tvQuotaUsed,
-        remaining: tvQuotaLimit
-          ? Math.max(0, tvQuotaLimit - tvQuotaUsed)
-          : undefined,
-        restricted: !!(tvQuotaLimit && tvQuotaLimit - tvQuotaUsed <= 0),
-      },
+      movie: getStatus(movieQuotaDays, movieQuotaLimit, movieQuotaUsed),
+      tv: getStatus(tvQuotaDays, tvQuotaLimit, tvQuotaUsed),
+      music: getStatus(musicQuotaDays, musicQuotaLimit, musicQuotaUsed),
+      book: getStatus(bookQuotaDays, bookQuotaLimit, bookQuotaUsed),
     };
   }
 }

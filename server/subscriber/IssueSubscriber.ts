@@ -1,7 +1,14 @@
-import TheMovieDb from '@server/api/themoviedb';
-import { IssueStatus, IssueType, IssueTypeName } from '@server/constants/issue';
+import {
+  IssueStatus,
+  IssueType,
+  getIssueTypeName,
+} from '@server/constants/issue';
 import { MediaType } from '@server/constants/media';
 import Issue from '@server/entity/Issue';
+import {
+  getBookFormatChoiceName,
+  getMediaNotificationDetails,
+} from '@server/lib/mediaNotificationDetails';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { Permission } from '@server/lib/permissions';
 import logger from '@server/logger';
@@ -13,6 +20,50 @@ import type {
 } from 'typeorm';
 import { EventSubscriber } from 'typeorm';
 
+/**
+ * The notification fields that say which part of the media has the problem:
+ * the season and episode of a series, the disc and track of an album and
+ * the format of a book
+ */
+export const getIssueExtra = (
+  issue: Issue
+): { name: string; value: string }[] => {
+  const extra: { name: string; value: string }[] = [];
+
+  if (issue.media.mediaType === MediaType.TV && issue.problemSeason > 0) {
+    extra.push({
+      name: 'Affected Season',
+      value: issue.problemSeason.toString(),
+    });
+
+    if (issue.problemEpisode > 0) {
+      extra.push({
+        name: 'Affected Episode',
+        value: issue.problemEpisode.toString(),
+      });
+    }
+  }
+
+  if (issue.media.mediaType === MediaType.MUSIC && issue.problemEpisode > 0) {
+    extra.push({
+      name: 'Affected Track',
+      value:
+        issue.problemSeason > 1
+          ? `Disc ${issue.problemSeason}, Track ${issue.problemEpisode}`
+          : `Track ${issue.problemEpisode}`,
+    });
+  }
+
+  if (issue.media.mediaType === MediaType.BOOK && issue.bookFormat) {
+    extra.push({
+      name: 'Format',
+      value: getBookFormatChoiceName(issue.bookFormat),
+    });
+  }
+
+  return extra;
+};
+
 @EventSubscriber()
 export class IssueSubscriber implements EntitySubscriberInterface<Issue> {
   public listenTo(): typeof Issue {
@@ -20,69 +71,30 @@ export class IssueSubscriber implements EntitySubscriberInterface<Issue> {
   }
 
   private async sendIssueNotification(entity: Issue, type: Notification) {
-    let title: string;
-    let image: string;
-    const tmdb = new TheMovieDb();
-
     try {
-      if (entity.media.mediaType === MediaType.MOVIE) {
-        const movie = await tmdb.getMovie({ movieId: entity.media.tmdbId });
-
-        title = `${movie.title}${
-          movie.release_date ? ` (${movie.release_date.slice(0, 4)})` : ''
-        }`;
-        image = `https://image.tmdb.org/t/p/w600_and_h900_bestv2${movie.poster_path}`;
-      } else {
-        const tvshow = await tmdb.getTvShow({ tvId: entity.media.tmdbId });
-
-        title = `${tvshow.name}${
-          tvshow.first_air_date ? ` (${tvshow.first_air_date.slice(0, 4)})` : ''
-        }`;
-        image = `https://image.tmdb.org/t/p/w600_and_h900_bestv2${tvshow.poster_path}`;
-      }
+      const { subject, image } = await getMediaNotificationDetails(
+        entity.media
+      );
 
       const [firstComment] = sortBy(entity.comments, 'id');
-      const extra: { name: string; value: string }[] = [];
-
-      if (entity.media.mediaType === MediaType.TV && entity.problemSeason > 0) {
-        extra.push({
-          name: 'Affected Season',
-          value: entity.problemSeason.toString(),
-        });
-
-        if (entity.problemEpisode > 0) {
-          extra.push({
-            name: 'Affected Episode',
-            value: entity.problemEpisode.toString(),
-          });
-        }
-      }
+      const issueTypeName =
+        entity.issueType !== IssueType.OTHER
+          ? `${getIssueTypeName(entity.issueType, entity.media.mediaType)} `
+          : '';
 
       notificationManager.sendNotification(type, {
         event:
           type === Notification.ISSUE_CREATED
-            ? `New ${
-                entity.issueType !== IssueType.OTHER
-                  ? `${IssueTypeName[entity.issueType]} `
-                  : ''
-              }Issue Reported`
+            ? `New ${issueTypeName}Issue Reported`
             : type === Notification.ISSUE_RESOLVED
-              ? `${
-                  entity.issueType !== IssueType.OTHER
-                    ? `${IssueTypeName[entity.issueType]} `
-                    : ''
-                }Issue Resolved`
-              : `${
-                  entity.issueType !== IssueType.OTHER
-                    ? `${IssueTypeName[entity.issueType]} `
-                    : ''
-                }Issue Reopened`,
-        subject: title,
+              ? `${issueTypeName}Issue Resolved`
+              : `${issueTypeName}Issue Reopened`,
+        subject,
         message: firstComment.message,
         issue: entity,
         media: entity.media,
         image,
-        extra,
+        extra: getIssueExtra(entity),
         notifyAdmin: true,
         notifySystem: true,
         notifyUser:

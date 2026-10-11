@@ -52,6 +52,17 @@ export class UserSettings {
   @Column({ nullable: true })
   public originalLanguage?: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  public accentColor?: string | null;
+
+  // Language this user requests books in, null for the server default
+  @Column({ type: 'varchar', nullable: true })
+  public bookLanguage?: string | null;
+
+  // Version of the guided tour this user has seen, null when never shown
+  @Column({ type: 'integer', nullable: true })
+  public tourVersion?: number | null;
+
   @Column({ nullable: true })
   public pgpKey?: string;
 

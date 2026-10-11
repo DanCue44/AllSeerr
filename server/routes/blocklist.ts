@@ -4,22 +4,31 @@ import dataSource, { getRepository } from '@server/datasource';
 import { Blocklist } from '@server/entity/Blocklist';
 import Media from '@server/entity/Media';
 import type { BlocklistResultsResponse } from '@server/interfaces/api/blocklistInterfaces';
+import {
+  getMediaListKey,
+  isMediaListType,
+  isValidMediaListId,
+  mediaListIds,
+  requireMediaListId,
+} from '@server/lib/mediaListKeys';
 import { Permission } from '@server/lib/permissions';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
 import { EntityNotFoundError, In, QueryFailedError } from 'typeorm';
-import { z } from 'zod';
+import { ZodError, z } from 'zod';
 
 const blocklistRoutes = Router();
 
-export const blocklistAdd = z.object({
-  tmdbId: z.coerce.number(),
-  mediaType: z.nativeEnum(MediaType),
-  title: z.coerce.string().optional(),
-  user: z.coerce.number(),
-  blocklistedTags: z.string().optional(),
-});
+export const blocklistAdd = z
+  .object({
+    ...mediaListIds,
+    mediaType: z.nativeEnum(MediaType),
+    title: z.coerce.string().optional(),
+    user: z.coerce.number(),
+    blocklistedTags: z.string().optional(),
+  })
+  .superRefine(requireMediaListId);
 
 const blocklistGet = z.object({
   take: z.coerce.number().int().positive().default(25),
@@ -91,8 +100,13 @@ blocklistRoutes.get(
     type: 'or',
   }),
   async (req, res, next) => {
+    // The id is a TMDB id for movies and series, a MusicBrainz release group
+    // id for albums and an OpenLibrary work id for books
     const mediaType = req.query.mediaType;
-    if (mediaType !== MediaType.MOVIE && mediaType !== MediaType.TV) {
+    if (
+      !isMediaListType(mediaType) ||
+      !isValidMediaListId(mediaType, req.params.id)
+    ) {
       return next({
         status: 400,
         message: 'Invalid or missing mediaType query parameter.',
@@ -104,7 +118,7 @@ blocklistRoutes.get(
 
       const blocklistItem = await blocklisteRepository.findOneOrFail({
         where: {
-          tmdbId: Number(req.params.id),
+          ...getMediaListKey(mediaType, req.params.id),
           mediaType,
         },
       });
@@ -141,6 +155,10 @@ blocklistRoutes.post(
         return;
       }
 
+      if (error instanceof ZodError) {
+        return next({ status: 400, message: error.message });
+      }
+
       if (error instanceof QueryFailedError) {
         switch (error.driverError.errno) {
           case 19:
@@ -148,6 +166,8 @@ blocklistRoutes.post(
           default:
             logger.warn('Something wrong with data blocklist', {
               tmdbId: req.body.tmdbId,
+              mbId: req.body.mbId,
+              olId: req.body.olId,
               mediaType: req.body.mediaType,
               label: 'Blocklist',
             });
@@ -267,8 +287,13 @@ blocklistRoutes.delete(
     type: 'or',
   }),
   async (req, res, next) => {
+    // The id is a TMDB id for movies and series, a MusicBrainz release group
+    // id for albums and an OpenLibrary work id for books
     const mediaType = req.query.mediaType;
-    if (mediaType !== MediaType.MOVIE && mediaType !== MediaType.TV) {
+    if (
+      !isMediaListType(mediaType) ||
+      !isValidMediaListId(mediaType, req.params.id)
+    ) {
       return next({
         status: 400,
         message: 'Invalid or missing mediaType query parameter.',
@@ -280,7 +305,7 @@ blocklistRoutes.delete(
 
       const blocklistItem = await blocklisteRepository.findOneOrFail({
         where: {
-          tmdbId: Number(req.params.id),
+          ...getMediaListKey(mediaType, req.params.id),
           mediaType,
         },
       });
@@ -291,8 +316,8 @@ blocklistRoutes.delete(
 
       const mediaItem = await mediaRepository.findOneOrFail({
         where: {
-          tmdbId: Number(req.params.id),
-          mediaType: req.query.mediaType as MediaType,
+          ...getMediaListKey(mediaType, req.params.id),
+          mediaType,
         },
       });
 

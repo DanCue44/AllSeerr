@@ -16,8 +16,10 @@ export interface ExternalAPIOptions {
   headers?: Record<string, unknown>;
   timeout?: number;
   rateLimit?: {
-    maxRPS: number;
+    maxRPS?: number;
     maxRequests: number;
+    // Window for maxRequests when maxRPS is not set, in milliseconds
+    perMilliseconds?: number;
   };
 }
 
@@ -48,6 +50,7 @@ class ExternalAPI {
       this.axios = rateLimit(this.axios, {
         maxRequests: options.rateLimit.maxRequests,
         maxRPS: options.rateLimit.maxRPS,
+        perMilliseconds: options.rateLimit.perMilliseconds,
       });
     }
 

@@ -1,11 +1,13 @@
-import { IssueType, IssueTypeName } from '@server/constants/issue';
-import { MediaRequestStatus, MediaType } from '@server/constants/media';
+import { IssueType, getIssueTypeName } from '@server/constants/issue';
+import { MediaRequestStatus } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import MediaRequest from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { UserPushSubscription } from '@server/entity/UserPushSubscription';
 import { defineMessages, getIntl } from '@server/i18n';
 import globalMessages from '@server/i18n/globalMessages';
+import { brandingIconPath } from '@server/lib/branding';
+import { getPayloadMediaTypeName } from '@server/lib/notifications/mediaTypeName';
 import type { NotificationAgentConfig } from '@server/lib/settings';
 import { NotificationAgentKey, getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -13,7 +15,7 @@ import type { AvailableLocale } from '@server/types/languages';
 import webpush from 'web-push';
 import { Notification, shouldSendAdminNotification } from '..';
 import type { NotificationAgent, NotificationPayload } from './agent';
-import { BaseAgent } from './agent';
+import { BaseAgent, getPayloadPath } from './agent';
 
 const messages = defineMessages('notifications.agents.webpush', {
   autoRequested: 'Automatically submitted a new {quality}{mediaType} request.',
@@ -21,6 +23,8 @@ const messages = defineMessages('notifications.agents.webpush', {
   autoApproved:
     'Automatically approved a new {quality}{mediaType} request from {userName}.',
   available: 'Your {quality}{mediaType} request is now available!',
+  episodesAvailable:
+    'New episodes of your {quality}{mediaType} request are now available!',
   declined: 'Your {quality}{mediaType} request was declined.',
   failed: 'Failed to process {quality}{mediaType} request.',
   pending:
@@ -29,8 +33,15 @@ const messages = defineMessages('notifications.agents.webpush', {
   issueComment: '{userName} commented on the {issueType}.',
   issueResolved: 'The {issueType} was marked as resolved by {userName}!',
   issueReopened: 'The {issueType} was reopened by {userName}.',
+  removalPending:
+    'Approval required to remove a {quality}{mediaType} at the request of {userName}.',
+  removalApproved:
+    'Your request to remove a {quality}{mediaType} was approved and it has been removed.',
+  removalDeclined:
+    'Your request to remove a {quality}{mediaType} was declined.',
   viewIssue: 'View Issue',
   viewMedia: 'View Media',
+  viewSettings: 'Open Settings',
 });
 
 interface PushNotificationPayload {
@@ -38,6 +49,7 @@ interface PushNotificationPayload {
   subject: string;
   message?: string;
   image?: string;
+  icon?: string;
   actionUrl?: string;
   actionUrlTitle?: string;
   requestId?: number;
@@ -75,19 +87,20 @@ class WebPushAgent
   ): PushNotificationPayload {
     const intl = getIntl(locale);
     const { embedPoster } = getSettings().notifications.agents.webpush;
+    const { applicationLogoVersion } = getSettings().main;
 
-    const mediaType = payload.media
-      ? payload.media.mediaType === MediaType.MOVIE
-        ? intl.formatMessage(globalMessages.movie)
-        : intl.formatMessage(globalMessages.series)
-      : undefined;
-    const is4k = payload.request?.is4k;
+    const mediaType = getPayloadMediaTypeName(payload, intl);
+    const is4k =
+      payload.request?.is4k ?? payload.removal?.is4k ?? payload.rollover?.is4k;
     const quality = is4k ? '4K ' : '';
 
     const issueType = payload.issue
       ? payload.issue.issueType !== IssueType.OTHER
         ? intl.formatMessage(globalMessages.issueTypeName, {
-            type: IssueTypeName[payload.issue.issueType].toLowerCase(),
+            type: getIssueTypeName(
+              payload.issue.issueType,
+              payload.media?.mediaType
+            ).toLowerCase(),
           })
         : intl.formatMessage(globalMessages.issue)
       : undefined;
@@ -118,6 +131,12 @@ class WebPushAgent
         break;
       case Notification.MEDIA_AVAILABLE:
         message = intl.formatMessage(messages.available, {
+          quality,
+          mediaType,
+        });
+        break;
+      case Notification.MEDIA_EPISODES_AVAILABLE:
+        message = intl.formatMessage(messages.episodesAvailable, {
           quality,
           mediaType,
         });
@@ -165,6 +184,29 @@ class WebPushAgent
           userName: payload.issue?.modifiedBy?.displayName,
         });
         break;
+      case Notification.REMOVAL_PENDING:
+        message = intl.formatMessage(messages.removalPending, {
+          quality,
+          mediaType,
+          userName: payload.removal?.requestedBy.displayName,
+        });
+        break;
+      case Notification.REMOVAL_APPROVED:
+        message = intl.formatMessage(messages.removalApproved, {
+          quality,
+          mediaType,
+        });
+        break;
+      case Notification.REMOVAL_DECLINED:
+        message = intl.formatMessage(messages.removalDeclined, {
+          quality,
+          mediaType,
+        });
+        break;
+      case Notification.SEASON_ROLLOVER_PENDING:
+      case Notification.SCAN_FAILURE:
+        message = payload.message;
+        break;
       default:
         return {
           notificationType: Notification[type],
@@ -174,13 +216,17 @@ class WebPushAgent
 
     const actionUrl = payload.issue
       ? `/issues/${payload.issue.id}`
-      : payload.media
-        ? `/${payload.media.mediaType}/${payload.media.tmdbId}`
+      : payload.media || type === Notification.SCAN_FAILURE
+        ? getPayloadPath(payload) || undefined
         : undefined;
 
     const actionUrlTitle = actionUrl
       ? intl.formatMessage(
-          payload.issue ? messages.viewIssue : messages.viewMedia
+          payload.issue
+            ? messages.viewIssue
+            : type === Notification.SCAN_FAILURE
+              ? messages.viewSettings
+              : messages.viewMedia
         )
       : undefined;
 
@@ -189,6 +235,9 @@ class WebPushAgent
       subject: payload.subject,
       message,
       image: embedPoster ? payload.image : undefined,
+      icon: applicationLogoVersion
+        ? brandingIconPath('android-chrome-192x192.png', applicationLogoVersion)
+        : undefined,
       requestId: payload.request?.id,
       actionUrl,
       actionUrlTitle,

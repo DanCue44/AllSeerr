@@ -1,4 +1,4 @@
-import { IssueStatus, IssueTypeName } from '@server/constants/issue';
+import { IssueStatus, getIssueTypeName } from '@server/constants/issue';
 import { getIntl } from '@server/i18n';
 import globalMessages from '@server/i18n/globalMessages';
 import type { NotificationAgentNtfy } from '@server/lib/settings';
@@ -8,7 +8,7 @@ import type { AvailableLocale } from '@server/types/languages';
 import axios from 'axios';
 import { Notification, hasNotificationType } from '..';
 import type { NotificationAgent, NotificationPayload } from './agent';
-import { BaseAgent } from './agent';
+import { BaseAgent, getPayloadPath } from './agent';
 
 class NtfyAgent
   extends BaseAgent<NotificationAgentNtfy>
@@ -59,6 +59,7 @@ class NtfyAgent
           status = intl.formatMessage(globalMessages.processing);
           break;
         case Notification.MEDIA_AVAILABLE:
+        case Notification.MEDIA_EPISODES_AVAILABLE:
           status = intl.formatMessage(globalMessages.available);
           break;
         case Notification.MEDIA_DECLINED:
@@ -80,7 +81,7 @@ class NtfyAgent
       )}:**\n${payload.comment.message}`;
     } else if (payload.issue) {
       message += `\n\n**${intl.formatMessage(globalMessages.reportedBy)}:** ${this.escapeMarkdown(payload.issue.createdBy.displayName)}`;
-      message += `\n**${intl.formatMessage(globalMessages.issueType)}:** ${IssueTypeName[payload.issue.issueType]}`;
+      message += `\n**${intl.formatMessage(globalMessages.issueType)}:** ${getIssueTypeName(payload.issue.issueType, payload.media?.mediaType)}`;
       message += `\n**${intl.formatMessage(globalMessages.issueStatus)}:** ${
         payload.issue.status === IssueStatus.OPEN
           ? intl.formatMessage(globalMessages.open)
@@ -96,7 +97,7 @@ class NtfyAgent
 
     let click;
     if (applicationUrl && payload.media) {
-      click = `${applicationUrl}/${payload.media.mediaType}/${payload.media.tmdbId}`;
+      click = `${applicationUrl}${getPayloadPath(payload)}`;
     }
 
     const ntfyPayload: Record<string, unknown> = {

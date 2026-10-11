@@ -2,24 +2,33 @@ import Badge from '@app/components/Common/Badge';
 import { menuMessages } from '@app/components/Layout/Sidebar';
 import useClickOutside from '@app/hooks/useClickOutside';
 import { Permission, useUser } from '@app/hooks/useUser';
+import { SPACES } from '@app/utils/spaces';
 import { Transition } from '@headlessui/react';
 import {
+  BookOpenIcon,
+  BuildingLibraryIcon,
+  CalendarDaysIcon,
   ClockIcon,
   CogIcon,
   EllipsisHorizontalIcon,
   ExclamationTriangleIcon,
   EyeSlashIcon,
   FilmIcon,
+  MusicalNoteIcon,
   SparklesIcon,
   TvIcon,
   UsersIcon,
 } from '@heroicons/react/24/outline';
 import {
+  BookOpenIcon as FilledBookOpenIcon,
+  BuildingLibraryIcon as FilledBuildingLibraryIcon,
+  CalendarDaysIcon as FilledCalendarDaysIcon,
   ClockIcon as FilledClockIcon,
   CogIcon as FilledCogIcon,
   ExclamationTriangleIcon as FilledExclamationTriangleIcon,
   EyeSlashIcon as FilledEyeSlashIcon,
   FilmIcon as FilledFilmIcon,
+  MusicalNoteIcon as FilledMusicalNoteIcon,
   SparklesIcon as FilledSparklesIcon,
   TvIcon as FilledTvIcon,
   UsersIcon as FilledUsersIcon,
@@ -79,18 +88,39 @@ const MobileMenu = ({
       activeRegExp: /^\/(discover\/?)?$/,
     },
     {
-      href: '/discover/movies',
+      href: SPACES.movies.path,
       content: intl.formatMessage(menuMessages.browsemovies),
       svgIcon: <FilmIcon className="h-6 w-6" />,
       svgIconSelected: <FilledFilmIcon className="h-6 w-6" />,
-      activeRegExp: /^\/discover\/movies$/,
+      activeRegExp: SPACES.movies.matches,
     },
     {
-      href: '/discover/tv',
+      href: SPACES.series.path,
       content: intl.formatMessage(menuMessages.browsetv),
       svgIcon: <TvIcon className="h-6 w-6" />,
       svgIconSelected: <FilledTvIcon className="h-6 w-6" />,
-      activeRegExp: /^\/discover\/tv$/,
+      activeRegExp: SPACES.series.matches,
+    },
+    {
+      href: SPACES.music.path,
+      content: intl.formatMessage(menuMessages.browsemusic),
+      svgIcon: <MusicalNoteIcon className="h-6 w-6" />,
+      svgIconSelected: <FilledMusicalNoteIcon className="h-6 w-6" />,
+      activeRegExp: SPACES.music.matches,
+    },
+    {
+      href: SPACES.books.path,
+      content: intl.formatMessage(menuMessages.browsebooks),
+      svgIcon: <BookOpenIcon className="h-6 w-6" />,
+      svgIconSelected: <FilledBookOpenIcon className="h-6 w-6" />,
+      activeRegExp: SPACES.books.matches,
+    },
+    {
+      href: '/library/movies',
+      content: intl.formatMessage(menuMessages.library),
+      svgIcon: <BuildingLibraryIcon className="h-6 w-6" />,
+      svgIconSelected: <FilledBuildingLibraryIcon className="h-6 w-6" />,
+      activeRegExp: /^\/library/,
     },
     {
       href: '/requests',
@@ -98,6 +128,13 @@ const MobileMenu = ({
       svgIcon: <ClockIcon className="h-6 w-6" />,
       svgIconSelected: <FilledClockIcon className="h-6 w-6" />,
       activeRegExp: /^\/requests/,
+    },
+    {
+      href: '/calendar',
+      content: intl.formatMessage(menuMessages.calendar),
+      svgIcon: <CalendarDaysIcon className="h-6 w-6" />,
+      svgIconSelected: <FilledCalendarDaysIcon className="h-6 w-6" />,
+      activeRegExp: /^\/calendar/,
     },
     {
       href: '/blocklist',

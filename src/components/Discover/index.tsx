@@ -5,20 +5,13 @@ import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
 import CreateSlider from '@app/components/Discover/CreateSlider';
 import DiscoverSliderEdit from '@app/components/Discover/DiscoverSliderEdit';
-import MovieGenreSlider from '@app/components/Discover/MovieGenreSlider';
-import NetworkSlider from '@app/components/Discover/NetworkSlider';
-import PlexWatchlistSlider from '@app/components/Discover/PlexWatchlistSlider';
-import RecentRequestsSlider from '@app/components/Discover/RecentRequestsSlider';
-import RecentlyAddedSlider from '@app/components/Discover/RecentlyAddedSlider';
-import StudioSlider from '@app/components/Discover/StudioSlider';
-import TvGenreSlider from '@app/components/Discover/TvGenreSlider';
-import { sliderTitles } from '@app/components/Discover/constants';
-import MediaSlider from '@app/components/MediaSlider';
-import { encodeURIExtraParams } from '@app/hooks/useDiscover';
+import DiscoverSliderRow from '@app/components/Discover/DiscoverSliderRow';
+import ScanHealthAlert from '@app/components/ScanHealthAlert';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import { selectHomeSliders } from '@app/utils/discoverMediaFilter';
 import { Transition } from '@headlessui/react';
 import {
   ArrowDownOnSquareIcon,
@@ -27,7 +20,6 @@ import {
   PencilIcon,
   PlusIcon,
 } from '@heroicons/react/24/solid';
-import { DiscoverSliderType } from '@server/constants/discover';
 import type DiscoverSlider from '@server/entity/DiscoverSlider';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
@@ -50,8 +42,15 @@ const messages = defineMessages('components.Discover', {
   customizediscover: 'Customize Discover',
   stopediting: 'Stop Editing',
   createnewslider: 'Create New Slider',
+  foryou: 'For You',
 });
 
+/**
+ * The For You home: the personal rows (recently added, recent requests, the
+ * watchlist, what is coming up) and trending across every media type, as an
+ * admin set them up in Customize Discover. The rows made for one media type
+ * live in that type's space.
+ */
 const Discover = () => {
   const intl = useIntl();
   const { hasPermission } = useUser();
@@ -110,21 +109,16 @@ const Discover = () => {
     }
   };
 
-  const now = new Date();
-  const offset = now.getTimezoneOffset();
-  const upcomingDate = new Date(now.getTime() - offset * 60 * 1000)
-    .toISOString()
-    .split('T')[0];
-
   if (!discoverData && !discoverError) {
     return <LoadingSpinner />;
   }
 
   return (
     <>
-      <PageTitle title={intl.formatMessage(messages.discover)} />
+      <PageTitle title={intl.formatMessage(messages.foryou)} />
       {hasPermission(Permission.ADMIN) && (
         <>
+          <ScanHealthAlert className="mt-6" />
           {isEditing && (
             <div className="my-6 rounded-lg bg-gray-800">
               <div className="flex items-center space-x-2 rounded-t-lg border-l border-r border-t border-gray-800 bg-gray-900 p-4 text-lg font-semibold text-gray-400">
@@ -208,258 +202,71 @@ const Discover = () => {
           </Transition>
         </>
       )}
-      {(isEditing ? sliders : discoverData)?.map((slider, index) => {
-        let sliderComponent: React.ReactNode;
+      {(isEditing ? sliders : selectHomeSliders(discoverData ?? [])).map(
+        (slider, index) => {
+          const sliderComponent = <DiscoverSliderRow slider={slider} />;
 
-        switch (slider.type) {
-          case DiscoverSliderType.RECENTLY_ADDED:
-            sliderComponent = <RecentlyAddedSlider />;
-            break;
-          case DiscoverSliderType.RECENT_REQUESTS:
-            sliderComponent = <RecentRequestsSlider />;
-            break;
-          case DiscoverSliderType.PLEX_WATCHLIST:
-            sliderComponent = <PlexWatchlistSlider />;
-            break;
-          case DiscoverSliderType.TRENDING:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey="trending"
-                title={intl.formatMessage(sliderTitles.trending)}
-                url="/api/v1/discover/trending"
-                linkUrl="/discover/trending"
-              />
-            );
-            break;
-          case DiscoverSliderType.POPULAR_MOVIES:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey="popular-movies"
-                title={intl.formatMessage(sliderTitles.popularmovies)}
-                url="/api/v1/discover/movies"
-                linkUrl="/discover/movies"
-              />
-            );
-            break;
-          case DiscoverSliderType.MOVIE_GENRES:
-            sliderComponent = <MovieGenreSlider />;
-            break;
-          case DiscoverSliderType.UPCOMING_MOVIES:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey="upcoming"
-                title={intl.formatMessage(sliderTitles.upcoming)}
-                linkUrl={`/discover/movies?primaryReleaseDateGte=${upcomingDate}`}
-                url="/api/v1/discover/movies"
-                extraParams={`primaryReleaseDateGte=${upcomingDate}`}
-              />
-            );
-            break;
-          case DiscoverSliderType.STUDIOS:
-            sliderComponent = <StudioSlider />;
-            break;
-          case DiscoverSliderType.POPULAR_TV:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey="popular-tv"
-                title={intl.formatMessage(sliderTitles.populartv)}
-                url="/api/v1/discover/tv"
-                linkUrl="/discover/tv"
-              />
-            );
-            break;
-          case DiscoverSliderType.TV_GENRES:
-            sliderComponent = <TvGenreSlider />;
-            break;
-          case DiscoverSliderType.UPCOMING_TV:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey="upcoming-tv"
-                title={intl.formatMessage(sliderTitles.upcomingtv)}
-                linkUrl={`/discover/tv?firstAirDateGte=${upcomingDate}`}
-                url="/api/v1/discover/tv"
-                extraParams={`firstAirDateGte=${upcomingDate}`}
-              />
-            );
-            break;
-          case DiscoverSliderType.NETWORKS:
-            sliderComponent = <NetworkSlider />;
-            break;
-          case DiscoverSliderType.TMDB_MOVIE_KEYWORD:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey={`custom-slider-${slider.id}`}
-                title={slider.title ?? ''}
-                url="/api/v1/discover/movies"
-                extraParams={
-                  slider.data
-                    ? `keywords=${encodeURIExtraParams(slider.data)}`
-                    : ''
-                }
-                linkUrl={`/discover/movies?keywords=${slider.data}`}
-              />
-            );
-            break;
-          case DiscoverSliderType.TMDB_TV_KEYWORD:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey={`custom-slider-${slider.id}`}
-                title={slider.title ?? ''}
-                url="/api/v1/discover/tv"
-                extraParams={
-                  slider.data
-                    ? `keywords=${encodeURIExtraParams(slider.data)}`
-                    : ''
-                }
-                linkUrl={`/discover/tv?keywords=${slider.data}`}
-              />
-            );
-            break;
-          case DiscoverSliderType.TMDB_MOVIE_GENRE:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey={`custom-slider-${slider.id}`}
-                title={slider.title ?? ''}
-                url={`/api/v1/discover/movies`}
-                extraParams={`genre=${slider.data}`}
-                linkUrl={`/discover/movies?genre=${slider.data}`}
-              />
-            );
-            break;
-          case DiscoverSliderType.TMDB_TV_GENRE:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey={`custom-slider-${slider.id}`}
-                title={slider.title ?? ''}
-                url={`/api/v1/discover/tv`}
-                extraParams={`genre=${slider.data}`}
-                linkUrl={`/discover/tv?genre=${slider.data}`}
-              />
-            );
-            break;
-          case DiscoverSliderType.TMDB_STUDIO:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey={`custom-slider-${slider.id}`}
-                title={slider.title ?? ''}
-                url={`/api/v1/discover/movies/studio/${slider.data}`}
-                linkUrl={`/discover/movies/studio/${slider.data}`}
-              />
-            );
-            break;
-          case DiscoverSliderType.TMDB_NETWORK:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey={`custom-slider-${slider.id}`}
-                title={slider.title ?? ''}
-                url={`/api/v1/discover/tv/network/${slider.data}`}
-                linkUrl={`/discover/tv/network/${slider.data}`}
-              />
-            );
-            break;
-          case DiscoverSliderType.TMDB_SEARCH:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey={`custom-slider-${slider.id}`}
-                title={slider.title ?? ''}
-                url="/api/v1/search"
-                extraParams={`query=${slider.data}`}
-                linkUrl={`/search?query=${slider.data}`}
-              />
-            );
-            break;
-          case DiscoverSliderType.TMDB_MOVIE_STREAMING_SERVICES:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey={`custom-slider-${slider.id}`}
-                title={slider.title ?? ''}
-                url="/api/v1/discover/movies"
-                extraParams={`watchRegion=${
-                  slider.data?.split(',')[0]
-                }&watchProviders=${slider.data?.split(',')[1]}`}
-                linkUrl={`/discover/movies?watchRegion=${
-                  slider.data?.split(',')[0]
-                }&watchProviders=${slider.data?.split(',')[1]}`}
-              />
-            );
-            break;
-          case DiscoverSliderType.TMDB_TV_STREAMING_SERVICES:
-            sliderComponent = (
-              <MediaSlider
-                sliderKey={`custom-slider-${slider.id}`}
-                title={slider.title ?? ''}
-                url="/api/v1/discover/tv"
-                extraParams={`watchRegion=${
-                  slider.data?.split(',')[0]
-                }&watchProviders=${slider.data?.split(',')[1]}`}
-                linkUrl={`/discover/tv?watchRegion=${
-                  slider.data?.split(',')[0]
-                }&watchProviders=${slider.data?.split(',')[1]}`}
-              />
-            );
-            break;
-        }
+          if (isEditing) {
+            return (
+              <DiscoverSliderEdit
+                key={`discover-slider-${slider.id}-edit`}
+                slider={slider}
+                onDelete={async () => {
+                  const newSliders = await mutate();
 
-        if (isEditing) {
+                  if (newSliders) {
+                    setSliders(newSliders);
+                  }
+                }}
+                onEnable={() => {
+                  const tempSliders = sliders.slice();
+                  tempSliders[index].enabled = !tempSliders[index].enabled;
+                  setSliders(tempSliders);
+                }}
+                onPositionUpdate={(
+                  updatedItemId,
+                  position,
+                  hasClickedArrows
+                ) => {
+                  const originalPosition = sliders.findIndex(
+                    (item) => item.id === updatedItemId
+                  );
+                  const originalItem = sliders[originalPosition];
+
+                  const tempSliders = sliders.slice();
+
+                  tempSliders.splice(originalPosition, 1);
+                  if (hasClickedArrows) {
+                    tempSliders.splice(
+                      position === 'Above' ? index - 1 : index + 1,
+                      0,
+                      originalItem
+                    );
+                  } else {
+                    tempSliders.splice(
+                      position === 'Above' && index > originalPosition
+                        ? Math.max(index - 1, 0)
+                        : index,
+                      0,
+                      originalItem
+                    );
+                  }
+
+                  setSliders(tempSliders);
+                }}
+                disableUpButton={index === 0}
+                disableDownButton={index === sliders.length - 1}
+              >
+                {sliderComponent}
+              </DiscoverSliderEdit>
+            );
+          }
+
           return (
-            <DiscoverSliderEdit
-              key={`discover-slider-${slider.id}-edit`}
-              slider={slider}
-              onDelete={async () => {
-                const newSliders = await mutate();
-
-                if (newSliders) {
-                  setSliders(newSliders);
-                }
-              }}
-              onEnable={() => {
-                const tempSliders = sliders.slice();
-                tempSliders[index].enabled = !tempSliders[index].enabled;
-                setSliders(tempSliders);
-              }}
-              onPositionUpdate={(updatedItemId, position, hasClickedArrows) => {
-                const originalPosition = sliders.findIndex(
-                  (item) => item.id === updatedItemId
-                );
-                const originalItem = sliders[originalPosition];
-
-                const tempSliders = sliders.slice();
-
-                tempSliders.splice(originalPosition, 1);
-                if (hasClickedArrows) {
-                  tempSliders.splice(
-                    position === 'Above' ? index - 1 : index + 1,
-                    0,
-                    originalItem
-                  );
-                } else {
-                  tempSliders.splice(
-                    position === 'Above' && index > originalPosition
-                      ? Math.max(index - 1, 0)
-                      : index,
-                    0,
-                    originalItem
-                  );
-                }
-
-                setSliders(tempSliders);
-              }}
-              disableUpButton={index === 0}
-              disableDownButton={index === sliders.length - 1}
-            >
-              {sliderComponent}
-            </DiscoverSliderEdit>
+            <div key={`discover-slider-${slider.id}`}>{sliderComponent}</div>
           );
         }
-
-        if (!slider.enabled) {
-          return null;
-        }
-
-        return (
-          <div key={`discover-slider-${slider.id}`}>{sliderComponent}</div>
-        );
-      })}
+      )}
     </>
   );
 };

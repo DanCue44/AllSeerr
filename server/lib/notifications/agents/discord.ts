@@ -2,7 +2,7 @@ import {
   DISCORD_SNOWFLAKE_REGEX,
   EmbedColors,
 } from '@server/constants/discord';
-import { IssueStatus, IssueTypeName } from '@server/constants/issue';
+import { IssueStatus, getIssueTypeName } from '@server/constants/issue';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import { getIntl } from '@server/i18n';
@@ -18,7 +18,7 @@ import {
   shouldSendAdminNotification,
 } from '..';
 import type { NotificationAgent, NotificationPayload } from './agent';
-import { BaseAgent } from './agent';
+import { BaseAgent, getPayloadPath } from './agent';
 
 const isValidSnowflake = (id: string): boolean =>
   DISCORD_SNOWFLAKE_REGEX.test(id);
@@ -123,6 +123,7 @@ class DiscordAgent
           status = intl.formatMessage(globalMessages.processing);
           break;
         case Notification.MEDIA_AVAILABLE:
+        case Notification.MEDIA_EPISODES_AVAILABLE:
           color = EmbedColors.GREEN;
           status = intl.formatMessage(globalMessages.available);
           break;
@@ -160,7 +161,10 @@ class DiscordAgent
         },
         {
           name: intl.formatMessage(globalMessages.issueType),
-          value: IssueTypeName[payload.issue.issueType],
+          value: getIssueTypeName(
+            payload.issue.issueType,
+            payload.media?.mediaType
+          ),
           inline: true,
         },
         {
@@ -199,7 +203,7 @@ class DiscordAgent
       ? payload.issue
         ? `${applicationUrl}/issues/${payload.issue.id}`
         : payload.media
-          ? `${applicationUrl}/${payload.media.mediaType}/${payload.media.tmdbId}`
+          ? `${applicationUrl}${getPayloadPath(payload)}`
           : undefined
       : undefined;
 

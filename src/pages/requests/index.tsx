@@ -1,8 +1,16 @@
+import AmbientRequestList from '@app/components/AllSeerr/RequestList';
 import RequestList from '@app/components/RequestList';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import type { NextPage } from 'next';
 
 const RequestsPage: NextPage = () => {
-  return <RequestList />;
+  const [interfaceStyle] = useInterfaceStyle();
+
+  return interfaceStyle === 'ambient' ? (
+    <AmbientRequestList />
+  ) : (
+    <RequestList />
+  );
 };
 
 export default RequestsPage;

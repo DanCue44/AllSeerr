@@ -1,6 +1,12 @@
+import {
+  authHeading,
+  authInput,
+  authPrimary,
+} from '@app/components/AllSeerr/Auth';
 import Alert from '@app/components/Common/Alert';
 import Button from '@app/components/Common/Button';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
 import { ArrowLeftOnRectangleIcon } from '@heroicons/react/24/outline';
@@ -37,6 +43,8 @@ interface LocalLoginProps {
 
 const LocalLogin = ({ revalidate }: LocalLoginProps) => {
   const intl = useIntl();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
   const settings = useSettings();
   const [loginError, setLoginError] = useState<string | null>(null);
 
@@ -86,7 +94,11 @@ const LocalLogin = ({ revalidate }: LocalLoginProps) => {
           <>
             <Form data-form-type="login">
               <div>
-                <h2 className="-mt-1 mb-6 text-center text-lg font-bold text-neutral-200">
+                <h2
+                  className={`-mt-1 mb-6 text-center ${
+                    ambient ? authHeading : 'text-lg font-bold text-neutral-200'
+                  }`}
+                >
                   {intl.formatMessage(messages.loginwithapp, {
                     appName: settings.currentSettings.applicationTitle,
                   })}
@@ -108,7 +120,11 @@ const LocalLogin = ({ revalidate }: LocalLoginProps) => {
                       inputMode="email"
                       data-testid="email"
                       data-form-type="username,email"
-                      className="!bg-gray-700/80 placeholder:text-gray-400"
+                      className={
+                        ambient
+                          ? authInput
+                          : '!bg-gray-700/80 placeholder:text-gray-400'
+                      }
                     />
                   </div>
                   {touched.email && values.email.match(/\s$/) && (
@@ -150,7 +166,11 @@ const LocalLogin = ({ revalidate }: LocalLoginProps) => {
                       autoComplete="current-password"
                       data-testid="password"
                       data-form-type="password"
-                      className="!bg-gray-700/80 placeholder:text-gray-400"
+                      className={
+                        ambient
+                          ? authInput
+                          : '!bg-gray-700/80 placeholder:text-gray-400'
+                      }
                       data-1pignore="false"
                       data-lpignore="false"
                     />
@@ -165,7 +185,11 @@ const LocalLogin = ({ revalidate }: LocalLoginProps) => {
                     {passwordResetEnabled && (
                       <Link
                         href="/resetpassword"
-                        className="pt-2 text-sm text-indigo-500 hover:text-indigo-400"
+                        className={`pt-2 text-sm ${
+                          ambient
+                            ? 'text-as-accent-soft hover:text-as-accent'
+                            : 'text-indigo-500 hover:text-indigo-400'
+                        }`}
                       >
                         {intl.formatMessage(messages.forgotpassword)}
                       </Link>
@@ -184,7 +208,7 @@ const LocalLogin = ({ revalidate }: LocalLoginProps) => {
                 type="submit"
                 disabled={isSubmitting || !isValid}
                 data-testid="local-signin-button"
-                className="mt-2 w-full shadow-sm"
+                className={`mt-2 w-full shadow-sm ${ambient ? authPrimary : ''}`}
               >
                 <ArrowLeftOnRectangleIcon />
                 <span>

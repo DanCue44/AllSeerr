@@ -1,6 +1,6 @@
 ---
 title: Kubernetes (Advanced)
-description: Install Seerr in Kubernetes
+description: Install AllSeerr in Kubernetes
 sidebar_position: 3
 ---
 # Kubernetes
@@ -9,13 +9,15 @@ This method is not recommended for most users. It is intended for advanced users
 :::
 
 :::info
-All official Seerr charts are cryptographically signed and include a verified [Software Bill of Materials (SBOM)](https://cyclonedx.org/).
-
-To confirm that the chart you are using is authentic and unmodified, please refer to the [Verifying Signed Artifacts](/using-seerr/advanced/verifying-signed-artifacts#verifying-signed-helm-charts) guide.
+AllSeerr does not publish a Helm chart. Seerr's chart works if you point its image at `ghcr.io/dancue44/allseerr`, or use a plain Deployment like any other single container app.
 :::
 
 ## Installation
 ```console
-helm install seerr oci://ghcr.io/seerr-team/seerr/seerr-chart
+helm install allseerr oci://ghcr.io/seerr-team/seerr/seerr-chart \
+  --set image.registry=ghcr.io \
+  --set image.repository=dancue44/allseerr \
+  --set image.tag=latest
 ```
-Helm values can be found in the Seerr repository under [charts/seerr-chart/README.md](https://github.com/seerr-team/seerr/tree/develop/charts/seerr-chart).
+
+Check Seerr's chart `values.yaml` for the exact image keys and the other values. The container listens on port `5055` and keeps its data in `/app/config`, so give it a persistent volume there.

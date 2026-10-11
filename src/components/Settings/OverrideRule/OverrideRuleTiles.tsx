@@ -8,6 +8,7 @@ import type { User } from '@server/entity/User';
 import type {
   DVRSettings,
   Language,
+  LidarrSettings,
   RadarrSettings,
   SonarrSettings,
 } from '@server/lib/settings';
@@ -27,6 +28,10 @@ const messages = defineMessages('components.Settings.OverrideRuleTile', {
   keywords: 'Keywords',
   conditions: 'Conditions',
   settings: 'Settings',
+  autoApprove: 'Auto-Approve',
+  autoApproveEnabled: 'Enabled',
+  autoApproveMaxSeasons:
+    '{seasons, plural, one {Up to # season} other {Up to # seasons}}',
 });
 
 interface OverrideRuleTilesProps {
@@ -41,6 +46,7 @@ interface OverrideRuleTilesProps {
   revalidate: () => void;
   radarrServices: RadarrSettings[];
   sonarrServices: SonarrSettings[];
+  lidarrServices?: LidarrSettings[];
 }
 
 const OverrideRuleTiles = ({
@@ -49,6 +55,7 @@ const OverrideRuleTiles = ({
   revalidate,
   radarrServices,
   sonarrServices,
+  lidarrServices = [],
 }: OverrideRuleTilesProps) => {
   const intl = useIntl();
   const [users, setUsers] = useState<User[] | null>(null);
@@ -61,16 +68,22 @@ const OverrideRuleTiles = ({
 
   const getServiceInfos = useCallback(async () => {
     const results: (DVRTestResponse & { type: string; id: number })[] = [];
-    const services: DVRSettings[] = [...radarrServices, ...sonarrServices];
+    const services: DVRSettings[] = [
+      ...radarrServices,
+      ...sonarrServices,
+      ...lidarrServices,
+    ];
+    const getServiceType = (service: DVRSettings) =>
+      radarrServices.includes(service as RadarrSettings)
+        ? 'radarr'
+        : lidarrServices.includes(service as LidarrSettings)
+          ? 'lidarr'
+          : 'sonarr';
     for (const service of services) {
       const { hostname, port, apiKey, baseUrl, useSsl = false } = service;
       try {
         const response = await axios.post<DVRTestResponse>(
-          `/api/v1/settings/${
-            radarrServices.includes(service as RadarrSettings)
-              ? 'radarr'
-              : 'sonarr'
-          }/test`,
+          `/api/v1/settings/${getServiceType(service)}/test`,
           {
             hostname,
             apiKey,
@@ -80,17 +93,13 @@ const OverrideRuleTiles = ({
           }
         );
         results.push({
-          type: radarrServices.includes(service as RadarrSettings)
-            ? 'radarr'
-            : 'sonarr',
+          type: getServiceType(service),
           id: service.id,
           ...response.data,
         });
       } catch {
         results.push({
-          type: radarrServices.includes(service as RadarrSettings)
-            ? 'radarr'
-            : 'sonarr',
+          type: getServiceType(service),
           id: service.id,
           profiles: [],
           rootFolders: [],
@@ -99,7 +108,7 @@ const OverrideRuleTiles = ({
       }
     }
     setTestResponses(results);
-  }, [radarrServices, sonarrServices]);
+  }, [radarrServices, sonarrServices, lidarrServices]);
 
   useEffect(() => {
     getServiceInfos();
@@ -140,7 +149,7 @@ const OverrideRuleTiles = ({
   return (
     <>
       {rules.map((rule) => (
-        <li className="flex h-full flex-col rounded-lg bg-gray-800 text-left shadow ring-1 ring-gray-500">
+        <li className="service-card flex h-full flex-col rounded-lg bg-gray-800 text-left shadow ring-1 ring-gray-500">
           <div className="flex w-full flex-1 items-center justify-between space-x-6 p-6">
             <div className="flex-1 truncate">
               <span className="text-lg">
@@ -236,7 +245,9 @@ const OverrideRuleTiles = ({
                       (r) =>
                         (r.id === rule.radarrServiceId &&
                           r.type === 'radarr') ||
-                        (r.id === rule.sonarrServiceId && r.type === 'sonarr')
+                        (r.id === rule.sonarrServiceId &&
+                          r.type === 'sonarr') ||
+                        (r.id === rule.lidarrServiceId && r.type === 'lidarr')
                     )
                     ?.profiles.find((profile) => rule.profileId === profile.id)
                     ?.name || rule.profileId}
@@ -264,7 +275,9 @@ const OverrideRuleTiles = ({
                               (r.id === rule.radarrServiceId &&
                                 r.type === 'radarr') ||
                               (r.id === rule.sonarrServiceId &&
-                                r.type === 'sonarr')
+                                r.type === 'sonarr') ||
+                              (r.id === rule.lidarrServiceId &&
+                                r.type === 'lidarr')
                           )
                           ?.tags?.find((t) => t.id === Number(tag))?.label ||
                           tag}
@@ -273,9 +286,21 @@ const OverrideRuleTiles = ({
                   </div>
                 </p>
               )}
+              {rule.autoApprove && (
+                <p className="truncate text-sm leading-5 text-gray-300">
+                  <span className="mr-2 font-bold">
+                    {intl.formatMessage(messages.autoApprove)}
+                  </span>
+                  {rule.maxSeasons
+                    ? intl.formatMessage(messages.autoApproveMaxSeasons, {
+                        seasons: rule.maxSeasons,
+                      })
+                    : intl.formatMessage(messages.autoApproveEnabled)}
+                </p>
+              )}
             </div>
           </div>
-          <div className="border-t border-gray-500">
+          <div className="service-card-actions border-t border-gray-500">
             <div className="-mt-px flex">
               <div className="flex w-0 flex-1 border-r border-gray-500">
                 <button

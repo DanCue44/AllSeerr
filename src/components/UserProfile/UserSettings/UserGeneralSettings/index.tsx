@@ -5,7 +5,10 @@ import PageTitle from '@app/components/Common/PageTitle';
 import LanguageSelector from '@app/components/LanguageSelector';
 import QuotaSelector from '@app/components/QuotaSelector';
 import RegionSelector from '@app/components/RegionSelector';
+import AccentColorPicker from '@app/components/Settings/AccentColorPicker';
 import { availableLanguages } from '@app/context/LanguageContext';
+import { useTour } from '@app/context/TourContext';
+import useBookLanguages from '@app/hooks/useBookLanguages';
 import useLocale from '@app/hooks/useLocale';
 import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
@@ -13,10 +16,12 @@ import { Permission, UserType, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
-import { ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
+import { ArrowDownOnSquareIcon, MapIcon } from '@heroicons/react/24/outline';
 import { ApiErrorCode } from '@server/constants/error';
 import type { UserSettingsGeneralResponse } from '@server/interfaces/api/userSettingsInterfaces';
+import { MOVIE_RATINGS, TV_RATINGS } from '@server/lib/contentRatingLimit';
 import type { AvailableLocale } from '@server/types/languages';
+import { DEFAULT_ACCENT_COLOR } from '@server/utils/accentColor';
 import axios from 'axios';
 import { Field, Form, Formik } from 'formik';
 import { useRouter } from 'next/router';
@@ -58,8 +63,21 @@ const messages = defineMessages(
     streamingRegionTip: 'Show streaming sites by regional availability',
     movierequestlimit: 'Movie Request Limit',
     seriesrequestlimit: 'Series Request Limit',
+    musicrequestlimit: 'Music Request Limit',
+    bookrequestlimit: 'Book Request Limit',
     enableOverride: 'Override Global Limit',
+    movieratinglimit: 'Movie Rating Limit',
+    movieratinglimitTip: 'Highest US movie certification this user can request',
+    seriesratinglimit: 'Series Rating Limit',
+    seriesratinglimitTip: 'Highest US TV rating this user can request',
+    noratinglimit: 'No Limit',
     applanguage: 'Display Language',
+    accentColor: 'Accent Color',
+    accentColorTip: 'Accent color of the Ambient interface for this account',
+    accentColorDefault: 'Use Server Default',
+    bookLanguage: 'Book Language',
+    bookLanguageTip: 'Language books are requested in',
+    bookLanguageDefault: 'Use Server Default ({language})',
     languageDefault: 'Default ({language})',
     validationemailrequired: 'Email required',
     validationemailformat: 'Valid email required',
@@ -69,6 +87,9 @@ const messages = defineMessages(
     plexwatchlistsyncseries: 'Auto-Request Series',
     plexwatchlistsyncseriestip:
       'Automatically request series on your <PlexWatchlistSupportLink>Plex Watchlist</PlexWatchlistSupportLink>',
+    tour: 'Guided Tour',
+    tourtip: 'A quick look at where everything is and what you can do',
+    taketour: 'Take the Tour',
   }
 );
 
@@ -78,6 +99,8 @@ const UserGeneralSettings = () => {
   const { locale, setLocale } = useLocale();
   const [movieQuotaEnabled, setMovieQuotaEnabled] = useState(false);
   const [tvQuotaEnabled, setTvQuotaEnabled] = useState(false);
+  const [musicQuotaEnabled, setMusicQuotaEnabled] = useState(false);
+  const [bookQuotaEnabled, setBookQuotaEnabled] = useState(false);
   const router = useRouter();
   const {
     user,
@@ -86,8 +109,14 @@ const UserGeneralSettings = () => {
   } = useUser({
     id: Number(router.query.userId),
   });
-  const { user: currentUser, hasPermission: currentHasPermission } = useUser();
+  const {
+    user: currentUser,
+    hasPermission: currentHasPermission,
+    revalidate: revalidateCurrentUser,
+  } = useUser();
   const { currentSettings } = useSettings();
+  const tour = useTour();
+  const bookLanguages = useBookLanguages();
   const {
     data,
     error,
@@ -124,6 +153,12 @@ const UserGeneralSettings = () => {
     setTvQuotaEnabled(
       data?.tvQuotaLimit != undefined && data?.tvQuotaDays != undefined
     );
+    setMusicQuotaEnabled(
+      data?.musicQuotaLimit != undefined && data?.musicQuotaDays != undefined
+    );
+    setBookQuotaEnabled(
+      data?.bookQuotaLimit != undefined && data?.bookQuotaDays != undefined
+    );
   }, [data]);
 
   if (!data && !error) {
@@ -159,8 +194,16 @@ const UserGeneralSettings = () => {
           movieQuotaDays: data?.movieQuotaDays,
           tvQuotaLimit: data?.tvQuotaLimit,
           tvQuotaDays: data?.tvQuotaDays,
+          musicQuotaLimit: data?.musicQuotaLimit,
+          musicQuotaDays: data?.musicQuotaDays,
+          bookQuotaLimit: data?.bookQuotaLimit,
+          bookQuotaDays: data?.bookQuotaDays,
+          movieRatingLimit: data?.movieRatingLimit ?? '',
+          tvRatingLimit: data?.tvRatingLimit ?? '',
           watchlistSyncMovies: data?.watchlistSyncMovies,
           watchlistSyncTv: data?.watchlistSyncTv,
+          accentColor: data?.accentColor ?? '',
+          bookLanguage: data?.bookLanguage ?? '',
         }}
         validationSchema={UserGeneralSettingsSchema}
         enableReinitialize
@@ -180,8 +223,22 @@ const UserGeneralSettings = () => {
               movieQuotaDays: movieQuotaEnabled ? values.movieQuotaDays : null,
               tvQuotaLimit: tvQuotaEnabled ? values.tvQuotaLimit : null,
               tvQuotaDays: tvQuotaEnabled ? values.tvQuotaDays : null,
+              musicQuotaLimit: musicQuotaEnabled
+                ? values.musicQuotaLimit
+                : null,
+              musicQuotaDays: musicQuotaEnabled ? values.musicQuotaDays : null,
+              bookQuotaLimit: bookQuotaEnabled ? values.bookQuotaLimit : null,
+              bookQuotaDays: bookQuotaEnabled ? values.bookQuotaDays : null,
+              ...(currentHasPermission(Permission.MANAGE_USERS)
+                ? {
+                    movieRatingLimit: values.movieRatingLimit || null,
+                    tvRatingLimit: values.tvRatingLimit || null,
+                  }
+                : {}),
               watchlistSyncMovies: values.watchlistSyncMovies,
               watchlistSyncTv: values.watchlistSyncTv,
+              accentColor: values.accentColor || null,
+              bookLanguage: values.bookLanguage || null,
             });
 
             if (currentUser?.id === user?.id && setLocale) {
@@ -224,6 +281,9 @@ const UserGeneralSettings = () => {
           } finally {
             revalidate();
             revalidateUser();
+            if (currentUser?.id === user?.id) {
+              revalidateCurrentUser();
+            }
           }
         }}
       >
@@ -363,6 +423,46 @@ const UserGeneralSettings = () => {
                 </div>
               </div>
               <div className="form-row">
+                <label
+                  id="accentColor-label"
+                  htmlFor="accentColorDefault"
+                  className="text-label"
+                >
+                  {intl.formatMessage(messages.accentColor)}
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.accentColorTip)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <label className="mb-3 flex items-center gap-2">
+                    <input
+                      id="accentColorDefault"
+                      type="checkbox"
+                      checked={!values.accentColor}
+                      onChange={(e) =>
+                        setFieldValue(
+                          'accentColor',
+                          e.target.checked
+                            ? ''
+                            : currentSettings.accentColor ||
+                                DEFAULT_ACCENT_COLOR
+                        )
+                      }
+                    />
+                    <span>
+                      {intl.formatMessage(messages.accentColorDefault)}
+                    </span>
+                  </label>
+                  {values.accentColor && (
+                    <AccentColorPicker
+                      id="accentColor"
+                      value={values.accentColor}
+                      onChange={(color) => setFieldValue('accentColor', color)}
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="form-row">
                 <label htmlFor="discoverRegion" className="text-label">
                   <span>{intl.formatMessage(messages.discoverRegion)}</span>
                   <span className="label-tip">
@@ -418,6 +518,34 @@ const UserGeneralSettings = () => {
                   </div>
                 </div>
               </div>
+              {currentSettings.booksEnabled && (
+                <div className="form-row">
+                  <label htmlFor="bookLanguage" className="text-label">
+                    <span>{intl.formatMessage(messages.bookLanguage)}</span>
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.bookLanguageTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field">
+                      <Field as="select" id="bookLanguage" name="bookLanguage">
+                        <option value="">
+                          {intl.formatMessage(messages.bookLanguageDefault, {
+                            language: bookLanguages.getLanguageName(
+                              bookLanguages.serverLanguage
+                            ),
+                          })}
+                        </option>
+                        {bookLanguages.options.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              )}
               {currentHasPermission(Permission.MANAGE_USERS) &&
                 !hasPermission(Permission.MANAGE_USERS) && (
                   <>
@@ -501,8 +629,152 @@ const UserGeneralSettings = () => {
                         </div>
                       </div>
                     </div>
+                    {currentSettings.musicEnabled && (
+                      <div className="form-row">
+                        <label htmlFor="musicQuotaLimit" className="text-label">
+                          <span>
+                            {intl.formatMessage(messages.musicrequestlimit)}
+                          </span>
+                        </label>
+                        <div className="form-input-area">
+                          <div className="flex flex-col">
+                            <div className="mb-4 flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={musicQuotaEnabled}
+                                onChange={() => setMusicQuotaEnabled((s) => !s)}
+                              />
+                              <span className="ml-2 text-gray-300">
+                                {intl.formatMessage(messages.enableOverride)}
+                              </span>
+                            </div>
+                            <QuotaSelector
+                              isDisabled={!musicQuotaEnabled}
+                              dayFieldName="musicQuotaDays"
+                              limitFieldName="musicQuotaLimit"
+                              mediaType="music"
+                              onChange={setFieldValue}
+                              defaultDays={values.musicQuotaDays}
+                              defaultLimit={values.musicQuotaLimit}
+                              dayOverride={
+                                !musicQuotaEnabled
+                                  ? data?.globalMusicQuotaDays
+                                  : undefined
+                              }
+                              limitOverride={
+                                !musicQuotaEnabled
+                                  ? data?.globalMusicQuotaLimit
+                                  : undefined
+                              }
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {currentSettings.booksEnabled && (
+                      <div className="form-row">
+                        <label htmlFor="bookQuotaLimit" className="text-label">
+                          <span>
+                            {intl.formatMessage(messages.bookrequestlimit)}
+                          </span>
+                        </label>
+                        <div className="form-input-area">
+                          <div className="flex flex-col">
+                            <div className="mb-4 flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={bookQuotaEnabled}
+                                onChange={() => setBookQuotaEnabled((s) => !s)}
+                              />
+                              <span className="ml-2 text-gray-300">
+                                {intl.formatMessage(messages.enableOverride)}
+                              </span>
+                            </div>
+                            <QuotaSelector
+                              isDisabled={!bookQuotaEnabled}
+                              dayFieldName="bookQuotaDays"
+                              limitFieldName="bookQuotaLimit"
+                              mediaType="book"
+                              onChange={setFieldValue}
+                              defaultDays={values.bookQuotaDays}
+                              defaultLimit={values.bookQuotaLimit}
+                              dayOverride={
+                                !bookQuotaEnabled
+                                  ? data?.globalBookQuotaDays
+                                  : undefined
+                              }
+                              limitOverride={
+                                !bookQuotaEnabled
+                                  ? data?.globalBookQuotaLimit
+                                  : undefined
+                              }
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
+              {currentHasPermission(Permission.MANAGE_USERS) && (
+                <>
+                  <div className="form-row">
+                    <label htmlFor="movieRatingLimit" className="text-label">
+                      <span>
+                        {intl.formatMessage(messages.movieratinglimit)}
+                      </span>
+                      <span className="label-tip">
+                        {intl.formatMessage(messages.movieratinglimitTip)}
+                      </span>
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <Field
+                          as="select"
+                          id="movieRatingLimit"
+                          name="movieRatingLimit"
+                        >
+                          <option value="">
+                            {intl.formatMessage(messages.noratinglimit)}
+                          </option>
+                          {MOVIE_RATINGS.map((rating) => (
+                            <option key={rating} value={rating}>
+                              {rating}
+                            </option>
+                          ))}
+                        </Field>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="tvRatingLimit" className="text-label">
+                      <span>
+                        {intl.formatMessage(messages.seriesratinglimit)}
+                      </span>
+                      <span className="label-tip">
+                        {intl.formatMessage(messages.seriesratinglimitTip)}
+                      </span>
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <Field
+                          as="select"
+                          id="tvRatingLimit"
+                          name="tvRatingLimit"
+                        >
+                          <option value="">
+                            {intl.formatMessage(messages.noratinglimit)}
+                          </option>
+                          {TV_RATINGS.map((rating) => (
+                            <option key={rating} value={rating}>
+                              {rating}
+                            </option>
+                          ))}
+                        </Field>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
               {hasPermission(
                 [Permission.AUTO_REQUEST, Permission.AUTO_REQUEST_MOVIE],
                 { type: 'or' }
@@ -596,6 +868,27 @@ const UserGeneralSettings = () => {
                     </div>
                   </div>
                 )}
+              {/* Only for the user's own profile, in the Ambient interface */}
+              {tour.available && currentUser?.id === user?.id && (
+                <div className="form-row">
+                  <label className="text-label">
+                    {intl.formatMessage(messages.tour)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.tourtip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <Button
+                      type="button"
+                      buttonType="default"
+                      onClick={() => tour.startTour()}
+                    >
+                      <MapIcon />
+                      <span>{intl.formatMessage(messages.taketour)}</span>
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="actions">
                 <div className="flex justify-end">
                   <span className="ml-3 inline-flex rounded-md shadow-sm">

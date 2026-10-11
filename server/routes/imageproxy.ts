@@ -1,34 +1,8 @@
-import ImageProxy from '@server/lib/imageproxy';
+import { getImageProxy } from '@server/lib/imageProxies';
 import logger from '@server/logger';
 import { Router } from 'express';
 
 const router = Router();
-
-// Delay the initialization of ImageProxy instances until the proxy (if any) is properly configured
-let _tmdbImageProxy: ImageProxy;
-function initTmdbImageProxy() {
-  if (!_tmdbImageProxy) {
-    _tmdbImageProxy = new ImageProxy('tmdb', 'https://image.tmdb.org', {
-      rateLimitOptions: {
-        maxRequests: 20,
-        maxRPS: 50,
-      },
-    });
-  }
-  return _tmdbImageProxy;
-}
-let _tvdbImageProxy: ImageProxy;
-function initTvdbImageProxy() {
-  if (!_tvdbImageProxy) {
-    _tvdbImageProxy = new ImageProxy('tvdb', 'https://artworks.thetvdb.com', {
-      rateLimitOptions: {
-        maxRequests: 20,
-        maxRPS: 50,
-      },
-    });
-  }
-  return _tvdbImageProxy;
-}
 
 router.get<{
   type: string;
@@ -41,19 +15,18 @@ router.get<{
     return next({ status: 403, message: 'Invalid URL for image proxy.' });
   }
 
+  const proxy = getImageProxy(req.params.type);
+
+  if (!proxy) {
+    logger.error('Unsupported image type', {
+      imagePath,
+      type: req.params.type,
+    });
+    return next({ status: 400, message: 'Unsupported image type.' });
+  }
+
   try {
-    let imageData;
-    if (req.params.type === 'tmdb') {
-      imageData = await initTmdbImageProxy().getImage(imagePath);
-    } else if (req.params.type === 'tvdb') {
-      imageData = await initTvdbImageProxy().getImage(imagePath);
-    } else {
-      logger.error('Unsupported image type', {
-        imagePath,
-        type: req.params.type,
-      });
-      return next({ status: 400, message: 'Unsupported image type.' });
-    }
+    const imageData = await proxy.getImage(imagePath);
 
     res.writeHead(200, {
       'Content-Type': `image/${imageData.meta.extension}`,

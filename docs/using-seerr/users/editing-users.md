@@ -31,13 +31,13 @@ You cannot leave this field blank.
 
 ### Display Language
 
-Users can override the [global display language](/using-seerr/settings/general#display-language) to use Seerr in their preferred language.
+Users can override the [global display language](/using-seerr/settings/general#display-language) to use AllSeerr in their preferred language.
 
 ### Discover Region & Discover Language
 
 Users can override the [global filter settings](/using-seerr/settings/general#discover-region-discover-language--streaming-region) to suit their own preferences.
 
-### Movie Request Limit & Series Request Limit
+### Movie, Series, Music and Book Request Limits
 
 You can override the default settings and assign different request limits for specific users by checking the **Enable Override** box and selecting the desired request limit and time period.
 
@@ -46,6 +46,22 @@ Unless an override is configured, users are granted the global request limits.
 Note that users with the **Manage Users** permission are exempt from request limits, since that permission also grants the ability to submit requests on behalf of other users.
 
 Users are also unable to modify their own request limits.
+
+### Movie Rating Limit & Series Rating Limit
+
+Users with the **Manage Users** permission can set the highest US movie certification and US TV rating a user can request. Titles above the limit are flagged and cannot be requested by that user. **No Limit** is the default.
+
+### Book Language
+
+The language this user's book requests are made in. **Use Server Default** follows [Book Language](/using-seerr/settings/general#book-language) in the general settings.
+
+### Guided Tour
+
+**Take the Tour** opens the [guided tour](/using-seerr/features/guided-tour) again.
+
+## API Key
+
+Each user can generate a **personal API key** in their profile settings. It lets apps and scripts act as that user, with the same permissions as the account. Send it in the `X-Api-Key` header. The key is shown only once, right after it is generated; regenerating it replaces the old key, and it can be revoked at any time.
 
 ## Password
 

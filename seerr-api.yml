@@ -26,6 +26,10 @@ tags:
     description: Endpoints related to retrieving movies and their details.
   - name: tv
     description: Endpoints related to retrieving TV series and their details.
+  - name: music
+    description: Endpoints related to retrieving albums, artists and their artwork.
+  - name: books
+    description: Endpoints related to retrieving books and authors from OpenLibrary.
   - name: other
     description: Endpoints related to other TMDB data
   - name: person
@@ -35,11 +39,17 @@ tags:
   - name: collection
     description: Endpoints related to retrieving collection details.
   - name: service
-    description: Endpoints related to getting service (Radarr/Sonarr) details.
+    description: Endpoints related to getting service (Radarr/Sonarr/Lidarr) details.
   - name: watchlist
     description: Collection of media to watch later
+  - name: favorite
+    description: Movies, series, albums and books a user has marked as favorites.
+  - name: library
+    description: Browse the movies, series and collections already on the server.
   - name: blocklist
     description: Blocklisted media from discovery page.
+  - name: calendar
+    description: Upcoming releases from the configured Radarr, Sonarr and Lidarr servers.
 servers:
   - url: '{server}/api/v1'
     variables:
@@ -54,6 +64,17 @@ components:
         tmdbId:
           type: number
           example: 1
+        mbId:
+          type: string
+          description: MusicBrainz release group id, for albums in place of tmdbId
+          example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843
+        olId:
+          type: string
+          description: OpenLibrary work id, for books in place of tmdbId
+          example: OL45804W
+        mediaType:
+          type: string
+          enum: [movie, tv, music, book]
         title:
           type: string
         media:
@@ -61,6 +82,86 @@ components:
         userId:
           type: number
           example: 1
+    CalendarItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: episode-393189-2-5
+        type:
+          type: string
+          enum: [movie, episode, album]
+        date:
+          type: string
+          example: '2026-10-09'
+        airDateUtc:
+          type: string
+          example: '2026-10-10T01:00:00Z'
+        releaseType:
+          type: string
+          enum: [cinema, digital, physical, airing, release]
+        title:
+          type: string
+          example: Andor
+        subtitle:
+          type: string
+          example: S02E05 - The Long Night
+        tmdbId:
+          type: number
+          example: 83867
+        tvdbId:
+          type: number
+          example: 393189
+        posterUrl:
+          type: string
+          example: https://artworks.thetvdb.com/banners/andor.jpg
+        hasFile:
+          type: boolean
+          example: false
+        mediaId:
+          type: number
+          example: 11
+        requestedBy:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: number
+                example: 1
+              displayName:
+                type: string
+                example: Alex
+              avatar:
+                type: string
+        requestedByMe:
+          type: boolean
+          example: true
+    Favorite:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+          readOnly: true
+        tmdbId:
+          type: number
+          example: 550
+        mbId:
+          type: string
+          description: MusicBrainz release group id, for albums in place of tmdbId
+          example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843
+        olId:
+          type: string
+          description: OpenLibrary work id, for books in place of tmdbId
+          example: OL45804W
+        mediaType:
+          type: string
+          enum: [movie, tv, music, book]
+        createdAt:
+          type: string
+          example: '2020-09-12T10:00:27.000Z'
+          readOnly: true
     Watchlist:
       type: object
       properties:
@@ -71,6 +172,18 @@ components:
         tmdbId:
           type: number
           example: 1
+        mbId:
+          type: string
+          description: MusicBrainz release group id, for albums in place of tmdbId, or MusicBrainz artist id, for followed artists
+          example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843
+        olId:
+          type: string
+          description: OpenLibrary work id, for books in place of tmdbId, or OpenLibrary author id, for followed authors
+          example: OL45804W
+        mediaType:
+          type: string
+          description: Artists and authors are followed by adding them with the artist or author media type
+          enum: [movie, tv, music, book, artist, author]
         ratingKey:
           type: string
         type:
@@ -133,6 +246,16 @@ components:
           type: number
           example: 5
           readOnly: true
+        movieRatingLimit:
+          type: string
+          nullable: true
+          example: 'PG-13'
+          readOnly: true
+        tvRatingLimit:
+          type: string
+          nullable: true
+          example: 'TV-PG'
+          readOnly: true
       required:
         - id
         - email
@@ -160,10 +283,46 @@ components:
           type: string
           nullable: true
           example: 'US'
+        blockedWatchProviders:
+          type: string
+          nullable: true
+          example: '8|1796'
+          description: TMDB watch provider IDs, separated by a pipe. Titles streaming on these subscription providers in the streaming region cannot be requested.
         originalLanguage:
           type: string
           nullable: true
           example: 'en'
+        accentColor:
+          type: string
+          nullable: true
+          example: '#4F8EF7'
+          description: Accent color of the Ambient interface for this user. Empty or null uses the server accent color.
+        bookLanguage:
+          type: string
+          nullable: true
+          enum:
+            [
+              en,
+              es,
+              fr,
+              de,
+              it,
+              pt,
+              nl,
+              sv,
+              da,
+              'no',
+              fi,
+              pl,
+              ru,
+              ja,
+              zh,
+              ko,
+              any,
+              null,
+            ]
+          example: en
+          description: ISO 639-1 code of the language this user requests books in. Null uses the server default.
         movieQuotaLimit:
           type: number
           nullable: true
@@ -184,6 +343,36 @@ components:
           nullable: true
           description: 'Time period in days for TV quota'
           example: 14
+        musicQuotaLimit:
+          type: number
+          nullable: true
+          description: 'Maximum number of music requests allowed'
+          example: 10
+        musicQuotaDays:
+          type: number
+          nullable: true
+          description: 'Time period in days for music quota'
+          example: 30
+        bookQuotaLimit:
+          type: number
+          nullable: true
+          description: 'Maximum number of book requests allowed. Each format of a book counts as one request.'
+          example: 10
+        bookQuotaDays:
+          type: number
+          nullable: true
+          description: 'Time period in days for book quota'
+          example: 30
+        movieRatingLimit:
+          type: string
+          nullable: true
+          description: 'Highest US movie certification the user may request (G, PG, PG-13, R or NC-17). Null means no limit. Only users with the `MANAGE_USERS` permission can change it.'
+          example: 'PG-13'
+        tvRatingLimit:
+          type: string
+          nullable: true
+          description: 'Highest US TV rating the user may request (TV-Y, TV-Y7, TV-G, TV-PG, TV-14 or TV-MA). Null means no limit. Only users with the `MANAGE_USERS` permission can change it.'
+          example: 'TV-PG'
         globalMovieQuotaDays:
           type: number
           nullable: true
@@ -204,6 +393,26 @@ components:
           nullable: true
           description: 'Global TV quota days setting'
           example: 14
+        globalMusicQuotaLimit:
+          type: number
+          nullable: true
+          description: 'Global music quota limit setting'
+          example: 10
+        globalMusicQuotaDays:
+          type: number
+          nullable: true
+          description: 'Global music quota days setting'
+          example: 30
+        globalBookQuotaLimit:
+          type: number
+          nullable: true
+          description: 'Global book quota limit setting'
+          example: 10
+        globalBookQuotaDays:
+          type: number
+          nullable: true
+          description: 'Global book quota days setting'
+          example: 30
         watchlistSyncMovies:
           type: boolean
           nullable: true
@@ -229,6 +438,16 @@ components:
         applicationUrl:
           type: string
           example: https://os.example.com
+        applicationLogoVersion:
+          type: string
+          readOnly: true
+          example: 3f2a9c81d4e7
+          description: Version of the uploaded application logo, empty when the bundled logo is used. Changes only through the logo upload and reset endpoints.
+        accentColor:
+          type: string
+          pattern: '^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$'
+          example: '#EC703E'
+          description: Accent color of the Ambient interface.
         hideAvailable:
           type: boolean
           example: false
@@ -238,6 +457,53 @@ components:
         partialRequestsEnabled:
           type: boolean
           example: false
+        allowCurrentSeasonRequests:
+          type: boolean
+          example: false
+          description: Allows users without the Manage Requests permission to request only the current season of a series. Managers can always make these requests. When a new season starts, the older seasons those requests brought in are deleted from disk after the notice period, and seasons that were already available are kept unless an admin approves deleting them.
+        defaultBookFormat:
+          type: string
+          enum: [ebook, audiobook, both]
+          example: both
+          description: Format preselected when requesting a book.
+        bookLanguage:
+          type: string
+          enum:
+            [
+              en,
+              es,
+              fr,
+              de,
+              it,
+              pt,
+              nl,
+              sv,
+              da,
+              'no',
+              fi,
+              pl,
+              ru,
+              ja,
+              zh,
+              ko,
+              any,
+            ]
+          example: en
+          description: ISO 639-1 code of the language books are requested in, unless a user sets their own. `any` takes whichever language is found. With Chaptarr, AllSeerr keeps a tag and a release profile for each requested language.
+        bookService:
+          type: string
+          enum: [chaptarr, lazylibrarian]
+          example: chaptarr
+          description: Service book requests are sent to. When it is not set or not configured, Chaptarr is used when configured, otherwise LazyLibrarian.
+        googleBooksApiKey:
+          type: string
+          example: yourapikey
+          description: Google Books API key used to check whether books have ebook editions. Left empty, ebook editions are not checked. Only returned to admins.
+        currentSeasonRolloverDelayDays:
+          type: integer
+          minimum: 0
+          example: 3
+          description: Days admins are notified before older seasons of a current season request are deleted.
         localLogin:
           type: boolean
           example: true
@@ -535,6 +801,163 @@ components:
               type: string
               enum: [tvdb, tmdb]
               example: 'tvdb'
+    BazarrSettings:
+      type: object
+      properties:
+        hostname:
+          type: string
+          nullable: true
+          example: 'bazarr.example.com'
+        port:
+          type: number
+          nullable: true
+          example: 6767
+        useSsl:
+          type: boolean
+          nullable: true
+        urlBase:
+          type: string
+          nullable: true
+          example: '/bazarr'
+        apiKey:
+          type: string
+          nullable: true
+        externalUrl:
+          type: string
+          nullable: true
+    LazyLibrarianSettings:
+      type: object
+      properties:
+        hostname:
+          type: string
+          nullable: true
+          example: 'lazylibrarian.example.com'
+        port:
+          type: number
+          nullable: true
+          example: 5299
+        useSsl:
+          type: boolean
+          nullable: true
+        urlBase:
+          type: string
+          nullable: true
+          description: LazyLibrarian's web root (http_root), if it has one
+          example: '/request'
+        apiKey:
+          type: string
+          nullable: true
+        externalUrl:
+          type: string
+          nullable: true
+        audiobookshelfUrl:
+          type: string
+          nullable: true
+          deprecated: true
+          description: Moved to AudiobookshelfSettings.url. Still read while that is unset.
+          example: 'https://books.example.com'
+        audiobookshelfLibraryId:
+          type: string
+          nullable: true
+          deprecated: true
+          description: Moved to AudiobookshelfSettings.libraryId.
+    AudiobookshelfSettings:
+      type: object
+      properties:
+        url:
+          type: string
+          nullable: true
+          description: Public Audiobookshelf address, linked from available books
+          example: 'https://books.example.com'
+        libraryId:
+          type: string
+          nullable: true
+          description: Audiobookshelf library searched for a book's title. Without it the link opens Audiobookshelf's home page.
+          example: '3f2b8c1e-6a4d-4e9b-8c7a-1d2e3f4a5b6c'
+        ebookLibraryId:
+          type: string
+          nullable: true
+          description: Audiobookshelf library holding the ebooks, when they are kept apart from the audiobooks. Without it ebooks are searched for in the main library.
+          example: '9e8d7c6b-5a4f-4e3d-9c2b-1a0f9e8d7c6b'
+        apiKey:
+          type: string
+          nullable: true
+          description: Optional. Only used to list the libraries in the settings.
+    BookRelease:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Google Books volume id, or OpenLibrary work id
+          example: 'zyTCAlFPjgYC'
+        title:
+          type: string
+          example: 'Wind and Truth'
+        authorName:
+          type: string
+          example: 'Brandon Sanderson'
+        authorId:
+          type: string
+          description: OpenLibrary id of the followed author
+          example: 'OL1394865A'
+        date:
+          type: string
+          description: YYYY-MM-DD, or YYYY-MM or YYYY when that is all the source knows
+          example: '2026-12-02'
+        posterUrl:
+          type: string
+        olId:
+          type: string
+          description: Set when the book has a page of its own
+    AudiobookshelfLibrary:
+      type: object
+      properties:
+        id:
+          type: string
+          example: '3f2b8c1e-6a4d-4e9b-8c7a-1d2e3f4a5b6c'
+        name:
+          type: string
+          example: Audiobooks
+        mediaType:
+          type: string
+          example: book
+    SubtitleLanguage:
+      type: object
+      properties:
+        code:
+          type: string
+          example: en
+        name:
+          type: string
+          example: English
+        forced:
+          type: boolean
+        hi:
+          type: boolean
+          description: Hearing impaired
+    SubtitleTrack:
+      allOf:
+        - $ref: '#/components/schemas/SubtitleLanguage'
+        - type: object
+          properties:
+            embedded:
+              type: boolean
+              description: Embedded in the video file rather than a separate subtitle file
+            fileName:
+              type: string
+            size:
+              type: number
+    SubtitleStatus:
+      type: object
+      properties:
+        subtitles:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubtitleTrack'
+        missing:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubtitleLanguage'
     TautulliSettings:
       type: object
       properties:
@@ -697,6 +1120,153 @@ components:
         - is4k
         - enableSeasonFolders
         - isDefault
+    LidarrSettings:
+      type: object
+      properties:
+        id:
+          type: number
+          example: 0
+          readOnly: true
+        name:
+          type: string
+          example: 'Lidarr Main'
+        hostname:
+          type: string
+          example: '127.0.0.1'
+        port:
+          type: number
+          example: 8686
+        apiKey:
+          type: string
+          example: 'exampleapikey'
+        useSsl:
+          type: boolean
+          example: false
+        baseUrl:
+          type: string
+        activeProfileId:
+          type: number
+          example: 1
+        activeProfileName:
+          type: string
+          example: Any
+        activeDirectory:
+          type: string
+          example: '/music'
+        activeMetadataProfileId:
+          type: number
+          example: 1
+        activeMetadataProfileName:
+          type: string
+          example: Standard
+        isDefault:
+          type: boolean
+          example: false
+        externalUrl:
+          type: string
+          example: http://lidarr.example.com
+        syncEnabled:
+          type: boolean
+          example: false
+        preventSearch:
+          type: boolean
+          example: false
+      required:
+        - name
+        - hostname
+        - port
+        - apiKey
+        - useSsl
+        - activeProfileId
+        - activeProfileName
+        - activeDirectory
+        - activeMetadataProfileId
+        - activeMetadataProfileName
+        - isDefault
+    ChaptarrSettings:
+      type: object
+      description: A Chaptarr server, or another Readarr compatible server. The active profile, metadata profile and directory are used for ebooks, the audiobook fields for audiobooks.
+      properties:
+        id:
+          type: number
+          example: 0
+          readOnly: true
+        name:
+          type: string
+          example: 'Chaptarr'
+        hostname:
+          type: string
+          example: '127.0.0.1'
+        port:
+          type: number
+          example: 8789
+        apiKey:
+          type: string
+          example: 'exampleapikey'
+        useSsl:
+          type: boolean
+          example: false
+        baseUrl:
+          type: string
+        activeProfileId:
+          type: number
+          example: 1
+          description: Ebook quality profile
+        activeProfileName:
+          type: string
+          example: E-Book
+        activeDirectory:
+          type: string
+          example: '/ebooks'
+          description: Ebook root folder
+        activeMetadataProfileId:
+          type: number
+          example: 2
+          description: Ebook metadata profile
+        activeMetadataProfileName:
+          type: string
+          example: Ebook Default
+        activeAudiobookProfileId:
+          type: number
+          example: 2
+        activeAudiobookProfileName:
+          type: string
+          example: Audiobook
+        activeAudiobookDirectory:
+          type: string
+          example: '/audiobooks'
+        activeAudiobookMetadataProfileId:
+          type: number
+          example: 1
+        activeAudiobookMetadataProfileName:
+          type: string
+          example: Audiobook Default
+        tags:
+          type: array
+          items:
+            type: number
+        isDefault:
+          type: boolean
+          example: true
+        externalUrl:
+          type: string
+          example: http://chaptarr.example.com
+        syncEnabled:
+          type: boolean
+          example: true
+        preventSearch:
+          type: boolean
+          example: false
+        tagRequests:
+          type: boolean
+          example: false
+      required:
+        - name
+        - hostname
+        - port
+        - apiKey
+        - useSsl
+        - isDefault
     ServarrTag:
       type: object
       properties:
@@ -715,6 +1285,58 @@ components:
         initialized:
           type: boolean
           example: false
+        applicationTitle:
+          type: string
+          example: AllSeerr
+        applicationLogoVersion:
+          type: string
+          example: 3f2a9c81d4e7
+          description: Version of the uploaded application logo, empty when the bundled logo is used
+        accentColor:
+          type: string
+          example: '#EC703E'
+          description: Accent color of the Ambient interface
+        musicEnabled:
+          type: boolean
+          description: Whether Lidarr is configured, so music can be requested
+          example: false
+        subtitlesEnabled:
+          type: boolean
+          description: Whether Bazarr is configured, so subtitles can be checked and requested
+          example: false
+        booksEnabled:
+          type: boolean
+          description: Whether Chaptarr or LazyLibrarian is configured, so books can be requested
+          example: false
+        bookService:
+          type: string
+          enum: [chaptarr, lazylibrarian]
+          description: Service book requests are sent to, missing when books cannot be requested
+          example: chaptarr
+        bookLanguage:
+          type: string
+          enum:
+            [
+              en,
+              es,
+              fr,
+              de,
+              it,
+              pt,
+              nl,
+              sv,
+              da,
+              'no',
+              fi,
+              pl,
+              ru,
+              ja,
+              zh,
+              ko,
+              any,
+            ]
+          description: Language books are requested in, unless a user sets their own
+          example: en
         plexClientIdentifier:
           type: string
           format: uuid
@@ -832,6 +1454,556 @@ components:
             oneOf:
               - $ref: '#/components/schemas/MovieResult'
               - $ref: '#/components/schemas/TvResult'
+    BulkRequestItem:
+      type: object
+      properties:
+        mediaId:
+          type: string
+          description: MusicBrainz release group ID or OpenLibrary work ID
+          example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843
+        title:
+          type: string
+          example: OK Computer
+        isAudiobook:
+          type: boolean
+          description: Books only
+        requestId:
+          type: number
+          description: Created requests only
+        status:
+          type: number
+          description: Status of a created request
+        reason:
+          type: string
+          description: Why the item was skipped (`requested`, `available` or `blocklisted`), or the error that failed it
+    BulkRequestResponse:
+      type: object
+      properties:
+        created:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkRequestItem'
+        skipped:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkRequestItem'
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkRequestItem'
+        monitorNewReleases:
+          type: boolean
+          description: Discography requests only. Whether Lidarr was asked to monitor new releases of the artist.
+    AlbumResult:
+      type: object
+      properties:
+        id:
+          type: string
+          description: MusicBrainz release group ID
+          example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843
+        mediaType:
+          type: string
+          enum: [album]
+        title:
+          type: string
+          example: OK Computer
+        albumType:
+          type: string
+          example: Album
+        secondaryTypes:
+          type: array
+          items:
+            type: string
+        releaseDate:
+          type: string
+          example: '1997-05-21'
+        artistId:
+          type: string
+          example: a74b1b7f-71a5-4011-9441-d0b5e4122711
+        artistName:
+          type: string
+          example: Radiohead
+        score:
+          type: number
+          example: 100
+        posterPath:
+          type: string
+          nullable: true
+        needsCoverArt:
+          type: boolean
+          description: True when the cover is not known yet, it can be fetched from /coverart/batch
+        artistBackdrop:
+          type: string
+          nullable: true
+          description: TheAudioDB fanart of the artist. Only set on the featured hero albums, null when the artist has none.
+        palette:
+          type: array
+          description: Dominant colours of the cover as hex, most prominent first, toned dark enough for a backdrop. Only set on the featured hero items.
+          items:
+            type: string
+            example: '#1d3557'
+        mediaInfo:
+          $ref: '#/components/schemas/MediaInfo'
+    ArtistResult:
+      type: object
+      properties:
+        id:
+          type: string
+          description: MusicBrainz artist ID
+          example: a74b1b7f-71a5-4011-9441-d0b5e4122711
+        mediaType:
+          type: string
+          enum: [artist]
+        name:
+          type: string
+          example: Radiohead
+        type:
+          type: string
+          example: Group
+        sortName:
+          type: string
+        country:
+          type: string
+        disambiguation:
+          type: string
+        score:
+          type: number
+        artistThumb:
+          type: string
+          nullable: true
+        artistBackdrop:
+          type: string
+          nullable: true
+    BookResult:
+      type: object
+      properties:
+        id:
+          type: string
+          description: OpenLibrary work ID
+          example: OL45804W
+        mediaType:
+          type: string
+          enum: [book]
+        title:
+          type: string
+          example: Fantastic Mr Fox
+        subtitle:
+          type: string
+        authorId:
+          type: string
+          example: OL34184A
+        authorName:
+          type: string
+          example: Roald Dahl
+        firstPublishYear:
+          type: number
+          example: 1970
+        editionCount:
+          type: number
+          example: 161
+        posterPath:
+          type: string
+          nullable: true
+          example: https://covers.openlibrary.org/b/id/6498519-M.jpg
+        palette:
+          type: array
+          description: Dominant colours of the cover as hex, most prominent first, toned dark enough for a backdrop. Only set on the featured hero items.
+          items:
+            type: string
+            example: '#1d3557'
+        mediaInfo:
+          $ref: '#/components/schemas/MediaInfo'
+    AuthorResult:
+      type: object
+      properties:
+        id:
+          type: string
+          description: OpenLibrary author ID
+          example: OL34184A
+        mediaType:
+          type: string
+          enum: [author]
+        name:
+          type: string
+          example: Roald Dahl
+        birthDate:
+          type: string
+          example: 13 September 1916
+        deathDate:
+          type: string
+        topWork:
+          type: string
+        workCount:
+          type: number
+        profilePath:
+          type: string
+          nullable: true
+    BookLink:
+      type: object
+      properties:
+        title:
+          type: string
+        url:
+          type: string
+    AudiobookAvailability:
+      type: object
+      properties:
+        exists:
+          type: boolean
+          nullable: true
+          description: Whether Audible lists an audiobook edition, null when Audible could not be asked
+          example: true
+        asin:
+          type: string
+          description: Audible product id of the matched edition
+          example: B0BB3F6HKX
+        narrators:
+          type: array
+          items:
+            type: string
+          description: Narrators of the matched edition
+          example: ['Dylan Baker']
+        runtimeMinutes:
+          type: integer
+          description: Length of the matched edition in minutes
+          example: 1518
+        coverUrl:
+          type: string
+          description: Audible cover of the matched edition
+          example: https://m.media-amazon.com/images/I/51S2iJN3DYL._SL500_.jpg
+      required:
+        - exists
+    EbookAvailability:
+      type: object
+      properties:
+        exists:
+          type: boolean
+          nullable: true
+          description: Whether Google Books lists an ebook edition, null when no Google Books API key is set, Google could not be asked or it has no volume of the book
+          example: true
+        volumeId:
+          type: string
+          description: Google Books volume the answer is based on
+          example: XfFvDwAAQBAJ
+      required:
+        - exists
+    BookDetails:
+      type: object
+      properties:
+        id:
+          type: string
+          example: OL45804W
+        olId:
+          type: string
+          example: OL45804W
+        mediaType:
+          type: string
+          enum: [book]
+        title:
+          type: string
+          example: Fantastic Mr Fox
+        subtitle:
+          type: string
+        description:
+          type: string
+        authors:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                example: OL34184A
+              name:
+                type: string
+                example: Roald Dahl
+        firstPublishYear:
+          type: number
+          example: 1970
+        posterPath:
+          type: string
+          nullable: true
+        subjects:
+          type: array
+          items:
+            type: string
+        subjectPlaces:
+          type: array
+          items:
+            type: string
+        subjectPeople:
+          type: array
+          items:
+            type: string
+        subjectTimes:
+          type: array
+          items:
+            type: string
+        editionCount:
+          type: number
+        pageCount:
+          type: number
+          description: Median page count of the editions
+        ratingsAverage:
+          type: number
+        ratingsCount:
+          type: number
+        languages:
+          type: array
+          items:
+            type: string
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookLink'
+        audiobookshelfUrl:
+          type: string
+          nullable: true
+          description: Where the book opens in Audiobookshelf, once either format is available and an Audiobookshelf address is set
+        audiobookshelfEbookUrl:
+          type: string
+          nullable: true
+          description: Where the ebook opens in Audiobookshelf, once it is available. The book itself when an API key is set and the book is found in the library, otherwise a title search there
+        audiobookshelfAudiobookUrl:
+          type: string
+          nullable: true
+          description: Where the audiobook opens in Audiobookshelf, once it is available. The book itself when an API key is set and the book is found in the library, otherwise a title search there
+        audiobookEdition:
+          type: object
+          nullable: true
+          description: The audiobook edition Audible lists, as saved by the last availability lookup
+          properties:
+            asin:
+              type: string
+              example: B005V0QI82
+            narrators:
+              type: array
+              items:
+                type: string
+              example: ['Dylan Baker']
+            runtimeMinutes:
+              type: integer
+              example: 1518
+            coverUrl:
+              type: string
+              example: https://m.media-amazon.com/images/I/51S2iJN3DYL._SL500_.jpg
+          required:
+            - narrators
+        mediaInfo:
+          $ref: '#/components/schemas/MediaInfo'
+    AuthorDetails:
+      type: object
+      properties:
+        onUserWatchlist:
+          type: boolean
+          description: Whether the current user follows them through their watchlist
+        id:
+          type: string
+          example: OL34184A
+        olId:
+          type: string
+          example: OL34184A
+        mediaType:
+          type: string
+          enum: [author]
+        name:
+          type: string
+          example: Roald Dahl
+        bio:
+          type: string
+        birthDate:
+          type: string
+        deathDate:
+          type: string
+        profilePath:
+          type: string
+          nullable: true
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookLink'
+        wikipedia:
+          type: string
+        works:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookResult'
+        totalWorks:
+          type: number
+    MusicLink:
+      type: object
+      properties:
+        type:
+          type: string
+          example: official homepage
+        url:
+          type: string
+    WikipediaExtract:
+      type: object
+      properties:
+        title:
+          type: string
+        url:
+          type: string
+        content:
+          type: string
+    MusicDetails:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843
+        mbId:
+          type: string
+          example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843
+        mediaType:
+          type: string
+          enum: [album]
+        title:
+          type: string
+          example: OK Computer
+        type:
+          type: string
+          example: Album
+        secondaryTypes:
+          type: array
+          items:
+            type: string
+        disambiguation:
+          type: string
+        releaseDate:
+          type: string
+          example: '1997-05-21'
+        releaseId:
+          type: string
+          description: MusicBrainz release whose track list is shown
+        artist:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            type:
+              type: string
+        artistCredit:
+          type: string
+          example: Radiohead
+        genres:
+          type: array
+          items:
+            type: string
+        tracks:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              number:
+                type: string
+              position:
+                type: number
+              disc:
+                type: number
+              length:
+                type: number
+                nullable: true
+                description: Length in milliseconds
+              recordingMbid:
+                type: string
+              artists:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    mbid:
+                      type: string
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/MusicLink'
+        posterPath:
+          type: string
+          nullable: true
+        artistThumb:
+          type: string
+          nullable: true
+        artistBackdrop:
+          type: string
+          nullable: true
+        artistWikipedia:
+          anyOf:
+            - $ref: '#/components/schemas/WikipediaExtract'
+            - type: string
+              nullable: true
+        mediaInfo:
+          $ref: '#/components/schemas/MediaInfo'
+    ArtistDetails:
+      type: object
+      properties:
+        onUserWatchlist:
+          type: boolean
+          description: Whether the current user follows them through their watchlist
+        id:
+          type: string
+          example: a74b1b7f-71a5-4011-9441-d0b5e4122711
+        mbId:
+          type: string
+        mediaType:
+          type: string
+          enum: [artist]
+        name:
+          type: string
+          example: Radiohead
+        sortName:
+          type: string
+        type:
+          type: string
+          example: Group
+        disambiguation:
+          type: string
+        country:
+          type: string
+        area:
+          type: string
+        beginDate:
+          type: string
+        endDate:
+          type: string
+        ended:
+          type: boolean
+        genres:
+          type: array
+          items:
+            type: string
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/MusicLink'
+        wikipedia:
+          anyOf:
+            - $ref: '#/components/schemas/WikipediaExtract'
+            - type: string
+              nullable: true
+        artistThumb:
+          type: string
+          nullable: true
+        artistBackdrop:
+          type: string
+          nullable: true
+        releaseGroups:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlbumResult'
+        typeCounts:
+          type: object
+          additionalProperties:
+            type: number
+        totalReleaseGroups:
+          type: number
     Genre:
       type: object
       properties:
@@ -1267,6 +2439,36 @@ components:
         is4k:
           type: boolean
           example: false
+        isAudiobook:
+          type: boolean
+          example: false
+          description: Books only. True for an audiobook request, false for an ebook request.
+        language:
+          type: string
+          nullable: true
+          enum:
+            [
+              en,
+              es,
+              fr,
+              de,
+              it,
+              pt,
+              nl,
+              sv,
+              da,
+              'no',
+              fi,
+              pl,
+              ru,
+              ja,
+              zh,
+              ko,
+              any,
+              null,
+            ]
+          example: en
+          description: Books only. ISO 639-1 code of the language the book is requested in, or `any`. Null for requests made before languages could be chosen, which use the requester's language.
         serverId:
           type: number
         profileId:
@@ -1277,9 +2479,258 @@ components:
           type: boolean
           example: false
           description: If true, this request will not count against the user's quota. Requires MANAGE_REQUESTS permission.
+        declineReason:
+          type: string
+          nullable: true
+          example: 'Already streaming on Netflix'
+        monitorMode:
+          type: string
+          nullable: true
+          enum: [seasons, future, current, null]
+          description: Series only. `future` requests monitor only the episodes that have not aired yet, without searching for aired ones. `current` requests keep only the airing season. Once a new season has an aired episode with a file, the Sonarr scan schedules the older seasons for deletion after a notice period, and seasons in `preexistingSeasons` are kept unless an admin approves deleting them.
+        preexistingSeasons:
+          type: array
+          nullable: true
+          items:
+            type: number
+          example: [1, 2]
+          description: Current season requests only. Seasons that were already available when the request was made. Null for older requests, which keeps every older season.
+        seasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/SeasonRequest'
       required:
         - id
         - status
+    SeasonRequest:
+      type: object
+      properties:
+        id:
+          type: number
+          example: 1
+          readOnly: true
+        seasonNumber:
+          type: number
+          example: 2
+        status:
+          type: number
+          example: 1
+          description: Status of the season request. 1 = PENDING APPROVAL, 2 = APPROVED, 3 = DECLINED, 4 = FAILED, 5 = COMPLETED
+          readOnly: true
+        episodes:
+          type: array
+          nullable: true
+          items:
+            type: number
+          example: [3, 5]
+          description: Requested episode numbers, or null when the whole season is requested
+        createdAt:
+          type: string
+          example: '2020-09-12T10:00:27.000Z'
+          readOnly: true
+        updatedAt:
+          type: string
+          example: '2020-09-12T10:00:27.000Z'
+          readOnly: true
+    RequestedEpisodes:
+      type: object
+      properties:
+        seasonNumber:
+          type: number
+          minimum: 0
+          example: 2
+        episodeNumbers:
+          type: array
+          minItems: 1
+          items:
+            type: number
+            minimum: 1
+          example: [3, 5]
+      required:
+        - seasonNumber
+        - episodeNumbers
+    ArrActionAvailability:
+      type: object
+      properties:
+        available:
+          type: boolean
+        reason:
+          type: string
+          description: Why the action cannot be used
+      required:
+        - available
+    ArrItem:
+      type: object
+      description: A movie, season, episode, album or book format as its arr has it, with the actions an admin can take there
+      properties:
+        service:
+          type: string
+          enum: [radarr, sonarr, lidarr, chaptarr, lazylibrarian]
+        serviceName:
+          type: string
+          example: 4K Radarr
+        inService:
+          type: boolean
+          description: False when the arr does not have the item or is not set up
+        title:
+          type: string
+        hasFile:
+          type: boolean
+        actions:
+          type: object
+          properties:
+            search:
+              $ref: '#/components/schemas/ArrActionAvailability'
+            interactive:
+              $ref: '#/components/schemas/ArrActionAvailability'
+            replace:
+              $ref: '#/components/schemas/ArrActionAvailability'
+        episodes:
+          type: array
+          description: Series only, every episode Sonarr has
+          items:
+            type: object
+            properties:
+              seasonNumber:
+                type: integer
+              episodeNumber:
+                type: integer
+              title:
+                type: string
+              hasFile:
+                type: boolean
+    ArrRelease:
+      type: object
+      description: A release an arr found on its indexers, normalized across Radarr, Sonarr, Lidarr and Chaptarr
+      properties:
+        guid:
+          type: string
+        indexerId:
+          type: integer
+        title:
+          type: string
+        size:
+          type: number
+          description: Size in bytes
+        ageHours:
+          type: number
+        indexer:
+          type: string
+        protocol:
+          type: string
+          enum: [usenet, torrent, unknown]
+        seeders:
+          type: integer
+          description: Torrents only
+        leechers:
+          type: integer
+          description: Torrents only
+        quality:
+          type: string
+          example: Bluray-1080p
+        qualityWeight:
+          type: integer
+          description: How the quality profile ranks the quality, higher is better
+        languages:
+          type: array
+          items:
+            type: string
+        approved:
+          type: boolean
+          description: The arr would grab the release by itself
+        rejections:
+          type: array
+          items:
+            type: string
+        customFormatScore:
+          type: integer
+        releaseGroup:
+          type: string
+        infoUrl:
+          type: string
+    MediaFileInfo:
+      type: object
+      properties:
+        id:
+          type: number
+          example: 12
+        fileName:
+          type: string
+          example: Spider-Man Brand New Day (2026) WEBDL-2160p.mkv
+        path:
+          type: string
+          description: Only included for users with the `MANAGE_REQUESTS` permission
+          example: /media/Movies/Spider-Man Brand New Day (2026)/Spider-Man Brand New Day (2026) WEBDL-2160p.mkv
+        size:
+          type: number
+          example: 23300000000
+        dateAdded:
+          type: string
+          example: '2026-10-02T14:12:00Z'
+        quality:
+          type: string
+          example: WEBDL-2160p
+        resolution:
+          type: number
+          example: 2160
+        releaseGroup:
+          type: string
+        sceneName:
+          type: string
+        edition:
+          type: string
+        languages:
+          type: array
+          items:
+            type: string
+          example: ['English']
+        seasonNumber:
+          type: number
+        episodeNumbers:
+          type: array
+          items:
+            type: number
+        mediaInfo:
+          type: object
+          properties:
+            videoCodec:
+              type: string
+              example: HEVC
+            videoBitDepth:
+              type: number
+            videoBitrate:
+              type: number
+            videoFps:
+              type: number
+            videoDynamicRange:
+              type: string
+              example: DV HDR10
+            resolution:
+              type: string
+              example: 3840x2160
+            scanType:
+              type: string
+            runTime:
+              type: string
+              example: '2:25:14'
+            audioCodec:
+              type: string
+              example: EAC3 Atmos
+            audioChannels:
+              type: number
+              example: 5.1
+            audioBitrate:
+              type: number
+            audioStreamCount:
+              type: number
+            audioLanguages:
+              type: array
+              items:
+                type: string
+            subtitles:
+              type: array
+              items:
+                type: string
     MediaInfo:
       type: object
       properties:
@@ -1289,14 +2740,66 @@ components:
         tmdbId:
           type: number
           readOnly: true
+          nullable: true
         tvdbId:
           type: number
           readOnly: true
           nullable: true
+        mbId:
+          type: string
+          readOnly: true
+          nullable: true
+          description: MusicBrainz release group ID, set for music
+        olId:
+          type: string
+          readOnly: true
+          nullable: true
+          description: OpenLibrary work ID, set for books
         status:
           type: number
           example: 0
           description: Availability of the media. 1 = `UNKNOWN`, 2 = `PENDING`, 3 = `PROCESSING`, 4 = `PARTIALLY_AVAILABLE`, 5 = `AVAILABLE`, 6 = `DELETED`
+        statusAudio:
+          type: number
+          example: 1
+          description: Availability of a book's audiobook, with the same values as `status`, which holds the ebook
+        externalServiceIdAudio:
+          type: number
+          readOnly: true
+          nullable: true
+          description: Chaptarr book ID of a book's audiobook. The ebook's is in `externalServiceId`.
+        foreignBookId:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Chaptarr work ID of a book, such as `gr:3060926`, shared by its ebook and audiobook
+        downloadStatusAudio:
+          type: array
+          readOnly: true
+          description: Downloads of a book's audiobook in Chaptarr's queue. Those of the ebook are in `downloadStatus`.
+          items:
+            type: object
+            properties:
+              externalId:
+                type: number
+              title:
+                type: string
+              status:
+                type: string
+              size:
+                type: number
+              sizeLeft:
+                type: number
+              timeLeft:
+                type: string
+              estimatedCompletionTime:
+                type: string
+                nullable: true
+              downloadId:
+                type: string
+              bookFormat:
+                type: string
+                enum: [ebook, audiobook]
         requests:
           type: array
           readOnly: true
@@ -1615,6 +3118,24 @@ components:
             allowSelfSigned:
               type: boolean
               example: false
+            newsletterEnabled:
+              type: boolean
+              example: false
+            newsletterDay:
+              type: integer
+              minimum: 0
+              maximum: 6
+              description: Day of the week the newsletter is sent on (0 = Sunday)
+              example: 0
+            newsletterHour:
+              type: integer
+              minimum: 0
+              maximum: 23
+              description: Hour of the day the newsletter is sent at
+              example: 9
+            newsletterInclude4k:
+              type: boolean
+              example: false
     Job:
       type: object
       properties:
@@ -1636,6 +3157,90 @@ components:
         running:
           type: boolean
           example: false
+        lastSuccess:
+          type: string
+          nullable: true
+          description: When the job last completed successfully since the server started. Only scan jobs report it.
+          example: '2020-09-02T05:02:23.000Z'
+        lastError:
+          type: string
+          nullable: true
+          description: Why the last failed run failed. Only scan jobs report it.
+          example: 'Could not reach Plex at http://plex.example.com:32400 (timed out)'
+        consecutiveFailures:
+          type: number
+          description: Failed runs in a row. Resets when a run succeeds.
+          example: 0
+        failing:
+          type: boolean
+          description: True once the job has failed 3 times in a row
+          example: false
+    ScanAlert:
+      type: object
+      properties:
+        service:
+          type: string
+          enum:
+            [plex, jellyfin, sonarr, radarr, lidarr, chaptarr, lazylibrarian]
+        serviceName:
+          type: string
+          example: Plex
+        jobId:
+          type: string
+          example: plex-recently-added-scan
+        reason:
+          type: string
+          example: 'Could not reach Plex at http://plex.example.com:32400 (timed out)'
+        lastSuccess:
+          type: string
+          nullable: true
+          example: '2020-09-02T05:02:23.000Z'
+        consecutiveFailures:
+          type: number
+          example: 3
+        settingsPath:
+          type: string
+          example: /settings/plex
+    PlexConnectionError:
+      type: object
+      properties:
+        message:
+          type: string
+          example: 'Could not reach Plex at http://plex.example.com:32400 (timed out)'
+        explanation:
+          type: string
+          example: "plex.example.com goes through Cloudflare, which does not pass port 32400. Use https on port 443 (through your reverse proxy) or Plex's local address."
+        reason:
+          type: string
+          enum: [cloudflare-port, nonstandard-port-timeout, unauthorized]
+        url:
+          type: string
+          example: 'http://plex.example.com:32400'
+        suggestion:
+          type: object
+          description: An address on the same host that did connect. It is not saved.
+          properties:
+            ip:
+              type: string
+              example: plex.example.com
+            port:
+              type: number
+              example: 443
+            useSsl:
+              type: boolean
+              example: true
+        attempts:
+          type: array
+          items:
+            type: object
+            properties:
+              url:
+                type: string
+                example: 'https://plex.example.com:443'
+              ok:
+                type: boolean
+              message:
+                type: string
     PersonDetails:
       type: object
       properties:
@@ -2050,6 +3655,19 @@ components:
         issueType:
           type: number
           example: 1
+          description: Issue type (1 = VIDEO, 2 = AUDIO, 3 = SUBTITLES, 4 = OTHER, 5 = WRONG_CONTENT, 6 = MISSING_CONTENT). Music and books use AUDIO, WRONG_CONTENT, MISSING_CONTENT and OTHER.
+        problemSeason:
+          type: number
+          example: 0
+          description: Affected season of a series, or affected disc of an album
+        problemEpisode:
+          type: number
+          example: 0
+          description: Affected episode of a series, or affected track of an album
+        bookFormat:
+          type: string
+          nullable: true
+          description: Affected format of a book, ebook or audiobook
         media:
           $ref: '#/components/schemas/MediaInfo'
         createdBy:
@@ -2060,6 +3678,93 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/IssueComment'
+    RemovalRequest:
+      type: object
+      properties:
+        id:
+          type: number
+          example: 1
+        status:
+          type: number
+          example: 1
+          description: Status of the removal request (1 = PENDING, 2 = APPROVED, 3 = DECLINED, 4 = FAILED)
+        is4k:
+          type: boolean
+          example: false
+        bookFormat:
+          type: string
+          nullable: true
+          description: Formats of a book to remove, ebook, audiobook or both
+        reason:
+          type: string
+          nullable: true
+          example: 'We finished watching it'
+        declineReason:
+          type: string
+          nullable: true
+        media:
+          $ref: '#/components/schemas/MediaInfo'
+        requestedBy:
+          $ref: '#/components/schemas/User'
+        modifiedBy:
+          anyOf:
+            - $ref: '#/components/schemas/User'
+            - type: string
+              nullable: true
+        createdAt:
+          type: string
+          example: '2026-10-08T05:00:00.000Z'
+        updatedAt:
+          type: string
+          example: '2026-10-08T05:00:00.000Z'
+    SeasonRollover:
+      type: object
+      properties:
+        id:
+          type: number
+          example: 1
+        status:
+          type: number
+          example: 1
+          description: Status of the season rollover (1 = PENDING, 2 = KEPT, 3 = COMPLETED, 4 = REVIEW). REVIEW means the seasons the request brought in are deleted and the preexisting ones await an admin.
+        is4k:
+          type: boolean
+          example: false
+        currentSeason:
+          type: number
+          example: 5
+          description: The new season that started the rollover
+        seasons:
+          type: array
+          items:
+            type: number
+          example: [3, 4]
+          description: Older seasons the request brought in, deleted once deleteAfter has passed
+        preexistingSeasons:
+          type: array
+          items:
+            type: number
+          example: [1, 2]
+          description: Older seasons that were already available when the request was made, kept unless an admin approves deleting them
+        deletePreexisting:
+          type: boolean
+          example: false
+        deleteAfter:
+          type: string
+          example: '2026-10-11T05:00:00.000Z'
+        media:
+          $ref: '#/components/schemas/MediaInfo'
+        modifiedBy:
+          anyOf:
+            - $ref: '#/components/schemas/User'
+            - type: string
+              nullable: true
+        createdAt:
+          type: string
+          example: '2026-10-08T05:00:00.000Z'
+        updatedAt:
+          type: string
+          example: '2026-10-08T05:00:00.000Z'
     IssueComment:
       type: object
       properties:
@@ -2080,6 +3785,9 @@ components:
         type:
           type: number
           example: 1
+          description: |
+            The kind of slider. Custom book subject sliders use type 27 and keep the
+            OpenLibrary subject key (such as `science_fiction`) in `data`.
         title:
           type: string
           nullable: true
@@ -2109,7 +3817,65 @@ components:
       type: object
       properties:
         id:
+          type: number
+          example: 1
+          readOnly: true
+        radarrServiceId:
+          type: number
+          nullable: true
+          example: 0
+        sonarrServiceId:
+          type: number
+          nullable: true
+        lidarrServiceId:
+          type: number
+          nullable: true
+        users:
           type: string
+          nullable: true
+          description: Comma-separated user IDs
+          example: '1,2'
+        genre:
+          type: string
+          nullable: true
+          description: Comma-separated TMDB genre IDs
+          example: '16,35'
+        language:
+          type: string
+          nullable: true
+          description: Pipe-separated original language codes
+          example: 'en|fr'
+        keywords:
+          type: string
+          nullable: true
+          description: Comma-separated TMDB keyword IDs
+        profileId:
+          type: number
+          nullable: true
+        rootFolder:
+          type: string
+          nullable: true
+        tags:
+          type: string
+          nullable: true
+          description: Comma-separated service tag IDs
+        autoApprove:
+          type: boolean
+          description: Automatically approve requests matching the rule, even if the user lacks the auto-approve permission
+          example: false
+        maxSeasons:
+          type: number
+          nullable: true
+          description: Only auto-approve series requests for up to this many seasons
+          example: 1
+        createdAt:
+          type: string
+          example: '2020-09-02T05:02:23.000Z'
+          readOnly: true
+        updatedAt:
+          type: string
+          example: '2020-09-02T05:02:23.000Z'
+          readOnly: true
     Certification:
       type: object
       properties:
@@ -2158,8 +3924,8 @@ components:
 paths:
   /status:
     get:
-      summary: Get Seerr status
-      description: Returns the current Seerr status in a JSON object. updateAvailable and commitsBehind are omitted when checkUpdateAvailable is false.
+      summary: Get AllSeerr status
+      description: Returns the current AllSeerr status in a JSON object. updateAvailable and commitsBehind are omitted when checkUpdateAvailable is false.
       security: []
       tags:
         - public
@@ -2181,13 +3947,17 @@ paths:
                 properties:
                   version:
                     type: string
-                    example: 1.0.0
+                    example: 3.5.0.1
                   commitTag:
                     type: string
+                  releaseBuild:
+                    type: boolean
+                    description: True for release images, which are tagged with their version instead of a commit
                   updateAvailable:
                     type: boolean
                   commitsBehind:
                     type: number
+                    description: Commits the build is behind its branch, -1 when unknown. Always 0 for release builds.
                   restartRequired:
                     type: boolean
   /status/appdata:
@@ -2289,6 +4059,84 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MainSettings'
+  /settings/googlebooks/test:
+    post:
+      summary: Test a Google Books API key
+      description: Makes one Google Books API request with the given key, or with the saved key when none is given.
+      tags:
+        - settings
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                apiKey:
+                  type: string
+                  example: yourapikey
+      responses:
+        '200':
+          description: Google Books accepted the key
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: No key was given and none is saved
+        '500':
+          description: Google Books rejected the request
+  /settings/main/logo:
+    post:
+      summary: Upload an application logo
+      description: |
+        Replaces the application logo shown in the interface, favicons, web app manifest, emails and web push notifications. The image must be a square PNG, SVG or WebP file of at most 2 MB, sent base64 encoded (a data URL is accepted). Icons in every size are generated from it and stored in the config directory.
+
+        Requires the `ADMIN` permission.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  description: The image as a base64 data URL or bare base64
+                  example: 'data:image/png;base64,iVBORw0KGgo...'
+      responses:
+        '200':
+          description: Logo saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applicationLogoVersion:
+                    type: string
+                    example: 3f2a9c81d4e7
+        '400':
+          description: The image is missing, too large, not square or not a PNG, SVG or WebP file
+    delete:
+      summary: Reset the application logo
+      description: Removes the uploaded logo so the bundled logo is used again. Requires the `ADMIN` permission.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Logo removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applicationLogoVersion:
+                    type: string
+                    example: ''
   /settings/jellyfin:
     get:
       summary: Get Jellyfin settings
@@ -2498,7 +4346,11 @@ paths:
                 $ref: '#/components/schemas/PlexSettings'
     post:
       summary: Update Plex settings
-      description: Updates Plex settings with the provided values.
+      description: |
+        Tests the connection and saves the Plex settings only when it works. `ip` may hold a full URL
+        such as `https://plex.example.com` or `http://192.168.1.5:32400`, which also sets the port and
+        SSL. When the connection fails, other addresses on the same host are tried and the first that
+        works is returned as `suggestion`, without being saved.
       tags:
         - settings
       requestBody:
@@ -2514,6 +4366,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlexSettings'
+        '400':
+          description: The address could not be read, for example a URL with a sub path
+        '500':
+          description: Plex could not be reached. Nothing was saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlexConnectionError'
   /settings/plex/library:
     get:
       summary: Get Plex libraries
@@ -2726,8 +4586,8 @@ paths:
                 $ref: '#/components/schemas/MetadataSettings'
   /settings/metadatas/test:
     post:
-      summary: Test Provider configuration
-      description: Tests if the TVDB configuration is valid. Returns a list of available languages on success.
+      summary: Test Metadata Provider configuration
+      description: Tests if the metadata provider configuration is valid. Returns a list of available languages on success.
       tags:
         - settings
       requestBody:
@@ -2745,7 +4605,7 @@ paths:
                   example: true
       responses:
         '200':
-          description: Succesfully connected to TVDB
+          description: Succesfully connected to metadata provider
           content:
             application/json:
               schema:
@@ -2753,7 +4613,224 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: 'Successfully connected to TVDB'
+                    example: 'Successfully connected to metadata provider'
+  /settings/bazarr:
+    get:
+      summary: Get Bazarr settings
+      description: Retrieves current Bazarr settings.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BazarrSettings'
+    post:
+      summary: Update Bazarr settings
+      description: Updates Bazarr settings with the provided values after testing the connection.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BazarrSettings'
+      responses:
+        '200':
+          description: 'Values were successfully updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BazarrSettings'
+  /settings/lazylibrarian:
+    get:
+      summary: Get LazyLibrarian settings
+      description: Retrieves current LazyLibrarian settings.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LazyLibrarianSettings'
+    post:
+      summary: Update LazyLibrarian settings
+      description: Updates LazyLibrarian settings with the provided values after testing the connection. Saving without a hostname disables book requests.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LazyLibrarianSettings'
+      responses:
+        '200':
+          description: 'Values were successfully updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LazyLibrarianSettings'
+  /settings/audiobookshelf:
+    get:
+      summary: Get Audiobookshelf settings
+      description: Retrieves the Audiobookshelf link settings. Settings saved by older versions in the LazyLibrarian settings are returned until new ones are saved.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudiobookshelfSettings'
+    post:
+      summary: Update Audiobookshelf settings
+      description: Saves the Audiobookshelf link. The address is not tested, as it is the public address users open. Saving an empty URL removes the link.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudiobookshelfSettings'
+      responses:
+        '200':
+          description: 'Values were successfully updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudiobookshelfSettings'
+        '400':
+          description: The URL is not an http or https address
+  /settings/audiobookshelf/test:
+    post:
+      summary: Test Audiobookshelf configuration
+      description: Checks that Audiobookshelf answers at the URL (GET /status, then /ping). With an API key, also lists its libraries.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  example: 'https://books.example.com'
+                apiKey:
+                  type: string
+                  example: yourapikey
+              required:
+                - url
+      responses:
+        '200':
+          description: Successfully connected to Audiobookshelf
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                    description: Missing for servers without /status
+                    example: '2.17.0'
+                  libraries:
+                    type: array
+                    description: Only returned when an API key was given
+                    items:
+                      $ref: '#/components/schemas/AudiobookshelfLibrary'
+  /settings/bazarr/test:
+    post:
+      summary: Test Bazarr configuration
+      description: Tests if the Bazarr configuration is valid. Returns the Bazarr version on success.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                  example: '127.0.0.1'
+                port:
+                  type: number
+                  example: 6767
+                useSsl:
+                  type: boolean
+                  example: false
+                urlBase:
+                  type: string
+                  example: '/bazarr'
+                apiKey:
+                  type: string
+                  example: yourapikey
+              required:
+                - hostname
+                - port
+                - apiKey
+      responses:
+        '200':
+          description: Successfully connected to Bazarr
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+  /settings/lazylibrarian/test:
+    post:
+      summary: Test LazyLibrarian configuration
+      description: Tests if the LazyLibrarian configuration is valid. Returns the LazyLibrarian version on success.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                  example: '127.0.0.1'
+                port:
+                  type: number
+                  example: 6767
+                useSsl:
+                  type: boolean
+                  example: false
+                urlBase:
+                  type: string
+                  example: '/bazarr'
+                apiKey:
+                  type: string
+                  example: yourapikey
+              required:
+                - hostname
+                - port
+                - apiKey
+      responses:
+        '200':
+          description: Successfully connected to LazyLibrarian
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
   /settings/tautulli:
     get:
       summary: Get Tautulli settings
@@ -3051,6 +5128,413 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SonarrSettings'
+  /settings/lidarr:
+    get:
+      summary: Get Lidarr settings
+      description: Returns all Lidarr settings in a JSON array.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: 'Values were returned'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LidarrSettings'
+    post:
+      summary: Create Lidarr instance
+      description: Creates a new Lidarr instance from the request body.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LidarrSettings'
+      responses:
+        '201':
+          description: 'New Lidarr instance created'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LidarrSettings'
+  /settings/lidarr/test:
+    post:
+      summary: Test Lidarr configuration
+      description: Tests if the Lidarr configuration is valid. Returns profiles and root folders on success.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                  example: '127.0.0.1'
+                port:
+                  type: number
+                  example: 8686
+                apiKey:
+                  type: string
+                  example: yourapikey
+                useSsl:
+                  type: boolean
+                  example: false
+                baseUrl:
+                  type: string
+              required:
+                - hostname
+                - port
+                - apiKey
+                - useSsl
+      responses:
+        '200':
+          description: Successfully connected to Lidarr instance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profiles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServiceProfile'
+  /settings/lidarr/{lidarrId}:
+    put:
+      summary: Update Lidarr instance
+      description: Updates an existing Lidarr instance with the provided values.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: lidarrId
+          required: true
+          schema:
+            type: integer
+          description: Lidarr instance ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LidarrSettings'
+      responses:
+        '200':
+          description: 'Lidarr instance updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LidarrSettings'
+    delete:
+      summary: Delete Lidarr instance
+      description: Deletes an existing Lidarr instance based on the lidarrId parameter.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: lidarrId
+          required: true
+          schema:
+            type: integer
+          description: Lidarr instance ID
+      responses:
+        '200':
+          description: 'Lidarr instance deleted'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LidarrSettings'
+  /settings/chaptarr:
+    get:
+      summary: Get Chaptarr settings
+      description: Returns all Chaptarr settings in a JSON array.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: 'Values were returned'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChaptarrSettings'
+    post:
+      summary: Create Chaptarr instance
+      description: Creates a new Chaptarr instance from the request body.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChaptarrSettings'
+      responses:
+        '201':
+          description: 'New Chaptarr instance created'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChaptarrSettings'
+  /settings/chaptarr/test:
+    post:
+      summary: Test Chaptarr configuration
+      description: Tests if the Chaptarr configuration is valid. Returns quality profiles, metadata profiles, root folders and tags on success. Profiles and root folders carry their book format on Chaptarr.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                  example: '127.0.0.1'
+                port:
+                  type: number
+                  example: 8789
+                apiKey:
+                  type: string
+                  example: yourapikey
+                useSsl:
+                  type: boolean
+                  example: false
+                baseUrl:
+                  type: string
+              required:
+                - hostname
+                - port
+                - apiKey
+                - useSsl
+      responses:
+        '200':
+          description: Successfully connected to Chaptarr instance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  appName:
+                    type: string
+                    example: Chaptarr
+                  isChaptarr:
+                    type: boolean
+                    description: False for other Readarr compatible servers, which have no per format profiles and root folders
+                  profiles:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                        name:
+                          type: string
+                        profileType:
+                          type: string
+                          example: ebook
+                  metadataProfiles:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                        name:
+                          type: string
+                        profileType:
+                          type: number
+                          description: 0 general, 1 audiobook, 2 ebook
+                  rootFolders:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                        path:
+                          type: string
+                        folderType:
+                          type: number
+                          description: 0 mixed, 1 audiobook, 2 ebook
+                        ebookQualityProfileId:
+                          type: number
+                        ebookMetadataProfileId:
+                          type: number
+                        audiobookQualityProfileId:
+                          type: number
+                        audiobookMetadataProfileId:
+                          type: number
+                  tags:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServarrTag'
+                  urlBase:
+                    type: string
+  /settings/chaptarr/{chaptarrId}:
+    put:
+      summary: Update Chaptarr instance
+      description: Updates an existing Chaptarr instance with the provided values.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: chaptarrId
+          required: true
+          schema:
+            type: integer
+          description: Chaptarr instance ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChaptarrSettings'
+      responses:
+        '200':
+          description: 'Chaptarr instance updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChaptarrSettings'
+    delete:
+      summary: Delete Chaptarr instance
+      description: Deletes an existing Chaptarr instance based on the chaptarrId parameter.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: chaptarrId
+          required: true
+          schema:
+            type: integer
+          description: Chaptarr instance ID
+      responses:
+        '200':
+          description: 'Chaptarr instance deleted'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChaptarrSettings'
+  /branding/logo:
+    get:
+      summary: Get the application logo
+      description: Returns the uploaded application logo, or redirects to the bundled logo when none has been uploaded.
+      security: []
+      tags:
+        - settings
+      parameters:
+        - in: query
+          name: v
+          required: false
+          description: Logo version, used to cache the response
+          schema:
+            type: string
+            example: 3f2a9c81d4e7
+      responses:
+        '200':
+          description: The uploaded logo
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/svg+xml:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '302':
+          description: No logo has been uploaded; redirects to the bundled logo
+  /branding/icon/{name}:
+    get:
+      summary: Get an application icon
+      description: Returns an icon generated from the uploaded application logo, or redirects to the bundled icon of the same name when none has been uploaded.
+      security: []
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            enum:
+              - favicon-16x16.png
+              - favicon-32x32.png
+              - apple-touch-icon.png
+              - android-chrome-192x192.png
+              - android-chrome-512x512.png
+              - android-chrome-192x192_maskable.png
+              - android-chrome-512x512_maskable.png
+              - favicon.ico
+        - in: query
+          name: v
+          required: false
+          description: Logo version, used to cache the response
+          schema:
+            type: string
+            example: 3f2a9c81d4e7
+      responses:
+        '200':
+          description: The generated icon
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/x-icon:
+              schema:
+                type: string
+                format: binary
+        '302':
+          description: No logo has been uploaded; redirects to the bundled icon
+  /branding/splash/{name}:
+    get:
+      summary: Get an iOS launch screen
+      description: Returns a launch screen made from the uploaded application logo, or redirects to the bundled launch screen of the same name when none has been uploaded.
+      security: []
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: name
+          required: true
+          description: apple-splash-<width>-<height>.jpg, in one of the sizes iOS uses
+          schema:
+            type: string
+            pattern: '^apple-splash-[0-9]+-[0-9]+\.jpg$'
+            example: apple-splash-1170-2532.jpg
+        - in: query
+          name: v
+          required: false
+          description: Logo version, used to cache the response
+          schema:
+            type: string
+            example: 3f2a9c81d4e7
+      responses:
+        '200':
+          description: The launch screen
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '302':
+          description: No logo has been uploaded; redirects to the bundled launch screen
+        '404':
+          description: Not a launch screen size iOS uses
   /settings/public:
     get:
       summary: Get public settings
@@ -3093,6 +5577,21 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Job'
+  /settings/jobs/alerts:
+    get:
+      summary: Get failing scans
+      description: Returns one entry per service whose scans failed 3 or more times in a row.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Failing scans returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScanAlert'
   /settings/jobs/{jobId}/run:
     post:
       summary: Invoke a specific job
@@ -3411,6 +5910,19 @@ paths:
       responses:
         '204':
           description: Test notification attempted
+  /settings/notifications/email/newsletter/test:
+    post:
+      summary: Send a test newsletter
+      description: Sends the recently added newsletter to the current user only, using the saved email settings. If nothing was added since the last newsletter, the most recently added media is used instead.
+      tags:
+        - settings
+      responses:
+        '204':
+          description: Test newsletter sent
+        '400':
+          description: The email agent is not enabled
+        '500':
+          description: The test newsletter failed to send
   /settings/notifications/discord:
     get:
       summary: Get Discord notification settings
@@ -3928,6 +6440,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiscoverSlider'
+        '400':
+          description: The slider data is not valid, such as a book subject slider without a subject
     delete:
       summary: Delete slider by ID
       description: Deletes the slider with the provided sliderId. Requires the `ADMIN` permission.
@@ -3976,6 +6490,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiscoverSlider'
+        '400':
+          description: The slider data is not valid, such as a book subject slider without a subject
   /settings/discover/reset:
     get:
       summary: Reset all discover sliders
@@ -4001,7 +6517,10 @@ paths:
                 properties:
                   version:
                     type: string
-                    example: '1.0.0'
+                    example: '3.5.0.1'
+                  releaseBuild:
+                    type: boolean
+                    example: true
                   totalRequests:
                     type: number
                     example: 100
@@ -4743,6 +7262,42 @@ paths:
                       restricted:
                         type: boolean
                         example: false
+                  music:
+                    type: object
+                    properties:
+                      days:
+                        type: number
+                        example: 7
+                      limit:
+                        type: number
+                        example: 10
+                      used:
+                        type: number
+                        example: 6
+                      remaining:
+                        type: number
+                        example: 4
+                      restricted:
+                        type: boolean
+                        example: false
+                  book:
+                    type: object
+                    properties:
+                      days:
+                        type: number
+                        example: 7
+                      limit:
+                        type: number
+                        example: 10
+                      used:
+                        type: number
+                        example: 6
+                      remaining:
+                        type: number
+                        example: 4
+                      restricted:
+                        type: boolean
+                        example: false
   /blocklist:
     get:
       summary: Returns blocklisted items
@@ -4829,7 +7384,7 @@ paths:
       parameters:
         - in: path
           name: tmdbId
-          description: tmdbId ID
+          description: TMDB id, or the MusicBrainz release group id of an album or the OpenLibrary work id of a book
           required: true
           example: '1'
           schema:
@@ -4842,6 +7397,8 @@ paths:
             enum:
               - movie
               - tv
+              - music
+              - book
       responses:
         '200':
           description: Blocklist details in JSON
@@ -4852,7 +7409,7 @@ paths:
       parameters:
         - in: path
           name: tmdbId
-          description: tmdbId ID
+          description: TMDB id, or the MusicBrainz release group id of an album or the OpenLibrary work id of a book
           required: true
           example: '1'
           schema:
@@ -4865,6 +7422,8 @@ paths:
             enum:
               - movie
               - tv
+              - music
+              - book
       responses:
         '204':
           description: Succesfully removed media item
@@ -4962,7 +7521,7 @@ paths:
       parameters:
         - in: path
           name: tmdbId
-          description: tmdbId ID
+          description: TMDB id, or the MusicBrainz release group id of an album or the OpenLibrary work id of a book
           required: true
           example: '1'
           schema:
@@ -4975,6 +7534,8 @@ paths:
             enum:
               - movie
               - tv
+              - music
+              - book
       responses:
         '200':
           description: Blocklist details in JSON
@@ -4988,7 +7549,7 @@ paths:
       parameters:
         - in: path
           name: tmdbId
-          description: tmdbId ID
+          description: TMDB id, or the MusicBrainz release group id of an album or the OpenLibrary work id of a book
           required: true
           example: '1'
           schema:
@@ -5001,6 +7562,8 @@ paths:
             enum:
               - movie
               - tv
+              - music
+              - book
       responses:
         '204':
           description: Succesfully removed media item
@@ -5047,9 +7610,50 @@ paths:
           description: Successfully removed collection from blocklist
         '500':
           description: Error removing collection from blocklist
+  /calendar:
+    get:
+      summary: Get upcoming releases
+      description: |
+        Returns movie releases, episode air dates and album releases between the start and end dates (YYYY-MM-DD), pulled from the configured Radarr, Sonarr and Lidarr servers. The range cannot be longer than 62 days. Requesters are only included for users who can view all requests.
+      tags:
+        - calendar
+      parameters:
+        - in: query
+          name: start
+          required: true
+          schema:
+            type: string
+            example: '2026-10-01'
+        - in: query
+          name: end
+          required: true
+          schema:
+            type: string
+            example: '2026-10-31'
+      responses:
+        '200':
+          description: Calendar items returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  start:
+                    type: string
+                    example: '2026-10-01'
+                  end:
+                    type: string
+                    example: '2026-10-31'
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CalendarItem'
+        '400':
+          description: Invalid date range
   /watchlist:
     post:
       summary: Add media to watchlist
+      description: Adds a movie, series, album or book to the watchlist of the current user, or follows an artist or author. Movies and series are named by tmdbId, albums and artists by mbId, books and authors by olId.
       tags:
         - watchlist
       requestBody:
@@ -5074,7 +7678,7 @@ paths:
       parameters:
         - in: path
           name: tmdbId
-          description: tmdbId ID
+          description: TMDB id, or the MusicBrainz release group id of an album or the OpenLibrary work id of a book. The MusicBrainz artist id of a followed artist, or the OpenLibrary author id of a followed author.
           required: true
           example: '1'
           schema:
@@ -5087,9 +7691,133 @@ paths:
             enum:
               - movie
               - tv
+              - music
+              - book
+              - artist
+              - author
       responses:
         '204':
           description: Succesfully removed watchlist item
+  /favorite:
+    get:
+      summary: Get favorites
+      description: |
+        Returns the favorite movies, series, albums and books of the current user, newest first. Viewing another user's favorites requires the `MANAGE_REQUESTS` or `WATCHLIST_VIEW` permission.
+      tags:
+        - favorite
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+        - in: query
+          name: userId
+          schema:
+            type: number
+            example: 1
+        - in: query
+          name: tmdbId
+          schema:
+            type: number
+            example: 550
+        - in: query
+          name: mbId
+          schema:
+            type: string
+            example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843
+        - in: query
+          name: olId
+          schema:
+            type: string
+            example: OL45804W
+        - in: query
+          name: mediaType
+          schema:
+            type: string
+            enum: [movie, tv, music, book]
+      responses:
+        '200':
+          description: Favorites returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                    example: 1
+                  totalPages:
+                    type: number
+                    example: 1
+                  totalResults:
+                    type: number
+                    example: 1
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Favorite'
+    post:
+      summary: Add a favorite
+      description: Marks a movie, series, album or book as a favorite of the current user. Movies and series are named by tmdbId, albums by mbId and books by olId.
+      tags:
+        - favorite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tmdbId:
+                  type: number
+                  example: 550
+                mbId:
+                  type: string
+                  example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843
+                olId:
+                  type: string
+                  example: OL45804W
+                mediaType:
+                  type: string
+                  enum: [movie, tv, music, book]
+              required:
+                - mediaType
+      responses:
+        '201':
+          description: Favorite added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Favorite'
+        '409':
+          description: Already a favorite
+  /favorite/{tmdbId}:
+    delete:
+      summary: Remove a favorite
+      description: Removes a movie, series, album or book from the current user's favorites.
+      tags:
+        - favorite
+      parameters:
+        - in: path
+          name: tmdbId
+          description: TMDB id, or the MusicBrainz release group id of an album or the OpenLibrary work id of a book
+          required: true
+          example: '550'
+          schema:
+            type: string
+        - in: query
+          name: mediaType
+          required: true
+          schema:
+            type: string
+            enum: [movie, tv, music, book]
+      responses:
+        '204':
+          description: Favorite removed
+        '404':
+          description: Favorite not found
   /user/{userId}/watchlist:
     get:
       summary: Get the Plex watchlist for a specific user
@@ -5181,6 +7909,111 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserSettings'
+  /user/{userId}/settings/tour:
+    post:
+      summary: Record the guided tour as seen
+      description: Stores the version of the guided tour the current user has seen, so the tour is shown once per user on any device. Only the user themselves can update it.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version:
+                  type: integer
+                  minimum: 0
+                  example: 1
+              required:
+                - version
+      responses:
+        '200':
+          description: Tour version stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tourVersion:
+                    type: integer
+                    example: 1
+  /user/{userId}/settings/api-key:
+    get:
+      summary: Get personal API key status
+      description: Returns whether the user has a personal API key. The key itself is never returned. Requires `MANAGE_USERS` permission if viewing other users.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Personal API key status returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasApiKey:
+                    type: boolean
+                    example: true
+                  createdAt:
+                    type: string
+                    nullable: true
+                    example: '2026-10-08T05:00:00.000Z'
+    post:
+      summary: Generate a personal API key
+      description: |
+        Creates a new personal API key for the current user, replacing any existing key. The key is only returned once. Send it in the `X-Api-Key` header to act as this user.
+
+        Only the user themselves can generate a key.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      responses:
+        '201':
+          description: Personal API key generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apiKey:
+                    type: string
+                    example: 'asu_6p1x...'
+                  createdAt:
+                    type: string
+                    example: '2026-10-08T05:00:00.000Z'
+    delete:
+      summary: Revoke a personal API key
+      description: Revokes the user's personal API key. Requires `MANAGE_USERS` permission if revoking another user's key.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      responses:
+        '204':
+          description: Personal API key revoked
   /user/{userId}/settings/password:
     get:
       summary: Get password page informatiom
@@ -5494,8 +8327,11 @@ paths:
                     type: number
   /search:
     get:
-      summary: Search for movies, TV shows, or people
-      description: Returns a list of movies, TV shows, or people a JSON object.
+      summary: Search for movies, TV shows, people, music or books
+      description: |
+        Returns a list of movies, TV shows, or people a JSON object. When a Lidarr server is configured, the first page also holds matching albums and artists from MusicBrainz, and when LazyLibrarian is configured, matching books and authors from OpenLibrary.
+
+        With `type=music` only albums and artists are returned, and with `type=book` only books, plus authors on the first page.
       tags:
         - search
       parameters:
@@ -5511,6 +8347,12 @@ paths:
             type: number
             example: 1
             default: 1
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [all, music, book]
+            default: all
         - in: query
           name: language
           schema:
@@ -5540,6 +8382,10 @@ paths:
                         - $ref: '#/components/schemas/MovieResult'
                         - $ref: '#/components/schemas/TvResult'
                         - $ref: '#/components/schemas/PersonResult'
+                        - $ref: '#/components/schemas/AlbumResult'
+                        - $ref: '#/components/schemas/ArtistResult'
+                        - $ref: '#/components/schemas/BookResult'
+                        - $ref: '#/components/schemas/AuthorResult'
   /search/keyword:
     get:
       summary: Search for keywords
@@ -5946,6 +8792,372 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/MovieResult'
+  /discover/music:
+    get:
+      summary: Discover new music releases
+      description: Returns albums and EPs released in the past two weeks from ListenBrainz, newest first.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                    example: 1
+                  totalPages:
+                    type: number
+                    example: 20
+                  totalResults:
+                    type: number
+                    example: 200
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlbumResult'
+  /discover/music/albums:
+    get:
+      summary: Discover popular albums
+      description: Returns the albums most listened to on ListenBrainz this week.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                    example: 1
+                  totalPages:
+                    type: number
+                    example: 20
+                  totalResults:
+                    type: number
+                    example: 200
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlbumResult'
+  /discover/music/hero:
+    get:
+      summary: Albums for the featured hero banner
+      description: Returns the first few albums most listened to on ListenBrainz this week that have a cover, each with the TheAudioDB fanart of its artist as artistBackdrop, or the colours of its cover as palette when the artist has no fanart.
+      tags:
+        - search
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlbumResult'
+  /discover/music/artists:
+    get:
+      summary: Discover popular artists
+      description: Returns the artists most listened to on ListenBrainz this week.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                    example: 1
+                  totalPages:
+                    type: number
+                    example: 20
+                  totalResults:
+                    type: number
+                    example: 200
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ArtistResult'
+  /discover/music/genre/{genre}:
+    get:
+      summary: Discover popular albums of a genre
+      description: Returns popular albums of a genre, picked from the albums most listened to on ListenBrainz this month, this year and of all time by their MusicBrainz genres.
+      tags:
+        - search
+      parameters:
+        - in: path
+          name: genre
+          required: true
+          description: One of rock, metal, pop, hip-hop, rnb, electronic, jazz or country
+          schema:
+            type: string
+            example: rock
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                    example: 1
+                  totalPages:
+                    type: number
+                    example: 20
+                  totalResults:
+                    type: number
+                    example: 200
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlbumResult'
+  /discover/books:
+    get:
+      summary: Discover trending books
+      description: Returns the books trending on OpenLibrary today.
+      tags:
+        - books
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                    example: 1
+                  totalPages:
+                    type: number
+                    example: 20
+                  totalResults:
+                    type: number
+                    example: 200
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookResult'
+  /discover/books/hero:
+    get:
+      summary: Books for the featured hero banner
+      description: Returns the first few books trending on OpenLibrary today that have a cover, each with the colours of its cover as palette, and the covers of other trending books to lay behind them.
+      tags:
+        - books
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookResult'
+                  collage:
+                    type: array
+                    items:
+                      type: string
+                      example: https://covers.openlibrary.org/b/id/6498519-M.jpg
+  /discover/books/upcoming:
+    get:
+      summary: Upcoming and new books from followed authors
+      description: |
+        Books coming out soon and books out in the last `recentDays` days from the authors the user follows
+        (up to 20, the most recently followed first), from Google Books when an API key is configured.
+        Without a key, OpenLibrary only knows the year a work was first published, so `newReleases` holds
+        this year's works and `comingSoon` stays empty. Answers are cached for an hour.
+      tags:
+        - search
+      responses:
+        '200':
+          description: Upcoming and new books
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  source:
+                    type: string
+                    enum: [googlebooks, openlibrary]
+                  followedAuthors:
+                    type: number
+                    example: 3
+                  recentDays:
+                    type: number
+                    example: 60
+                  comingSoon:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookRelease'
+                  newReleases:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookRelease'
+  /discover/books/popular:
+    get:
+      summary: Discover popular books
+      description: Returns the books trending on OpenLibrary over the past year.
+      tags:
+        - books
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                    example: 1
+                  totalPages:
+                    type: number
+                    example: 20
+                  totalResults:
+                    type: number
+                    example: 200
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookResult'
+  /discover/books/subjects:
+    get:
+      summary: Search book subjects
+      description: |
+        Returns the OpenLibrary subjects whose names match the query, for picking the
+        subject of a book subject slider. People, places and times are left out.
+      tags:
+        - books
+      parameters:
+        - in: query
+          name: query
+          required: true
+          description: The subject to look for, URL encoded as with the other searches
+          schema:
+            type: string
+            example: science%20fiction
+      responses:
+        '200':
+          description: Matching subjects
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        subject:
+                          type: string
+                          example: science_fiction
+                        name:
+                          type: string
+                          example: Science fiction
+                        workCount:
+                          type: number
+                          example: 21229
+  /discover/books/subject/{subject}:
+    get:
+      summary: Discover books by subject
+      description: Returns the books on an OpenLibrary subject, most published first.
+      tags:
+        - books
+      parameters:
+        - in: path
+          name: subject
+          required: true
+          description: OpenLibrary subject key (lower case letters, digits, `_` and `-`)
+          schema:
+            type: string
+            example: science_fiction
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                    example: 1
+                  totalPages:
+                    type: number
+                    example: 20
+                  totalResults:
+                    type: number
+                    example: 200
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookResult'
   /discover/tv:
     get:
       summary: Discover TV shows
@@ -6547,7 +9759,7 @@ paths:
           name: mediaType
           schema:
             type: string
-            enum: [movie, tv, all]
+            enum: [movie, tv, music, book, all]
             nullable: true
             default: all
       responses:
@@ -6581,10 +9793,13 @@ paths:
               properties:
                 mediaType:
                   type: string
-                  enum: [movie, tv]
+                  enum: [movie, tv, music, book]
                   example: movie
                 mediaId:
-                  type: number
+                  oneOf:
+                    - type: number
+                    - type: string
+                  description: TMDB ID for movies and series, MusicBrainz release group ID for music, OpenLibrary work ID for books
                   example: 123
                 tvdbId:
                   type: number
@@ -6597,9 +9812,46 @@ paths:
                         minimum: 0
                     - type: string
                       enum: [all]
+                episodes:
+                  type: array
+                  description: Series only. Requests only these episodes of each listed season, which counts as one season against quotas and auto-approve rules. A season listed here does not need to be in `seasons`. Requires partial series requests to be enabled.
+                  items:
+                    $ref: '#/components/schemas/RequestedEpisodes'
+                monitorMode:
+                  type: string
+                  enum: [seasons, future, current]
+                  description: Series only. `future` ignores `seasons` and `episodes`, requests the seasons that are airing or announced, and has Sonarr monitor only episodes that have not aired yet, without a search. Requires partial series requests to be enabled. `current` ignores `seasons` and `episodes`, requests the season with the latest aired episode, and has Sonarr search it and monitor new seasons. When a new season starts, older seasons the request brought in are deleted after a notice period, while seasons that were already available are kept unless an admin approves deleting them. Users without the `MANAGE_REQUESTS` permission need current season requests to be allowed, otherwise the request is refused with 403.
                 is4k:
                   type: boolean
                   example: false
+                isAudiobook:
+                  type: boolean
+                  example: false
+                  description: Books only. Requests the audiobook instead of the ebook. Each format is its own request.
+                language:
+                  type: string
+                  enum:
+                    [
+                      en,
+                      es,
+                      fr,
+                      de,
+                      it,
+                      pt,
+                      nl,
+                      sv,
+                      da,
+                      'no',
+                      fi,
+                      pl,
+                      ru,
+                      ja,
+                      zh,
+                      ko,
+                      any,
+                    ]
+                  example: en
+                  description: Books only. ISO 639-1 code of the language to request the book in, or `any`. Only honored for users with the `MANAGE_REQUESTS` permission. Everyone else requests in their own language and a different value is ignored.
                 serverId:
                   type: number
                 profileId:
@@ -6625,6 +9877,143 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MediaRequest'
+  /request/discography:
+    post:
+      summary: Request albums of an artist's discography
+      description: |
+        Requests the given albums of an artist in one go, one music request per album, the way `POST /request` requests a single album. The `REQUEST` or `REQUEST_MUSIC` permission is required. Albums that are already requested, available or blocklisted are skipped, and albums that cannot be requested are reported as failed while the rest are still requested. A request can include at most 100 albums, and is refused as a whole when it needs more music requests than the user's quota has left, unless `ignoreQuota` is set. One summary notification is sent for the request instead of one per album.
+      tags:
+        - request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                artistId:
+                  type: string
+                  description: MusicBrainz artist ID
+                  example: a74b1b7f-71a5-4011-9441-d0b5e4122711
+                mbIds:
+                  type: array
+                  description: MusicBrainz release group IDs of the albums to request, at most 100
+                  items:
+                    type: string
+                    example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843
+                serverId:
+                  type: number
+                profileId:
+                  type: number
+                rootFolder:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: number
+                userId:
+                  type: number
+                  nullable: true
+                ignoreQuota:
+                  type: boolean
+                  example: false
+                  description: If true, these requests will not count against the user's quota. Requires MANAGE_REQUESTS permission.
+                monitorNewReleases:
+                  type: boolean
+                  example: false
+                  description: Has Lidarr monitor new albums of the artist once it is added. Requires MANAGE_REQUESTS permission. `mbIds` may be empty when this is set.
+              required:
+                - artistId
+                - mbIds
+      responses:
+        '200':
+          description: No album was requested, all of them were skipped or failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkRequestResponse'
+        '201':
+          description: At least one album was requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkRequestResponse'
+  /request/author-catalog:
+    post:
+      summary: Request works of an author
+      description: |
+        Requests the given works of an author in one go, one book request per work and format, the way `POST /request` requests a single book. The `REQUEST` or `REQUEST_BOOK` permission is required. Formats that are already requested, available or blocklisted are skipped, and works that cannot be requested are reported as failed while the rest are still requested. A request can include at most 100 requests, a work requested in both formats counting twice, and is refused as a whole when it needs more book requests than the user's quota has left, unless `ignoreQuota` is set. One summary notification is sent for the request instead of one per book.
+      tags:
+        - request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                authorId:
+                  type: string
+                  description: OpenLibrary author ID
+                  example: OL34184A
+                olIds:
+                  type: array
+                  description: OpenLibrary work IDs of the books to request, at most 100 requests counting each format
+                  items:
+                    type: string
+                    example: OL45804W
+                format:
+                  type: string
+                  enum: [ebook, audiobook, both]
+                  example: ebook
+                language:
+                  type: string
+                  enum:
+                    [
+                      en,
+                      es,
+                      fr,
+                      de,
+                      it,
+                      pt,
+                      nl,
+                      sv,
+                      da,
+                      'no',
+                      fi,
+                      pl,
+                      ru,
+                      ja,
+                      zh,
+                      ko,
+                      any,
+                    ]
+                  example: en
+                  description: ISO 639-1 code of the language to request the books in, or `any`. Only honored for users with the `MANAGE_REQUESTS` permission. Everyone else requests in their own language and a different value is ignored.
+                userId:
+                  type: number
+                  nullable: true
+                ignoreQuota:
+                  type: boolean
+                  example: false
+                  description: If true, these requests will not count against the user's quota. Requires MANAGE_REQUESTS permission.
+              required:
+                - authorId
+                - olIds
+                - format
+      responses:
+        '200':
+          description: No book was requested, all of them were skipped or failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkRequestResponse'
+        '201':
+          description: At least one book was requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkRequestResponse'
   /request/count:
     get:
       summary: Gets request counts
@@ -6645,6 +10034,10 @@ paths:
                   movie:
                     type: number
                   tv:
+                    type: number
+                  music:
+                    type: number
+                  book:
                     type: number
                   pending:
                     type: number
@@ -6701,12 +10094,21 @@ paths:
               properties:
                 mediaType:
                   type: string
-                  enum: [movie, tv]
+                  enum: [movie, tv, music, book]
                 seasons:
                   type: array
                   items:
                     type: number
                     minimum: 0
+                episodes:
+                  type: array
+                  description: Requests only these episodes of each listed season. Seasons already on the request take the new episode list.
+                  items:
+                    $ref: '#/components/schemas/RequestedEpisodes'
+                monitorMode:
+                  type: string
+                  enum: [seasons, future, current]
+                  description: Switches the request between season, future only and current season monitoring. Keeps the current mode when omitted.
                 is4k:
                   type: boolean
                   example: false
@@ -6718,6 +10120,30 @@ paths:
                   type: string
                 languageProfileId:
                   type: number
+                language:
+                  type: string
+                  enum:
+                    [
+                      en,
+                      es,
+                      fr,
+                      de,
+                      it,
+                      pt,
+                      nl,
+                      sv,
+                      da,
+                      'no',
+                      fi,
+                      pl,
+                      ru,
+                      ja,
+                      zh,
+                      ko,
+                      any,
+                    ]
+                  example: en
+                  description: Books only. Changes the language the book is requested in. Only users with the `MANAGE_REQUESTS` permission can change it, it is ignored for everyone else.
                 userId:
                   type: number
                   nullable: true
@@ -6798,6 +10224,17 @@ paths:
           schema:
             type: string
             enum: [approve, decline]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: Shown to the requester when a request is declined.
       responses:
         '200':
           description: Request status changed
@@ -6809,6 +10246,336 @@ paths:
           description: Status must be approve or decline
         '409':
           description: Only pending requests can be approved or declined
+  /music/{musicId}:
+    get:
+      summary: Get album details
+      description: Returns album details from MusicBrainz in a JSON object, with its cover, track list and request status.
+      tags:
+        - music
+      parameters:
+        - in: path
+          name: musicId
+          required: true
+          description: MusicBrainz release group ID
+          schema:
+            type: string
+            example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843
+      responses:
+        '200':
+          description: Album details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MusicDetails'
+  /book/{bookId}:
+    get:
+      summary: Get book details
+      description: Returns book details from OpenLibrary in a JSON object, with its cover, subjects and request status. Merged works resolve to the work they were merged into.
+      tags:
+        - books
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          description: OpenLibrary work ID
+          schema:
+            type: string
+            example: OL45804W
+      responses:
+        '200':
+          description: Book details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookDetails'
+  /book/{bookId}/audiobook:
+    get:
+      summary: Get audiobook availability of a book
+      description: Returns whether Audible lists an audiobook edition of the book, in the marketplace of the discover region. Answers are cached, and exists is null when Audible could not be asked.
+      tags:
+        - books
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          description: OpenLibrary work ID
+          schema:
+            type: string
+            example: OL45804W
+      responses:
+        '200':
+          description: Audiobook availability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudiobookAvailability'
+  /book/audiobook-availability:
+    post:
+      summary: Get audiobook availability of several books
+      description: Returns whether Audible lists audiobook editions of up to 50 books, keyed by OpenLibrary work ID. Books with an invalid ID or no title are left out.
+      tags:
+        - books
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                books:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                    properties:
+                      olId:
+                        type: string
+                        example: OL45804W
+                      title:
+                        type: string
+                        example: Fantastic Mr Fox
+                      author:
+                        type: string
+                        example: Roald Dahl
+                    required:
+                      - olId
+                      - title
+              required:
+                - books
+      responses:
+        '200':
+          description: Audiobook availability by OpenLibrary work ID
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/AudiobookAvailability'
+  /book/{bookId}/ebook:
+    get:
+      summary: Get ebook availability of a book
+      description: Returns whether Google Books lists an ebook edition of the book, in the country of the discover region. Answers are saved and asked again after 90 days when an ebook was found, after 14 days otherwise. exists is null when no Google Books API key is set or Google could not be asked.
+      tags:
+        - books
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          description: OpenLibrary work ID
+          schema:
+            type: string
+            example: OL45804W
+      responses:
+        '200':
+          description: Ebook availability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EbookAvailability'
+  /book/ebook-availability:
+    post:
+      summary: Get ebook availability of several books
+      description: Returns whether Google Books lists ebook editions of up to 50 books, keyed by OpenLibrary work ID. Books with an invalid ID or no title are left out. Without a Google Books API key, every book reports null and Google is not asked.
+      tags:
+        - books
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                books:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                    properties:
+                      olId:
+                        type: string
+                        example: OL17930368W
+                      title:
+                        type: string
+                        example: Atomic Habits
+                      author:
+                        type: string
+                        example: James Clear
+                    required:
+                      - olId
+                      - title
+              required:
+                - books
+      responses:
+        '200':
+          description: Ebook availability by OpenLibrary work ID
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/EbookAvailability'
+  /author/{authorId}:
+    get:
+      summary: Get author details
+      description: Returns author details from OpenLibrary in a JSON object, with their most published works.
+      tags:
+        - books
+      parameters:
+        - in: path
+          name: authorId
+          required: true
+          description: OpenLibrary author ID
+          schema:
+            type: string
+            example: OL34184A
+      responses:
+        '200':
+          description: Author details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorDetails'
+  /author/{authorId}/catalog:
+    get:
+      summary: Get all works of an author
+      description: Returns all works of an author from OpenLibrary, most published first, up to 1000 works, for requesting them in one go.
+      tags:
+        - books
+      parameters:
+        - in: path
+          name: authorId
+          required: true
+          description: OpenLibrary author ID
+          schema:
+            type: string
+            example: OL34184A
+      responses:
+        '200':
+          description: Works of the author
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authorId:
+                    type: string
+                    example: OL34184A
+                  authorName:
+                    type: string
+                    example: Roald Dahl
+                  works:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookResult'
+                  totalWorks:
+                    type: number
+                    example: 150
+  /artist/{artistId}:
+    get:
+      summary: Get artist details
+      description: Returns artist details and discography from MusicBrainz in a JSON object.
+      tags:
+        - music
+      parameters:
+        - in: path
+          name: artistId
+          required: true
+          description: MusicBrainz artist ID
+          schema:
+            type: string
+            example: a74b1b7f-71a5-4011-9441-d0b5e4122711
+      responses:
+        '200':
+          description: Artist details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtistDetails'
+  /artist/{artistId}/discography:
+    get:
+      summary: Get the discography of an artist
+      description: Returns all release groups of an artist from MusicBrainz, newest first, up to 2500, for requesting them in one go.
+      tags:
+        - music
+      parameters:
+        - in: path
+          name: artistId
+          required: true
+          description: MusicBrainz artist ID
+          schema:
+            type: string
+            example: a74b1b7f-71a5-4011-9441-d0b5e4122711
+      responses:
+        '200':
+          description: Discography of the artist
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  artistId:
+                    type: string
+                    example: a74b1b7f-71a5-4011-9441-d0b5e4122711
+                  artistName:
+                    type: string
+                    example: Radiohead
+                  releaseGroups:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlbumResult'
+                  totalReleaseGroups:
+                    type: number
+                    example: 120
+  /artist/{artistId}/similar:
+    get:
+      summary: Get similar artists
+      description: Returns up to 20 artists similar to an artist, most similar first, from ListenBrainz, with their images from TheAudioDB. The list is cached for a day, and is empty when ListenBrainz cannot be reached.
+      tags:
+        - music
+      parameters:
+        - in: path
+          name: artistId
+          required: true
+          description: MusicBrainz artist ID
+          schema:
+            type: string
+            example: a74b1b7f-71a5-4011-9441-d0b5e4122711
+      responses:
+        '200':
+          description: Similar artists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ArtistResult'
+  /coverart/batch/{ids}:
+    get:
+      summary: Get album covers
+      description: Returns the cover url of up to 50 albums, keyed by MusicBrainz release group ID. Albums without a cover map to null.
+      tags:
+        - music
+      parameters:
+        - in: path
+          name: ids
+          required: true
+          description: Comma separated MusicBrainz release group IDs
+          schema:
+            type: string
+            example: 1dc4c347-a1db-32aa-b14f-bc9cc507b843,b1392450-e666-3926-a536-22c65f834433
+      responses:
+        '200':
+          description: Album covers
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+                  nullable: true
   /movie/{movieId}:
     get:
       summary: Get movie details
@@ -7079,6 +10846,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Season'
+  /tv/{tvId}/season/{seasonNumber}/availability:
+    get:
+      summary: Get the availability of each episode of a season
+      description: Reads from Sonarr whether each episode is available, downloading, missing, wanted or unmonitored. Empty when the series is not in Sonarr.
+      tags:
+        - tv
+      parameters:
+        - in: path
+          name: tvId
+          required: true
+          schema:
+            type: number
+            example: 76479
+        - in: path
+          name: seasonNumber
+          required: true
+          schema:
+            type: number
+            example: 1
+      responses:
+        '200':
+          description: Availability keyed by episode number
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  episodes:
+                    type: object
+                    additionalProperties:
+                      type: string
+                      enum:
+                        [available, downloading, missing, wanted, unmonitored]
   /tv/{tvId}/recommendations:
     get:
       summary: Get recommended TV series
@@ -7266,6 +11066,118 @@ paths:
                       $ref: '#/components/schemas/CreditCrew'
                   id:
                     type: number
+  /library:
+    get:
+      summary: Browse the library
+      description: |
+        Returns movies or series whose status (or 4K status) is available or partially available, with titles and posters from TMDB. Sorting by date added only looks up the requested page on TMDB; every other sort and the genre filter use cached metadata for the whole library.
+      tags:
+        - library
+      parameters:
+        - in: query
+          name: type
+          required: true
+          schema:
+            type: string
+            enum: [movie, tv]
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum:
+              - mediaAdded.desc
+              - mediaAdded.asc
+              - title.asc
+              - title.desc
+              - releaseDate.desc
+              - releaseDate.asc
+              - rating.desc
+              - rating.asc
+            default: mediaAdded.desc
+        - in: query
+          name: genre
+          description: Comma separated TMDB genre ids; titles must have all of them.
+          schema:
+            type: string
+            example: '18'
+      responses:
+        '200':
+          description: Library titles returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                    example: 1
+                  totalPages:
+                    type: number
+                    example: 20
+                  totalResults:
+                    type: number
+                    example: 200
+                  results:
+                    type: array
+                    items:
+                      anyOf:
+                        - $ref: '#/components/schemas/MovieResult'
+                        - $ref: '#/components/schemas/TvResult'
+  /library/collections:
+    get:
+      summary: Browse library collections
+      description: |
+        Returns the TMDB collections that have at least one movie available or requested on the server, sorted by name.
+      tags:
+        - library
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Library collections returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                    example: 1
+                  totalPages:
+                    type: number
+                    example: 1
+                  totalResults:
+                    type: number
+                    example: 5
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                          example: 10
+                        mediaType:
+                          type: string
+                          example: collection
+                        title:
+                          type: string
+                          example: Star Wars Collection
+                        posterPath:
+                          type: string
+                        backdropPath:
+                          type: string
   /media:
     get:
       summary: Get media
@@ -7302,10 +11214,41 @@ paths:
               ]
         - in: query
           name: sort
+          description: |
+            `title`, `creator` (album artist or book author) and `releaseDate` only apply with
+            `mediaType` music or book, and sort on what Lidarr or Chaptarr know about each title.
+            Titles neither knows go last.
           schema:
             type: string
-            enum: [added, modified, mediaAdded]
+            enum: [added, modified, mediaAdded, title, creator, releaseDate]
             default: added
+        - in: query
+          name: sortDirection
+          description: For the `title`, `creator` and `releaseDate` sorts. Defaults to ascending, and descending (newest first) for `releaseDate`.
+          schema:
+            type: string
+            enum: [asc, desc]
+        - in: query
+          name: mediaType
+          schema:
+            type: string
+            enum: [movie, tv, music, book, all]
+            nullable: true
+            default: all
+        - in: query
+          name: albumType
+          description: With `mediaType` music, only albums of this Lidarr type. `other` is every type but album, EP and single.
+          schema:
+            type: string
+            enum: [album, ep, single, other]
+        - in: query
+          name: format
+          description: |
+            With `mediaType` book, only books available in this format (`both` needs the ebook and the
+            audiobook). Without it, `filter=allavailable` lists books available in either format.
+          schema:
+            type: string
+            enum: [ebook, audiobook, both]
       responses:
         '200':
           description: Returned media
@@ -7396,6 +11339,10 @@ paths:
                     When true, updates the 4K status field (status4k).
                     When false or not provided, updates the regular status field (status).
                     This applies to all status values (available, partial, processing, pending, unknown).
+                isAudiobook:
+                  type: boolean
+                  example: false
+                  description: Books only. When true, updates the audiobook status field (statusAudio) instead of the ebook status.
       responses:
         '200':
           description: Returned media
@@ -7403,6 +11350,463 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MediaInfo'
+  /media/{mediaId}/files:
+    get:
+      summary: Get files for media
+      description: |
+        Returns the files on disk for a movie or series, as reported by Radarr or Sonarr, including size, quality and stream details.
+
+        Full file paths are only included for users with the `MANAGE_REQUESTS` permission.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Files for the media
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  files:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MediaFileInfo'
+                  files4k:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MediaFileInfo'
+  /media/{mediaId}/subtitles:
+    get:
+      summary: Get subtitles for media
+      description: |
+        Returns downloaded, wanted and missing subtitles for a movie, or for each episode of a series, as reported by Bazarr.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subtitle status for the media
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wanted:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubtitleLanguage'
+                  available:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code:
+                          type: string
+                        name:
+                          type: string
+                  movie:
+                    $ref: '#/components/schemas/SubtitleStatus'
+                  episodes:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/SubtitleStatus'
+                        - type: object
+                          properties:
+                            seasonNumber:
+                              type: number
+                            episodeNumber:
+                              type: number
+                            title:
+                              type: string
+    post:
+      summary: Request subtitles for media
+      description: |
+        Asks Bazarr to search for and download one subtitle language. Series require a season and episode number.
+
+        Requires the `REQUEST` permission.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - language
+              properties:
+                language:
+                  type: string
+                  example: pt
+                forced:
+                  type: boolean
+                hi:
+                  type: boolean
+                seasonNumber:
+                  type: number
+                episodeNumber:
+                  type: number
+      responses:
+        '204':
+          description: Subtitle search started
+  /media/{mediaId}/arr:
+    get:
+      summary: Get the media in its arr
+      description: |
+        Looks the media up in the arr that holds it (Radarr, Sonarr, Lidarr, Chaptarr or LazyLibrarian) and lists the actions an admin can take there: search again, search manually and replace the file. For series, the episodes Sonarr has are included.
+
+        Requires the `MANAGE_REQUESTS` permission.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+        - in: query
+          name: is4k
+          description: Use the 4K Radarr or Sonarr server
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: seasonNumber
+          description: Series only, the season to act on
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - in: query
+          name: episodeNumber
+          description: Series only, the episode of seasonNumber to act on
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - in: query
+          name: bookFormat
+          description: Books only, the format to act on
+          required: false
+          schema:
+            type: string
+            enum: [ebook, audiobook]
+      responses:
+        '200':
+          description: The media in its arr
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArrItem'
+        '400':
+          description: The target is not valid for this media
+  /media/{mediaId}/arr/search:
+    post:
+      summary: Search again in the arr
+      description: |
+        Has the arr run its automatic search for the movie, series, season, episode, album or book format (MoviesSearch, SeriesSearch, SeasonSearch, EpisodeSearch, AlbumSearch, BookSearch, or a LazyLibrarian book search).
+
+        Requires the `MANAGE_REQUESTS` permission.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is4k:
+                  type: boolean
+                  description: Use the 4K Radarr or Sonarr server
+                seasonNumber:
+                  type: integer
+                  minimum: 0
+                  description: Series only, the season to act on
+                episodeNumber:
+                  type: integer
+                  minimum: 0
+                  description: Series only, the episode of seasonNumber to act on
+                bookFormat:
+                  type: string
+                  enum: [ebook, audiobook]
+                  description: Books only, the format to act on
+                issueId:
+                  type: integer
+                  description: The issue the action is taken from. A comment saying what was done is added to it.
+                resolveIssue:
+                  type: boolean
+                  description: Resolve the issue as well, for users with the `MANAGE_ISSUES` permission
+      responses:
+        '200':
+          description: The search was started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  issueResolved:
+                    type: boolean
+        '400':
+          description: The target is not valid for this media, or the arr cannot do this
+        '404':
+          description: The media does not exist, or its arr does not have it
+        '409':
+          description: No arr is set up for this media
+        '502':
+          description: The arr returned an error
+  /media/{mediaId}/arr/releases:
+    get:
+      summary: Search the arr for releases
+      description: |
+        Runs the arr's interactive search and lists the releases its indexers returned, approved ones first. Searching every indexer can take a minute or two. Series need a season or an episode. LazyLibrarian cannot list releases.
+
+        Requires the `MANAGE_REQUESTS` permission.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+        - in: query
+          name: is4k
+          description: Use the 4K Radarr or Sonarr server
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: seasonNumber
+          description: Series only, the season to act on
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - in: query
+          name: episodeNumber
+          description: Series only, the episode of seasonNumber to act on
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - in: query
+          name: bookFormat
+          description: Books only, the format to act on
+          required: false
+          schema:
+            type: string
+            enum: [ebook, audiobook]
+      responses:
+        '200':
+          description: Releases found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ArrRelease'
+        '400':
+          description: The target is not valid for this media, or the arr cannot do this
+        '404':
+          description: The media does not exist, or its arr does not have it
+        '409':
+          description: No arr is set up for this media
+        '502':
+          description: The arr returned an error
+  /media/{mediaId}/arr/grab:
+    post:
+      summary: Grab a release in the arr
+      description: |
+        Sends a release from the last release search to the arr's download client. The arr keeps search results for about 30 minutes.
+
+        Requires the `MANAGE_REQUESTS` permission.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - guid
+                - indexerId
+              properties:
+                guid:
+                  type: string
+                indexerId:
+                  type: integer
+                title:
+                  type: string
+                  description: The release title, for the log and the issue comment
+                replaced:
+                  type: boolean
+                  description: The file was replaced right before, for the issue comment
+                is4k:
+                  type: boolean
+                  description: Use the 4K Radarr or Sonarr server
+                seasonNumber:
+                  type: integer
+                  minimum: 0
+                  description: Series only, the season to act on
+                episodeNumber:
+                  type: integer
+                  minimum: 0
+                  description: Series only, the episode of seasonNumber to act on
+                bookFormat:
+                  type: string
+                  enum: [ebook, audiobook]
+                  description: Books only, the format to act on
+                issueId:
+                  type: integer
+                  description: The issue the action is taken from. A comment saying what was done is added to it.
+                resolveIssue:
+                  type: boolean
+                  description: Resolve the issue as well, for users with the `MANAGE_ISSUES` permission
+      responses:
+        '200':
+          description: The release was sent to the download client
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  issueResolved:
+                    type: boolean
+        '400':
+          description: The target is not valid for this media, or the arr cannot do this
+        '404':
+          description: The media does not exist, or its arr does not have it
+        '409':
+          description: No arr is set up for this media
+        '502':
+          description: The arr returned an error
+  /media/{mediaId}/arr/replace:
+    post:
+      summary: Replace the file in the arr
+      description: |
+        Deletes the current file(s) of the movie, season, episode, album or book format in the arr, optionally marks the download they came from as failed so the arr blocklists that release, then has the arr search again unless the admin will pick a release. The media shows as processing until a scan finds the new file. Series need a season or an episode. LazyLibrarian cannot delete files.
+
+        Requires the `MANAGE_REQUESTS` permission.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                blocklist:
+                  type: boolean
+                  default: true
+                  description: Blocklist the release of the current file
+                search:
+                  type: string
+                  enum: [automatic, interactive]
+                  default: automatic
+                  description: automatic has the arr search right away, interactive leaves picking a release to the admin
+                is4k:
+                  type: boolean
+                  description: Use the 4K Radarr or Sonarr server
+                seasonNumber:
+                  type: integer
+                  minimum: 0
+                  description: Series only, the season to act on
+                episodeNumber:
+                  type: integer
+                  minimum: 0
+                  description: Series only, the episode of seasonNumber to act on
+                bookFormat:
+                  type: string
+                  enum: [ebook, audiobook]
+                  description: Books only, the format to act on
+                issueId:
+                  type: integer
+                  description: The issue the action is taken from. A comment saying what was done is added to it.
+                resolveIssue:
+                  type: boolean
+                  description: Resolve the issue as well, for users with the `MANAGE_ISSUES` permission
+      responses:
+        '200':
+          description: The file was replaced
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deletedFiles:
+                    type: integer
+                  blocklisted:
+                    type: array
+                    items:
+                      type: string
+                  searched:
+                    type: boolean
+                  issueResolved:
+                    type: boolean
+        '400':
+          description: The target is not valid for this media, or the arr cannot do this
+        '404':
+          description: The media does not exist, or its arr does not have it
+        '409':
+          description: No arr is set up for this media
+        '502':
+          description: The arr returned an error
   /media/{mediaId}/watch_data:
     get:
       summary: Get watch data
@@ -7581,6 +11985,46 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/SonarrSeries'
+  /service/lidarr:
+    get:
+      summary: Get non-sensitive Lidarr server list
+      description: Returns a list of Lidarr server IDs and names in a JSON object.
+      tags:
+        - service
+      responses:
+        '200':
+          description: Request successful
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LidarrSettings'
+  /service/lidarr/{lidarrId}:
+    get:
+      summary: Get Lidarr server quality profiles and root folders
+      description: Returns a Lidarr server's quality profile and root folder details in a JSON object.
+      tags:
+        - service
+      parameters:
+        - in: path
+          name: lidarrId
+          required: true
+          schema:
+            type: number
+            example: 0
+      responses:
+        '200':
+          description: Request successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  server:
+                    $ref: '#/components/schemas/LidarrSettings'
+                  profiles:
+                    $ref: '#/components/schemas/ServiceProfile'
   /regions:
     get:
       summary: Regions supported by TMDB
@@ -7740,6 +12184,224 @@ paths:
                 type: array
                 items:
                   type: string
+  /removal:
+    get:
+      summary: Get removal requests
+      description: |
+        Returns removal requests in JSON format. Users without the `MANAGE_REQUESTS` permission only see their own.
+      tags:
+        - request
+      parameters:
+        - in: query
+          name: take
+          schema:
+            type: number
+            nullable: true
+            example: 20
+        - in: query
+          name: skip
+          schema:
+            type: number
+            nullable: true
+            example: 0
+        - in: query
+          name: filter
+          schema:
+            type: string
+            enum: [all, pending, approved, declined, failed]
+            default: all
+        - in: query
+          name: mediaId
+          schema:
+            type: number
+            nullable: true
+            example: 1
+      responses:
+        '200':
+          description: Removal requests returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pageInfo:
+                    $ref: '#/components/schemas/PageInfo'
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RemovalRequest'
+    post:
+      summary: Request removal of media
+      description: |
+        Asks for an available title to be removed from Radarr, Sonarr, Lidarr or LazyLibrarian, along with its files. A user with the `MANAGE_REQUESTS` permission must approve it.
+      tags:
+        - request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mediaId:
+                  type: number
+                  example: 1
+                is4k:
+                  type: boolean
+                  example: false
+                bookFormat:
+                  type: string
+                  enum: [ebook, audiobook, both]
+                  description: Formats of a book to remove, both when omitted
+                reason:
+                  type: string
+                  maxLength: 500
+                  example: 'We finished watching it'
+              required:
+                - mediaId
+      responses:
+        '201':
+          description: Removal request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemovalRequest'
+        '400':
+          description: Only available media can be requested for removal
+        '409':
+          description: A removal request for this media already exists
+  /removal/count:
+    get:
+      summary: Get pending removal request count
+      description: |
+        Returns the number of removal requests waiting for approval. Requires the `MANAGE_REQUESTS` permission.
+      tags:
+        - request
+      responses:
+        '200':
+          description: Pending removal request count returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pending:
+                    type: number
+                    example: 2
+  /removal/{removalId}:
+    delete:
+      summary: Delete a removal request
+      description: |
+        Cancels a pending removal request. Users can cancel their own; the `MANAGE_REQUESTS` permission is needed for anyone else's.
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: removalId
+          required: true
+          schema:
+            type: string
+            example: '1'
+      responses:
+        '204':
+          description: Removal request deleted
+  /removal/{removalId}/{status}:
+    post:
+      summary: Approve or decline a removal request
+      description: |
+        Approving removes the title and its files from Radarr or Sonarr. Requires the `MANAGE_REQUESTS` permission.
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: removalId
+          required: true
+          schema:
+            type: string
+            example: '1'
+        - in: path
+          name: status
+          required: true
+          schema:
+            type: string
+            enum: [approve, decline]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Removal request updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemovalRequest'
+        '409':
+          description: The removal request is no longer pending
+  /rollover:
+    get:
+      summary: Get season rollovers
+      description: |
+        Returns the season rollovers of current season requests, newest first. Requires the `MANAGE_REQUESTS` permission.
+      tags:
+        - request
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [all, pending, kept, completed]
+            default: all
+        - in: query
+          name: mediaId
+          schema:
+            type: number
+            nullable: true
+            example: 1
+      responses:
+        '200':
+          description: Season rollovers returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SeasonRollover'
+  /rollover/{rolloverId}/{action}:
+    post:
+      summary: Keep or delete the older seasons of a season rollover
+      description: |
+        `keep` keeps every older season. `delete-now` ends the notice period for the seasons the request brought in, and `delete-all` also approves deleting the seasons that were already there. Deleting happens on the Sonarr scan, which is started right away. Requires the `MANAGE_REQUESTS` permission.
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: rolloverId
+          required: true
+          schema:
+            type: string
+            example: '1'
+        - in: path
+          name: action
+          required: true
+          schema:
+            type: string
+            enum: [keep, delete-now, delete-all]
+      responses:
+        '200':
+          description: Season rollover updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeasonRollover'
+        '409':
+          description: The season rollover is no longer pending
   /issue:
     get:
       summary: Get all issues
@@ -7811,6 +12473,16 @@ paths:
                   type: string
                 mediaId:
                   type: number
+                problemSeason:
+                  type: number
+                  description: Affected season of a series, or affected disc of an album
+                problemEpisode:
+                  type: number
+                  description: Affected episode of a series, or affected track of an album
+                bookFormat:
+                  type: string
+                  nullable: true
+                  description: Affected format of a book, ebook or audiobook
                 userId:
                   type: number
                   nullable: true
@@ -8190,6 +12862,12 @@ paths:
       description: Creates a new Override Rule from the request body.
       tags:
         - overriderule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OverrideRule'
       responses:
         '200':
           description: 'Values were successfully created'
@@ -8211,6 +12889,12 @@ paths:
           required: true
           schema:
             type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OverrideRule'
       responses:
         '200':
           description: 'Values were successfully updated'
@@ -8252,13 +12936,13 @@ paths:
               type: object
               required:
                 - mediaType
-                - tmdbId
               properties:
                 mediaType:
                   type: string
                 tmdbId:
                   type: number
                   example: 1
+                  description: Required for movies and series, music rules only match on users
                 is4k:
                   type: boolean
                   example: false

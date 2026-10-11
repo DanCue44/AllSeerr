@@ -6,6 +6,8 @@ import { Session } from '@server/entity/Session';
 import { User } from '@server/entity/User';
 import { initI18n } from '@server/i18n';
 import { startJobs } from '@server/job/schedule';
+import { buildWebManifest, getIconFile } from '@server/lib/branding';
+import { getMusicGenrePool } from '@server/lib/musicGenres';
 import notificationManager from '@server/lib/notifications';
 import DiscordAgent from '@server/lib/notifications/agents/discord';
 import EmailAgent from '@server/lib/notifications/agents/email';
@@ -50,7 +52,7 @@ import swaggerUi from 'swagger-ui-express';
 
 const API_SPEC_PATH = path.join(__dirname, '../seerr-api.yml');
 
-logger.info(`Starting Seerr version ${getAppVersion()}`);
+logger.info(`Starting AllSeerr version ${getAppVersion()}`);
 const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
 const handle = app.getRequestHandler();
@@ -155,6 +157,14 @@ app
     const totalUsers = await userRepository.count();
     if (totalUsers > 0) {
       startJobs();
+
+      // Build the music genre shelves, and warm their covers, before anyone
+      // opens them
+      if (getSettings().lidarr.length > 0) {
+        setTimeout(() => {
+          getMusicGenrePool().catch(() => undefined);
+        }, 30 * 1000);
+      }
     } else {
       logger.info(
         `Skipping starting the scheduled jobs as we have no Plex/Jellyfin/Emby servers setup yet`,
@@ -172,6 +182,8 @@ app
       server.enable('trust proxy');
     }
     server.use(cookieParser());
+    // Logos are uploaded as base64 inside JSON, so allow a larger body there
+    server.use('/api/v1/settings/main/logo', express.json({ limit: '3mb' }));
     server.use(express.json());
     server.use(express.urlencoded({ extended: true }));
     server.use((req, _res, next) => {
@@ -266,6 +278,22 @@ app
     // Do not set cookies so CDNs can cache them
     server.use('/imageproxy', clearCookies, imageproxy);
     server.use('/avatarproxy', clearCookies, avatarproxy);
+
+    // The manifest and favicon carry the application title and logo
+    server.get('/site.webmanifest', clearCookies, (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.type('application/manifest+json').send(buildWebManifest());
+    });
+    server.get('/favicon.ico', clearCookies, (req, res, next) => {
+      const icon = getIconFile('favicon.ico');
+
+      if (!icon) {
+        return next();
+      }
+
+      res.setHeader('Cache-Control', 'no-cache');
+      res.type('image/x-icon').sendFile(icon);
+    });
 
     server.get('*path', (req, res) => handle(req, res));
     server.use(

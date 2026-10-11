@@ -1,13 +1,18 @@
 import { MediaServerType } from '@server/constants/server';
 import blocklistedTagsProcessor from '@server/job/blocklistedTagsProcessor';
+import followedReleases from '@server/job/followedReleases';
+import recentlyAddedNewsletter from '@server/job/newsletter';
 import availabilitySync from '@server/lib/availabilitySync';
 import downloadTracker from '@server/lib/downloadtracker';
 import ImageProxy from '@server/lib/imageproxy';
 import refreshToken from '@server/lib/refreshToken';
+import { chaptarrScanner } from '@server/lib/scanners/chaptarr';
 import {
   jellyfinFullScanner,
   jellyfinRecentScanner,
 } from '@server/lib/scanners/jellyfin';
+import { lazyLibrarianScanner } from '@server/lib/scanners/lazylibrarian';
+import { lidarrScanner } from '@server/lib/scanners/lidarr';
 import { plexFullScanner, plexRecentScanner } from '@server/lib/scanners/plex';
 import { radarrScanner } from '@server/lib/scanners/radarr';
 import { sonarrScanner } from '@server/lib/scanners/sonarr';
@@ -177,6 +182,53 @@ export const startJobs = (): void => {
     cancelFn: () => sonarrScanner.cancel(),
   });
 
+  // Run full lidarr scan every 24 hours
+  scheduledJobs.push({
+    id: 'lidarr-scan',
+    name: 'Lidarr Scan',
+    type: 'process',
+    interval: 'hours',
+    cronSchedule: jobs['lidarr-scan'].schedule,
+    job: schedule.scheduleJob(jobs['lidarr-scan'].schedule, () => {
+      logger.info('Starting scheduled job: Lidarr Scan', { label: 'Jobs' });
+      lidarrScanner.run();
+    }),
+    running: () => lidarrScanner.status().running,
+    cancelFn: () => lidarrScanner.cancel(),
+  });
+
+  // Run LazyLibrarian scan every 30 minutes
+  scheduledJobs.push({
+    id: 'lazylibrarian-scan',
+    name: 'LazyLibrarian Scan',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['lazylibrarian-scan'].schedule,
+    job: schedule.scheduleJob(jobs['lazylibrarian-scan'].schedule, () => {
+      logger.info('Starting scheduled job: LazyLibrarian Scan', {
+        label: 'Jobs',
+      });
+      lazyLibrarianScanner.run();
+    }),
+    running: () => lazyLibrarianScanner.status().running,
+    cancelFn: () => lazyLibrarianScanner.cancel(),
+  });
+
+  // Run Chaptarr scan every 15 minutes
+  scheduledJobs.push({
+    id: 'chaptarr-scan',
+    name: 'Chaptarr Scan',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['chaptarr-scan'].schedule,
+    job: schedule.scheduleJob(jobs['chaptarr-scan'].schedule, () => {
+      logger.info('Starting scheduled job: Chaptarr Scan', { label: 'Jobs' });
+      chaptarrScanner.run();
+    }),
+    running: () => chaptarrScanner.status().running,
+    cancelFn: () => chaptarrScanner.cancel(),
+  });
+
   // Checks if media is still available in plex/sonarr/radarr libs
   scheduledJobs.push({
     id: 'availability-sync',
@@ -257,6 +309,50 @@ export const startJobs = (): void => {
     }),
     running: () => blocklistedTagsProcessor.status().running,
     cancelFn: () => blocklistedTagsProcessor.cancel(),
+  });
+
+  // Send the recently added newsletter on the day and hour set in the email settings
+  scheduledJobs.push({
+    id: 'recently-added-newsletter',
+    name: 'Recently Added Newsletter',
+    type: 'process',
+    interval: 'fixed',
+    cronSchedule: jobs['recently-added-newsletter'].schedule,
+    job: schedule.scheduleJob(
+      jobs['recently-added-newsletter'].schedule,
+      () => {
+        logger.info('Starting scheduled job: Recently Added Newsletter', {
+          label: 'Jobs',
+        });
+        recentlyAddedNewsletter.run();
+      }
+    ),
+    running: () => recentlyAddedNewsletter.running,
+  });
+
+  // Look up new releases of followed artists and authors once a day
+  scheduledJobs.push({
+    id: 'followed-releases',
+    name: 'Followed Artist and Author Releases',
+    type: 'process',
+    interval: 'days',
+    cronSchedule: jobs['followed-releases'].schedule,
+    job: schedule.scheduleJob(jobs['followed-releases'].schedule, () => {
+      logger.info(
+        'Starting scheduled job: Followed Artist and Author Releases',
+        {
+          label: 'Jobs',
+        }
+      );
+      followedReleases.run().catch((e) => {
+        logger.error('Failed to check followed releases', {
+          label: 'Jobs',
+          errorMessage: e.message,
+        });
+      });
+    }),
+    running: () => followedReleases.running,
+    cancelFn: () => followedReleases.cancel(),
   });
 
   logger.info('Scheduled jobs loaded', { label: 'Jobs' });

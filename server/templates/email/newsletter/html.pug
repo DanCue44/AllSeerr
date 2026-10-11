@@ -1,0 +1,96 @@
+mixin mediaItem(item)
+  tr
+    td
+      div(style='box-sizing: border-box; margin: 1rem 0 0; width: 100%; color: #fff; border-radius: .75rem; padding: 1rem; border: 1px solid rgb(100,100,100); background-color: rgb(31,41,55);')
+        table(style='color: #fff; width: 100%;')
+          tr
+            td(style='vertical-align: top;')
+              if item.actionUrl
+                a(href=item.actionUrl style='display: block; max-width: 20rem; color: #fff; font-weight: 700; text-decoration: none; margin: 0 1rem 0.25rem 0; font-size: 1.15em; line-height: 1.25em;' class='title')
+                  | #{item.title}
+                  if item.year
+                    span(style='color: #9ca3af; font-weight: 400;')
+                      | &nbsp;(#{item.year})
+              else
+                div(style='max-width: 20rem; color: #fff; font-weight: 700; margin: 0 1rem 0.25rem 0; font-size: 1.15em; line-height: 1.25em;')
+                  | #{item.title}
+                  if item.year
+                    span(style='color: #9ca3af; font-weight: 400;')
+                      | &nbsp;(#{item.year})
+              if item.overview
+                div(style='color: #d1d5db; font-size: .875em; line-height: 1.45em; padding-top: .25rem; margin-right: 1rem;')
+                  | #{item.overview}
+            if item.imageUrl
+              td(style='width: 5rem; vertical-align: top;')
+                a(style='display: block; width: 5rem; overflow: hidden; border-radius: .375rem;' href=item.actionUrl)
+                  img(alt='' src=item.imageUrl style='box-sizing: border-box; padding: 0px; border: none; margin: auto; display: block; min-width: 100%; max-width: 100%;')
+
+doctype html
+head
+  meta(charset='utf-8')
+  meta(name='x-apple-disable-message-reformatting')
+  meta(http-equiv='x-ua-compatible' content='ie=edge')
+  meta(name='viewport' content='width=device-width, initial-scale=1')
+  meta(name='format-detection' content='telephone=no, date=no, address=no, email=no')
+  style.
+    .title:hover * {
+    text-decoration: underline;
+    }
+    @media only screen and (max-width:600px) {
+    table {
+    font-size: 20px !important;
+    width: 100% !important;
+    }
+    }
+div(style='display: block; background-color: #111827; padding: 2.5rem 0;')
+  table(style='margin: 0 auto; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif; color: #fff; font-size: 16px; width: 26rem;')
+    tr
+      td(style="text-align: center;")
+        if logoUrl
+          if applicationUrl
+            a(href=applicationUrl style='margin: 0 1rem;')
+              img(src=logoUrl style='width: 26rem; image-rendering: crisp-edges; image-rendering: -webkit-optimize-contrast;')
+          else
+            img(src=logoUrl style='margin: 0 1rem; width: 26rem; image-rendering: crisp-edges; image-rendering: -webkit-optimize-contrast;')
+        else
+          if logoIconUrl
+            img(src=logoIconUrl alt='' width='96' height='96' style='display: block; margin: 0 auto 1rem; width: 6rem; height: 6rem;')
+          div(style='margin: 0 1rem 2.5rem; font-size: 3em; font-weight: 700;')
+            | #{applicationTitle}
+    if recipientName !== recipientEmail
+      tr
+        td(style='text-align: center;')
+          div(style='margin: 1rem 0 0; font-size: 1.25em;')
+            | Hi, #{recipientName.replace(/\.|@/g, ((x) => x + '﻿'))}!
+    tr
+      td(style='text-align: center;')
+        div(style='margin: 1rem 0 0; font-size: 1.25em;')
+          | #{body}
+    if movies.length
+      tr
+        td
+          div(style='margin: 2rem 0 0; font-size: 1.5em; font-weight: 700;')
+            | #{moviesTitle}
+      each item in movies
+        +mediaItem(item)
+    if series.length
+      tr
+        td
+          div(style='margin: 2rem 0 0; font-size: 1.5em; font-weight: 700;')
+            | #{seriesTitle}
+      each item in series
+        +mediaItem(item)
+    if applicationUrl
+      tr
+        td
+          a(href=applicationUrl style='display: block; margin: 1.5rem 3rem 0; text-decoration: none; font-size: 1.0em; line-height: 2.25em;')
+            span(style='padding: 0.2rem; font-weight: 500; text-align: center; border-radius: 10px; background-color: rgb(99,102,241); color: #fff; display: block; border: 1px solid rgba(255,255,255,0.2);')
+              | #{openIn}
+    tr
+      td(style='text-align: center;')
+        div(style='margin: 1.5rem 0 0; font-size: .85em; color: #9ca3af;')
+          if settingsUrl
+            a(href=settingsUrl style='color: #9ca3af;')
+              | #{optOut}
+          else
+            | #{optOut}

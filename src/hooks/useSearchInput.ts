@@ -2,7 +2,7 @@
 import type { Nullable } from '@app/utils/typeHelpers';
 import { useRouter } from 'next/router';
 import type { Dispatch, SetStateAction } from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UrlObject } from 'url';
 import useDebouncedState from './useDebouncedState';
 
@@ -20,8 +20,19 @@ const useSearchInput = (): SearchObject => {
   const router = useRouter();
   const [searchOpen, setIsOpen] = useState(false);
   const [lastRoute, setLastRoute] = useState<Nullable<Url>>(null);
-  const [searchValue, debouncedValue, setSearchValue] = useDebouncedState(
-    (router.query.query as string) ?? ''
+  const [searchValue, debouncedValue, setSearchValueFromRoute] =
+    useDebouncedState((router.query.query as string) ?? '');
+  // Several search boxes can be mounted at once (the phone and desktop bars
+  // on the search page). Only the one being typed in may change the route,
+  // or a box still holding a half typed word would push it back over the
+  // newer search.
+  const typed = useRef(false);
+  const setSearchValue = useCallback(
+    (value: SetStateAction<string>) => {
+      typed.current = true;
+      setSearchValueFromRoute(value);
+    },
+    [setSearchValueFromRoute]
   );
 
   /**
@@ -32,7 +43,7 @@ const useSearchInput = (): SearchObject => {
    * in a new route. If we are, then we only replace the history.
    */
   useEffect(() => {
-    if (debouncedValue !== '' && searchOpen) {
+    if (debouncedValue !== '' && searchOpen && typed.current) {
       if (router.pathname.startsWith('/search')) {
         router.replace({
           pathname: router.pathname,
@@ -90,7 +101,8 @@ const useSearchInput = (): SearchObject => {
    */
   useEffect(() => {
     if (router.query.query !== debouncedValue) {
-      setSearchValue(
+      typed.current = false;
+      setSearchValueFromRoute(
         router.query.query
           ? decodeURIComponent(router.query.query as string)
           : ''
@@ -104,7 +116,7 @@ const useSearchInput = (): SearchObject => {
     if (router.pathname.startsWith('/search')) {
       setIsOpen(true);
     }
-  }, [router, setSearchValue]);
+  }, [router, setSearchValueFromRoute]);
 
   const clear = () => {
     setIsOpen(false);

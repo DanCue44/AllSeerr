@@ -26,6 +26,8 @@ div(style='display: block; background-color: #111827; padding: 2.5rem 0;')
           else
             img(src=logoUrl style='margin: 0 1rem; width: 26rem; image-rendering: crisp-edges; image-rendering: -webkit-optimize-contrast;')
         else
+          if logoIconUrl
+            img(src=logoIconUrl alt='' width='96' height='96' style='display: block; margin: 0 auto 1rem; width: 6rem; height: 6rem;')
           div(style='margin: 0 1rem 2.5rem; font-size: 3em; font-weight: 700;')
             | #{applicationTitle}
     if recipientName !== recipientEmail

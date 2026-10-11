@@ -22,6 +22,17 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  // The movie, series, music and books pages became spaces. Query strings
+  // are passed on, so filtered links keep their filters. Kept in step with
+  // LEGACY_SPACE_REDIRECTS in src/utils/spaces.ts.
+  async redirects() {
+    return [
+      { source: '/discover/movies', destination: '/movies/browse' },
+      { source: '/discover/tv', destination: '/series/browse' },
+      { source: '/discover/music', destination: '/music' },
+      { source: '/discover/books', destination: '/books' },
+    ].map((redirect) => ({ ...redirect, permanent: false }));
+  },
   experimental: {
     scrollRestoration: true,
     largePageDataBytes: 512 * 1000,

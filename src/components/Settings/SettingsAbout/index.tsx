@@ -8,6 +8,11 @@ import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
+import {
+  ALLSEERR_BRANCH,
+  ALLSEERR_REPO_URL,
+  SEERR_REPO_URL,
+} from '@server/constants/repository';
 import type {
   SettingsAboutResponse,
   StatusResponse,
@@ -17,22 +22,23 @@ import useSWR from 'swr';
 
 const messages = defineMessages('components.Settings.SettingsAbout', {
   about: 'About',
-  aboutseerr: 'About Seerr',
+  aboutseerr: 'About AllSeerr',
   version: 'Version',
   totalmedia: 'Total Media',
   totalrequests: 'Total Requests',
   gettingsupport: 'Getting Support',
   githubdiscussions: 'GitHub Discussions',
+  githubissues: 'Report an Issue',
   timezone: 'Time Zone',
   appDataPath: 'Data Directory',
-  supportseerr: 'Support Seerr',
-  contribute: 'Make a Contribution',
   documentation: 'Documentation',
+  credits: 'Credits',
+  basedonseerr: 'Based on Seerr',
   outofdate: 'Out of Date',
   uptodate: 'Up to Date',
   versionCheckDisabled: 'Version Check Disabled',
-  runningDevelop:
-    'You are running the <code>develop</code> branch of Seerr, which is only recommended for those contributing to development or assisting with bleeding-edge testing.',
+  runningBranch:
+    'You are running a build of the <code>{branch}</code> branch of AllSeerr rather than a release.',
 });
 
 const SettingsAbout = () => {
@@ -54,6 +60,25 @@ const SettingsAbout = () => {
     return <ErrorPage statusCode={500} />;
   }
 
+  const latestUrl = data.releaseBuild
+    ? `${ALLSEERR_REPO_URL}/releases`
+    : `${ALLSEERR_REPO_URL}/commits/${ALLSEERR_BRANCH}`;
+  const updateUrl =
+    data.releaseBuild || !status
+      ? `${ALLSEERR_REPO_URL}/releases`
+      : `${ALLSEERR_REPO_URL}/compare/${status.commitTag}...${ALLSEERR_BRANCH}`;
+
+  const link = (href: string) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="text-indigo-500 transition duration-300 hover:underline"
+    >
+      {href}
+    </a>
+  );
+
   return (
     <>
       <PageTitle
@@ -64,9 +89,10 @@ const SettingsAbout = () => {
       />
       <div className="section">
         <List title={intl.formatMessage(messages.aboutseerr)}>
-          {data.version.startsWith('develop-') && (
+          {!data.releaseBuild && (
             <Alert
-              title={intl.formatMessage(messages.runningDevelop, {
+              title={intl.formatMessage(messages.runningBranch, {
+                branch: ALLSEERR_BRANCH,
                 code: (msg: React.ReactNode) => (
                   <code className="bg-gray-800/50">{msg}</code>
                 ),
@@ -83,15 +109,7 @@ const SettingsAbout = () => {
             {settings.currentSettings.versionCheck ? (
               status && status.commitTag !== 'local' ? (
                 status.updateAvailable ? (
-                  <a
-                    href={
-                      data.version.startsWith('develop-')
-                        ? `https://github.com/seerr-team/seerr/compare/${status.commitTag}...develop`
-                        : 'https://github.com/seerr-team/seerr/releases'
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <a href={updateUrl} target="_blank" rel="noopener noreferrer">
                     <Badge
                       badgeType="warning"
                       className="ml-2 !cursor-pointer transition hover:bg-yellow-400"
@@ -100,15 +118,7 @@ const SettingsAbout = () => {
                     </Badge>
                   </a>
                 ) : (
-                  <a
-                    href={
-                      data.version.startsWith('develop-')
-                        ? 'https://github.com/seerr-team/seerr/commits/develop'
-                        : 'https://github.com/seerr-team/seerr/releases'
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <a href={latestUrl} target="_blank" rel="noopener noreferrer">
                     <Badge
                       badgeType="success"
                       className="ml-2 !cursor-pointer transition hover:bg-green-400"
@@ -119,15 +129,7 @@ const SettingsAbout = () => {
                 )
               ) : null
             ) : (
-              <a
-                href={
-                  data.version.startsWith('develop-')
-                    ? 'https://github.com/seerr-team/seerr/commits/develop'
-                    : 'https://github.com/seerr-team/seerr/releases'
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a href={latestUrl} target="_blank" rel="noopener noreferrer">
                 <Badge
                   badgeType="primary"
                   className="ml-2 !cursor-pointer transition hover:bg-yellow-400"
@@ -156,48 +158,20 @@ const SettingsAbout = () => {
       <div className="section">
         <List title={intl.formatMessage(messages.gettingsupport)}>
           <List.Item title={intl.formatMessage(messages.documentation)}>
-            <a
-              href="https://docs.seerr.dev"
-              target="_blank"
-              rel="noreferrer"
-              className="text-indigo-500 transition duration-300 hover:underline"
-            >
-              https://docs.seerr.dev
-            </a>
+            {link(`${ALLSEERR_REPO_URL}#readme`)}
+          </List.Item>
+          <List.Item title={intl.formatMessage(messages.githubissues)}>
+            {link(`${ALLSEERR_REPO_URL}/issues`)}
           </List.Item>
           <List.Item title={intl.formatMessage(messages.githubdiscussions)}>
-            <a
-              href="https://github.com/seerr-team/seerr/discussions"
-              target="_blank"
-              rel="noreferrer"
-              className="text-indigo-500 transition duration-300 hover:underline"
-            >
-              https://github.com/seerr-team/seerr/discussions
-            </a>
-          </List.Item>
-          <List.Item title="Discord">
-            <a
-              href="https://discord.gg/seerr"
-              target="_blank"
-              rel="noreferrer"
-              className="text-indigo-500 transition duration-300 hover:underline"
-            >
-              https://discord.gg/seerr
-            </a>
+            {link(`${ALLSEERR_REPO_URL}/discussions`)}
           </List.Item>
         </List>
       </div>
       <div className="section">
-        <List title={intl.formatMessage(messages.supportseerr)}>
-          <List.Item title={intl.formatMessage(messages.contribute)}>
-            <a
-              href="https://opencollective.com/seerr"
-              target="_blank"
-              rel="noreferrer"
-              className="text-indigo-500 transition duration-300 hover:underline"
-            >
-              https://opencollective.com/seerr
-            </a>
+        <List title={intl.formatMessage(messages.credits)}>
+          <List.Item title={intl.formatMessage(messages.basedonseerr)}>
+            {link(SEERR_REPO_URL)}
           </List.Item>
         </List>
       </div>

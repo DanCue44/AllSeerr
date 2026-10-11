@@ -1,0 +1,13 @@
+# Local development: mounts the source tree and runs `pnpm dev`.
+# docker compose -f compose.dev.yaml up
+services:
+  allseerr:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    ports:
+      - 5055:5055
+    volumes:
+      - .:/app:rw,cached
+      - /app/node_modules
+      - /app/.next

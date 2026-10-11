@@ -10,7 +10,7 @@ export const mediaLock = new AsyncLock();
 
 export const userKey = (userId: number) => `user:${userId}`;
 export const requestKey = (requestId: number) => `request:${requestId}`;
-export const mediaKey = (mediaType: MediaType, mediaId: number) =>
+export const mediaKey = (mediaType: MediaType, mediaId: number | string) =>
   `${mediaType}:${mediaId}`;
 
 export default requestLock;

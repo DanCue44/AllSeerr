@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { MediaRequest } from './MediaRequest';
+import { episodeNumbersTransformer } from './Season';
 
 @Entity()
 class SeasonRequest {
@@ -20,6 +21,14 @@ class SeasonRequest {
 
   @Column({ type: 'int', default: MediaRequestStatus.PENDING })
   public status: MediaRequestStatus;
+
+  // Episode numbers when only some episodes were requested, null for the whole season
+  @Column({
+    type: 'text',
+    nullable: true,
+    transformer: episodeNumbersTransformer,
+  })
+  public episodes?: number[] | null;
 
   @ManyToOne(() => MediaRequest, (request) => request.seasons, {
     onDelete: 'CASCADE',

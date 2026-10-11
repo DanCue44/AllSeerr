@@ -1,9 +1,8 @@
-import TheMovieDb from '@server/api/themoviedb';
-import { IssueType, IssueTypeName } from '@server/constants/issue';
-import { MediaType } from '@server/constants/media';
+import { IssueType, getIssueTypeName } from '@server/constants/issue';
 import IssueComment from '@server/entity/IssueComment';
 import Media from '@server/entity/Media';
 import { User } from '@server/entity/User';
+import { getMediaNotificationDetails } from '@server/lib/mediaNotificationDetails';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { Permission } from '@server/lib/permissions';
 import logger from '@server/logger';
@@ -25,10 +24,6 @@ export class IssueCommentSubscriber implements EntitySubscriberInterface<IssueCo
     manager: EntityManager,
     entity: IssueComment
   ) {
-    let title: string;
-    let image: string;
-    const tmdb = new TheMovieDb();
-
     try {
       const issue = (
         await manager.getRepository(IssueComment).findOneOrFail({
@@ -45,21 +40,7 @@ export class IssueCommentSubscriber implements EntitySubscriberInterface<IssueCo
         where: { id: issue.media.id },
       });
 
-      if (media.mediaType === MediaType.MOVIE) {
-        const movie = await tmdb.getMovie({ movieId: media.tmdbId });
-
-        title = `${movie.title}${
-          movie.release_date ? ` (${movie.release_date.slice(0, 4)})` : ''
-        }`;
-        image = `https://image.tmdb.org/t/p/w600_and_h900_bestv2${movie.poster_path}`;
-      } else {
-        const tvshow = await tmdb.getTvShow({ tvId: media.tmdbId });
-
-        title = `${tvshow.name}${
-          tvshow.first_air_date ? ` (${tvshow.first_air_date.slice(0, 4)})` : ''
-        }`;
-        image = `https://image.tmdb.org/t/p/w600_and_h900_bestv2${tvshow.poster_path}`;
-      }
+      const { subject, image } = await getMediaNotificationDetails(media);
 
       const [firstComment] = sortBy(issue.comments, 'id');
 
@@ -68,10 +49,10 @@ export class IssueCommentSubscriber implements EntitySubscriberInterface<IssueCo
         notificationManager.sendNotification(Notification.ISSUE_COMMENT, {
           event: `New Comment on ${
             issue.issueType !== IssueType.OTHER
-              ? `${IssueTypeName[issue.issueType]} `
+              ? `${getIssueTypeName(issue.issueType, media.mediaType)} `
               : ''
           }Issue`,
-          subject: title,
+          subject,
           message: firstComment.message,
           comment: entity,
           issue,

@@ -8,11 +8,13 @@
     padding: env(safe-area-inset-top) env(safe-area-inset-right)
       calc(4rem + env(safe-area-inset-bottom)) env(safe-area-inset-left);
     scrollbar-width: thin;
-    scrollbar-color: #4b5563 #1f2937;
+    scrollbar-color: rgb(var(--tw-gray-600, 75 85 99))
+      rgb(var(--tw-gray-800, 31 41 55));
   }
 
   html:hover {
-    scrollbar-color: #6b7280 #1f2937;
+    scrollbar-color: rgb(var(--tw-gray-500, 107 114 128))
+      rgb(var(--tw-gray-800, 31 41 55));
   }
 
   /* WebKit scrollbar styles */
@@ -21,15 +23,15 @@
   }
 
   html::-webkit-scrollbar-track {
-    background: #1f2937;
+    background: rgb(var(--tw-gray-800, 31 41 55));
   }
 
   html::-webkit-scrollbar-thumb {
-    background-color: #4b5563;
+    background-color: rgb(var(--tw-gray-600, 75 85 99));
   }
 
   html:hover::-webkit-scrollbar-thumb {
-    background-color: #6b7280;
+    background-color: rgb(var(--tw-gray-500, 107 114 128));
   }
 
   @media (min-width: 640px) {
@@ -62,7 +64,11 @@
     @apply border-r border-gray-700;
     padding-top: env(safe-area-inset-top);
     padding-left: env(safe-area-inset-left);
-    background: linear-gradient(180deg, rgba(31, 41, 55, 1) 0%, #131928 100%);
+    background: linear-gradient(
+      180deg,
+      rgb(var(--tw-gray-800, 31 41 55) / 1) 0%,
+      #131928 100%
+    );
   }
 
   .slideover {
@@ -585,4 +591,241 @@
 
 .ptr--box {
   margin-bottom: -13px !important;
+}
+
+/*
+ * AllSeerr Ambient: Seerr's shared form and settings classes drawn in the
+ * Ambient design. Only applies while a palette is set on <html>, so the
+ * classic interface is unchanged. :where() keeps each selector at the same
+ * specificity as the stock rule it restyles: these come later so they win
+ * over the stock rules, while utility classes on an element still win.
+ */
+@layer components {
+  :where([data-palette]) .heading {
+    @apply font-display text-xl font-medium leading-8 text-as-ink;
+  }
+
+  :where([data-palette]) .description {
+    @apply text-as-ink-faint;
+  }
+
+  :where([data-palette]) .section:has(.form-row),
+  :where([data-palette]) .section:has(> form) {
+    @apply rounded-[22px] bg-as-surface px-4 py-[22px] sm:px-6;
+  }
+
+  /* No card inside a card or inside a modal */
+  :where([data-palette]) .section .section:has(.form-row),
+  :where([data-palette]) [role='dialog'] .section:has(.form-row),
+  :where([data-palette]) [role='dialog'] .section:has(> form) {
+    @apply rounded-none bg-transparent p-0;
+  }
+
+  :where([data-palette]) .section .section:has(.form-row) {
+    @apply my-0;
+  }
+
+  :where([data-palette]) .section > .form-row:first-child,
+  :where([data-palette]) .section form > :first-child {
+    @apply mt-0;
+  }
+
+  :where([data-palette]) .actions {
+    @apply border-as-line;
+  }
+
+  :where([data-palette]) label,
+  :where([data-palette]) .group-label {
+    @apply font-semibold text-as-ink-soft;
+  }
+
+  :where([data-palette]) label a {
+    @apply text-as-accent-soft hover:text-as-accent;
+  }
+
+  :where([data-palette]) .label-required {
+    @apply text-as-accent;
+  }
+
+  :where([data-palette]) .label-tip {
+    @apply font-normal text-as-ink-faint;
+  }
+
+  :where([data-palette]) .form-input-field {
+    @apply rounded-full shadow-none;
+  }
+
+  :where([data-palette]) input[type='text'],
+  :where([data-palette]) input[type='password'],
+  :where([data-palette]) select,
+  :where([data-palette]) textarea {
+    @apply rounded-full border-as-line bg-as-tile pl-4 text-as-ink placeholder:text-as-ink-faint focus:border-as-accent;
+    --tw-ring-color: rgb(var(--as-accent));
+  }
+
+  :where([data-palette]) input[type='text'],
+  :where([data-palette]) input[type='password'] {
+    @apply pr-4;
+  }
+
+  :where([data-palette]) textarea {
+    @apply rounded-2xl py-3 pr-4;
+  }
+
+  :where([data-palette]) select option {
+    @apply bg-as-surface;
+  }
+
+  /* Joined inputs keep the square edge where they meet their neighbour */
+  :where([data-palette]) input.rounded-l-only,
+  :where([data-palette]) select.rounded-l-only,
+  :where([data-palette]) textarea.rounded-l-only {
+    @apply rounded-r-none;
+  }
+
+  :where([data-palette]) input.rounded-r-only,
+  :where([data-palette]) select.rounded-r-only,
+  :where([data-palette]) textarea.rounded-r-only {
+    @apply rounded-l-none;
+  }
+
+  :where([data-palette]) textarea.rounded-l-only {
+    @apply rounded-l-2xl;
+  }
+
+  :where([data-palette]) button.input-action {
+    @apply border-as-line bg-as-raised px-4 text-as-ink;
+  }
+
+  :where([data-palette]) button.input-action:last-child {
+    @apply rounded-r-full pr-[1.125rem];
+  }
+
+  :where([data-palette]) button.input-action:not([disabled]) {
+    @apply hover:bg-as-line active:bg-as-line-strong active:text-as-ink;
+  }
+
+  :where([data-palette]) .protocol {
+    @apply rounded-l-full border-as-line bg-as-raised pl-4 text-as-ink-soft;
+  }
+
+  /*
+   * Icon boxes in front of list filters and sort selects. Attribute
+   * selectors, so Tailwind does not treat this rule as one of the utilities
+   * it can @apply.
+   */
+  :where([data-palette]) [class~='rounded-l-md'][class~='border-r-0'] {
+    @apply rounded-l-full border-as-line bg-as-raised pl-4 text-as-ink-soft;
+  }
+
+  :where([data-palette]) input[type='checkbox'] {
+    @apply border-as-line-strong bg-as-tile text-as-accent;
+    --tw-ring-color: rgb(var(--as-accent));
+  }
+
+  :where([data-palette]) .error {
+    @apply text-as-bad;
+  }
+
+  :where([data-palette]) .warning {
+    @apply text-[#f0d9a8];
+  }
+
+  :where([data-palette]) code {
+    @apply bg-as-tile;
+  }
+
+  :where([data-palette]) .media-facts {
+    @apply rounded-[22px] border-0 bg-as-surface text-as-ink-soft shadow-none;
+  }
+
+  :where([data-palette]) .media-fact {
+    @apply border-as-line px-5 py-3;
+  }
+
+  :where([data-palette]) .media-fact-value {
+    @apply text-as-ink-faint;
+  }
+
+  :where([data-palette]) .media-poster {
+    @apply md:rounded-[18px];
+  }
+
+  :where([data-palette]) .react-select-container .react-select__control,
+  :where([data-palette])
+    .react-select-container
+    .react-select__control--is-focused {
+    @apply rounded-[1.25rem] border-as-line bg-as-tile text-as-ink hover:border-as-line-strong;
+  }
+
+  :where([data-palette])
+    .react-select-container:has(+ .input-action)
+    .react-select__control {
+    @apply rounded-l-[1.25rem] rounded-r-none border-as-line bg-as-tile;
+  }
+
+  :where([data-palette]) .react-select-container .react-select__menu {
+    @apply overflow-hidden rounded-2xl bg-as-raised text-as-ink-soft ring-1 ring-as-line-strong;
+  }
+
+  :where([data-palette])
+    .react-select-container
+    .react-select__option--is-focused {
+    @apply bg-as-line text-as-ink;
+  }
+
+  :where([data-palette]) .react-select-container .react-select__multi-value {
+    @apply rounded-full border-as-line-strong bg-as-raised pl-1;
+  }
+
+  :where([data-palette])
+    .react-select-container
+    .react-select__multi-value__remove {
+    @apply rounded-r-full;
+  }
+
+  :where([data-palette]) input[type='range']::-webkit-slider-thumb {
+    @apply bg-as-accent;
+  }
+
+  :where([data-palette]) input[type='range']::-moz-range-thumb {
+    @apply bg-as-accent;
+  }
+
+  :where([data-palette]) .media-title > h1 {
+    @apply font-display font-medium;
+  }
+
+  :where([data-palette]) .media-attributes {
+    @apply text-as-ink-muted;
+  }
+
+  /*
+   * Service and override rule cards in Settings. These selectors keep the
+   * palette's weight so they win over the utilities on the cards.
+   */
+  [data-palette] .service-card {
+    @apply rounded-[22px] bg-as-surface shadow-none ring-0;
+  }
+
+  [data-palette] .service-card-actions {
+    @apply border-t-0 px-6 pb-5;
+  }
+
+  [data-palette] .service-card-actions > div {
+    @apply mt-0 gap-2;
+  }
+
+  [data-palette] .service-card-actions > div > div {
+    @apply m-0 border-r-0;
+  }
+
+  [data-palette] .service-card-actions button {
+    @apply m-0 rounded-full border-as-line-strong bg-as-raised py-2.5 font-semibold text-as-ink hover:bg-as-line;
+  }
+
+  /* Dashed "add" tiles next to them */
+  [data-palette] li[class~='border-dashed'] {
+    @apply rounded-[22px] border-as-line-strong shadow-none;
+  }
 }

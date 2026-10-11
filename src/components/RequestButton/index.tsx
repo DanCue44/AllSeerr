@@ -1,24 +1,35 @@
 import ButtonWithDropdown from '@app/components/Common/ButtonWithDropdown';
+import DeclineRequestModal from '@app/components/DeclineRequestModal';
 import RequestModal from '@app/components/RequestModal';
 import useSettings from '@app/hooks/useSettings';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import { getBlockingProviders } from '@app/utils/watchProviderBlock';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import {
   CheckIcon,
   InformationCircleIcon,
+  NoSymbolIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type Media from '@server/entity/Media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
+import {
+  MOVIE_RATINGS,
+  TV_RATINGS,
+  exceedsRatingLimit,
+} from '@server/lib/contentRatingLimit';
+import type { WatchProviders } from '@server/models/common';
 import axios from 'axios';
 import { useMemo, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { mutate } from 'swr';
 
 const messages = defineMessages('components.RequestButton', {
+  streamingblocked: 'Streaming on {providers}',
+  ratingrestricted: 'Not Available for Your Profile',
   viewrequest: 'View Request',
   viewrequest4k: 'View 4K Request',
   requestmore: 'Request More',
@@ -51,6 +62,9 @@ interface RequestButtonProps {
   media?: Media;
   isShowComplete?: boolean;
   is4kShowComplete?: boolean;
+  watchProviders?: WatchProviders[];
+  ambient?: boolean;
+  contentRating?: string;
 }
 
 const RequestButton = ({
@@ -60,6 +74,9 @@ const RequestButton = ({
   mediaType,
   isShowComplete = false,
   is4kShowComplete = false,
+  watchProviders,
+  ambient = false,
+  contentRating,
 }: RequestButtonProps) => {
   const intl = useIntl();
   const settings = useSettings();
@@ -67,6 +84,8 @@ const RequestButton = ({
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showRequest4kModal, setShowRequest4kModal] = useState(false);
   const [editRequest, setEditRequest] = useState(false);
+  const [declineRequests, setDeclineRequests] = useState<MediaRequest[]>([]);
+  const [isDeclining, setIsDeclining] = useState(false);
 
   // All pending requests
   const activeRequests = media?.requests.filter(
@@ -94,9 +113,13 @@ const RequestButton = ({
 
   const modifyRequest = async (
     request: MediaRequest,
-    type: 'approve' | 'decline'
+    type: 'approve' | 'decline',
+    reason?: string
   ) => {
-    const response = await axios.post(`/api/v1/request/${request.id}/${type}`);
+    const response = await axios.post(
+      `/api/v1/request/${request.id}/${type}`,
+      reason ? { reason } : undefined
+    );
 
     if (response) {
       onUpdate();
@@ -106,7 +129,8 @@ const RequestButton = ({
 
   const modifyRequests = async (
     requests: MediaRequest[],
-    type: 'approve' | 'decline'
+    type: 'approve' | 'decline',
+    reason?: string
   ): Promise<void> => {
     if (!requests) {
       return;
@@ -114,7 +138,10 @@ const RequestButton = ({
 
     await Promise.all(
       requests.map(async (request) => {
-        return axios.post(`/api/v1/request/${request.id}/${type}`);
+        return axios.post(
+          `/api/v1/request/${request.id}/${type}`,
+          reason ? { reason } : undefined
+        );
       })
     );
 
@@ -161,7 +188,7 @@ const RequestButton = ({
           id: 'decline-request',
           text: intl.formatMessage(messages.declinerequest),
           action: () => {
-            modifyRequest(activeRequest, 'decline');
+            setDeclineRequests([activeRequest]);
           },
           svg: <XMarkIcon />,
         }
@@ -189,7 +216,7 @@ const RequestButton = ({
             requestCount: activeRequests.length,
           }),
           action: () => {
-            modifyRequests(activeRequests, 'decline');
+            setDeclineRequests(activeRequests);
           },
           svg: <XMarkIcon />,
         }
@@ -231,7 +258,7 @@ const RequestButton = ({
           id: 'decline-4k-request',
           text: intl.formatMessage(messages.declinerequest4k),
           action: () => {
-            modifyRequest(active4kRequest, 'decline');
+            setDeclineRequests([active4kRequest]);
           },
           svg: <XMarkIcon />,
         }
@@ -259,7 +286,7 @@ const RequestButton = ({
             requestCount: active4kRequests.length,
           }),
           action: () => {
-            modifyRequests(active4kRequests, 'decline');
+            setDeclineRequests(active4kRequests);
           },
           svg: <XMarkIcon />,
         }
@@ -360,14 +387,106 @@ const RequestButton = ({
     });
   }
 
-  const [buttonOne, ...others] = buttons;
+  const declineModal = (
+    <DeclineRequestModal
+      show={declineRequests.length > 0}
+      count={declineRequests.length}
+      isUpdating={isDeclining}
+      onDecline={async (reason) => {
+        setIsDeclining(true);
+        try {
+          await modifyRequests(declineRequests, 'decline', reason);
+        } finally {
+          setIsDeclining(false);
+          setDeclineRequests([]);
+        }
+      }}
+      onCancel={() => setDeclineRequests([])}
+    />
+  );
+
+  // Titles on a blocked streaming service cannot be requested, except by
+  // managers, so drop the request options and say why
+  const blockingProviders = hasPermission(Permission.MANAGE_REQUESTS)
+    ? []
+    : getBlockingProviders(
+        watchProviders,
+        settings.currentSettings.streamingRegion ||
+          settings.currentSettings.discoverRegion ||
+          'US',
+        settings.currentSettings.blockedWatchProviders
+      );
+  // Titles above the user's rating limit cannot be requested either, again
+  // except by managers
+  const ratingRestricted =
+    !hasPermission(Permission.MANAGE_REQUESTS) &&
+    exceedsRatingLimit(
+      mediaType === 'movie' ? MOVIE_RATINGS : TV_RATINGS,
+      contentRating,
+      mediaType === 'movie' ? user?.movieRatingLimit : user?.tvRatingLimit
+    );
+  const requestButtonIds = [
+    'request',
+    'request-more',
+    'request4k',
+    'request-more-4k',
+  ];
+  const visibleButtons =
+    blockingProviders.length || ratingRestricted
+      ? buttons.filter((button) => !requestButtonIds.includes(button.id))
+      : buttons;
+
+  const [buttonOne, ...others] = visibleButtons;
 
   if (!buttonOne) {
+    if (ratingRestricted) {
+      return (
+        <ButtonWithDropdown
+          text={
+            <>
+              <NoSymbolIcon />
+              <span>{intl.formatMessage(messages.ratingrestricted)}</span>
+            </>
+          }
+          buttonType={ambient ? 'ambient' : 'ghost'}
+          disabled
+          className={
+            ambient ? 'cursor-default opacity-60' : 'ml-2 cursor-default'
+          }
+        />
+      );
+    }
+
+    if (blockingProviders.length) {
+      return (
+        <ButtonWithDropdown
+          text={
+            <>
+              <NoSymbolIcon />
+              <span>
+                {intl.formatMessage(messages.streamingblocked, {
+                  providers: blockingProviders
+                    .map((provider) => provider.name)
+                    .join(', '),
+                })}
+              </span>
+            </>
+          }
+          buttonType={ambient ? 'ambient' : 'ghost'}
+          disabled
+          className={
+            ambient ? 'cursor-default opacity-60' : 'ml-2 cursor-default'
+          }
+        />
+      );
+    }
+
     return null;
   }
 
   return (
     <>
+      {declineModal}
       <RequestModal
         tmdbId={tmdbId}
         show={showRequestModal}
@@ -399,7 +518,8 @@ const RequestButton = ({
           </>
         }
         onClick={buttonOne.action}
-        className="ml-2"
+        buttonType={ambient ? 'ambient' : undefined}
+        className={ambient ? '' : 'ml-2'}
       >
         {others && others.length > 0
           ? others.map((button) => (

@@ -1,5 +1,11 @@
-import type { MediaType } from '@server/constants/media';
+import type {
+  BookFormatChoice,
+  MediaRequestMonitorMode,
+  MediaRequestStatus,
+  MediaType,
+} from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
+import type { RequestedEpisodes } from '@server/lib/episodeRequests';
 import type { NonFunctionProperties, PaginatedResponse } from './common';
 
 export interface RequestResultsResponse extends PaginatedResponse {
@@ -10,15 +16,25 @@ export interface RequestResultsResponse extends PaginatedResponse {
   serviceErrors: {
     radarr: { id: number; name: string }[];
     sonarr: { id: number; name: string }[];
+    lidarr?: { id: number; name: string }[];
   };
 }
 
 export type MediaRequestBody = {
   mediaType: MediaType;
-  mediaId: number;
+  // TMDB id for movies and series, MusicBrainz release group id for music,
+  // OpenLibrary work id for books
+  mediaId: number | string;
   tvdbId?: number;
   seasons?: number[] | 'all';
+  episodes?: RequestedEpisodes[];
+  monitorMode?: MediaRequestMonitorMode;
   is4k?: boolean;
+  // Books only, requests the audiobook instead of the ebook
+  isAudiobook?: boolean;
+  // Books only, an ISO 639-1 code or 'any'. Only honored for users who
+  // manage requests, everyone else requests in their own language.
+  language?: string;
   serverId?: number;
   profileId?: number;
   profileName?: string;
@@ -28,3 +44,54 @@ export type MediaRequestBody = {
   tags?: number[];
   ignoreQuota?: boolean;
 };
+
+// Albums of an artist's discography, requested in one go
+export type DiscographyRequestBody = {
+  // MusicBrainz artist id
+  artistId: string;
+  // MusicBrainz release group ids of the albums to request
+  mbIds: string[];
+  serverId?: number;
+  profileId?: number;
+  rootFolder?: string;
+  tags?: number[];
+  userId?: number;
+  ignoreQuota?: boolean;
+  // Has Lidarr monitor the new albums of the artist
+  monitorNewReleases?: boolean;
+};
+
+// Works of an author, requested in one go in one or both formats
+export type AuthorCatalogRequestBody = {
+  // OpenLibrary author id
+  authorId: string;
+  // OpenLibrary work ids of the books to request
+  olIds: string[];
+  format: BookFormatChoice;
+  // An ISO 639-1 code or 'any', only honored for users who manage requests
+  language?: string;
+  userId?: number;
+  ignoreQuota?: boolean;
+};
+
+export interface BulkRequestItem {
+  mediaId: string;
+  title: string;
+  // Books only
+  isAudiobook?: boolean;
+  // Created requests only
+  requestId?: number;
+  status?: MediaRequestStatus;
+  // Why the album or book was skipped (a BulkSkipReason), or the error
+  // that failed it
+  reason?: string;
+}
+
+export interface BulkRequestResponse {
+  created: BulkRequestItem[];
+  skipped: BulkRequestItem[];
+  failed: BulkRequestItem[];
+  // Discography requests only: whether Lidarr was asked to monitor new
+  // releases of the artist
+  monitorNewReleases?: boolean;
+}

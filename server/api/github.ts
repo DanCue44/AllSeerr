@@ -1,8 +1,9 @@
+import { ALLSEERR_BRANCH, ALLSEERR_REPO } from '@server/constants/repository';
 import cacheManager from '@server/lib/cache';
 import logger from '@server/logger';
 import ExternalAPI from './externalapi';
 
-interface GitHubRelease {
+export interface GitHubRelease {
   url: string;
   assets_url: string;
   upload_url: string;
@@ -21,7 +22,7 @@ interface GitHubRelease {
   body: string;
 }
 
-interface GithubCommit {
+export interface GithubCommit {
   sha: string;
   node_id: string;
   commit: {
@@ -76,14 +77,14 @@ class GithubAPI extends ExternalAPI {
     );
   }
 
-  public async getSeerrReleases({
+  public async getReleases({
     take = 20,
   }: {
     take?: number;
   } = {}): Promise<GitHubRelease[]> {
     try {
       const data = await this.get<GitHubRelease[]>(
-        '/repos/seerr-team/seerr/releases',
+        `/repos/${ALLSEERR_REPO}/releases`,
         {
           params: {
             per_page: take,
@@ -94,27 +95,27 @@ class GithubAPI extends ExternalAPI {
       return data;
     } catch (e) {
       logger.warn(
-        "Failed to retrieve GitHub releases. This may be an issue on GitHub's end. Seerr can't check if it's on the latest version.",
+        "Failed to retrieve GitHub releases. This may be an issue on GitHub's end. AllSeerr can't check if it's on the latest version.",
         { label: 'GitHub API', errorMessage: e.message }
       );
       return [];
     }
   }
 
-  public async getSeerrCommits({
+  public async getCommits({
     take = 20,
-    branch = 'develop',
+    branch = ALLSEERR_BRANCH,
   }: {
     take?: number;
     branch?: string;
   } = {}): Promise<GithubCommit[]> {
     try {
       const data = await this.get<GithubCommit[]>(
-        '/repos/seerr-team/seerr/commits',
+        `/repos/${ALLSEERR_REPO}/commits`,
         {
           params: {
             per_page: take,
-            branch,
+            sha: branch,
           },
         }
       );
@@ -122,7 +123,7 @@ class GithubAPI extends ExternalAPI {
       return data;
     } catch (e) {
       logger.warn(
-        "Failed to retrieve GitHub commits. This may be an issue on GitHub's end. Seerr can't check if it's on the latest version.",
+        "Failed to retrieve GitHub commits. This may be an issue on GitHub's end. AllSeerr can't check if it's on the latest version.",
         { label: 'GitHub API', errorMessage: e.message }
       );
       return [];

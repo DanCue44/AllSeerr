@@ -34,7 +34,7 @@ const Toast = ({
         leaveFrom="opacity-100 scale-100"
         leaveTo="opacity-0 scale-90"
       >
-        <div className="pointer-events-auto w-full max-w-sm rounded-lg bg-gray-800 shadow-lg ring-1 ring-gray-500">
+        <div className="toast-panel pointer-events-auto w-full max-w-sm rounded-lg bg-gray-800 shadow-lg ring-1 ring-gray-500">
           <div className="overflow-hidden rounded-lg ring-1 ring-black ring-opacity-5">
             <div className="p-4">
               <div className="flex items-start">

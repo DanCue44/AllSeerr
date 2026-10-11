@@ -4,6 +4,7 @@ import type {
   JellyfinLibraryItemExtended,
 } from '@server/api/jellyfin';
 import JellyfinAPI from '@server/api/jellyfin';
+import MusicBrainz from '@server/api/musicbrainz';
 import TheMovieDb from '@server/api/themoviedb';
 import type {
   TmdbTvDetails,
@@ -26,7 +27,7 @@ import { getSettings } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
 import { runWithMockTimers } from '@server/test/runWithMockTimers';
 import assert from 'node:assert/strict';
-import { beforeEach, describe, it } from 'node:test';
+import { beforeEach, describe, it, mock } from 'node:test';
 
 // --- Mock animeList.sync to avoid filesystem/network I/O in tests ---
 Object.defineProperty(animeList, 'sync', {
@@ -599,5 +600,68 @@ describe('Jellyfin Scanner', () => {
         'Show should stay PARTIALLY_AVAILABLE when a DELETED season is missing from the metadata provider'
       );
     });
+  });
+});
+
+describe('Jellyfin Scanner, music', () => {
+  const RELEASE_GROUP_MBID = '1dc4c347-a1db-32aa-b14f-bc9cc507b843';
+  const RELEASE_MBID = '11111111-1111-1111-1111-111111111111';
+
+  const fakeAlbumItem = (id: string): JellyfinLibraryItem => ({
+    Name: 'OK Computer',
+    Id: id,
+    Type: 'MusicAlbum',
+    HasSubtitles: false,
+    LocationType: 'FileSystem',
+    MediaType: 'Unknown',
+  });
+
+  beforeEach(() => {
+    configureJellyfinWithLibrary([
+      { id: 'music-library-id', name: 'Music', enabled: true, type: 'music' },
+    ]);
+    getLibraryContentsImpl = async () => [
+      fakeAlbumItem('jf-album-1'),
+      fakeAlbumItem('jf-album-2'),
+    ];
+  });
+
+  it('saves albums by their MusicBrainz release group', async () => {
+    const getReleaseGroup = mock.method(
+      MusicBrainz.prototype,
+      'getReleaseGroup',
+      async () => 'b1392450-e666-3926-a536-22c65f834433'
+    );
+
+    getItemDataImpl = async (id: string) => ({
+      ...fakeAlbumItem(id),
+      DateCreated: '2024-01-01T00:00:00Z',
+      // The second album only carries the release, which is looked up
+      ProviderIds:
+        id === 'jf-album-1'
+          ? { MusicBrainzReleaseGroup: RELEASE_GROUP_MBID }
+          : { MusicBrainzAlbum: RELEASE_MBID },
+    });
+
+    try {
+      await runWithMockTimers(() => jellyfinFullScanner.run());
+    } finally {
+      getReleaseGroup.mock.restore();
+    }
+
+    const mediaRepository = getRepository(Media);
+    const first = await mediaRepository.findOneOrFail({
+      where: { mbId: RELEASE_GROUP_MBID, mediaType: MediaType.MUSIC },
+    });
+    assert.strictEqual(first.status, MediaStatus.AVAILABLE);
+    assert.strictEqual(first.jellyfinMediaId, 'jf-album-1');
+
+    const second = await mediaRepository.findOneOrFail({
+      where: { mbId: 'b1392450-e666-3926-a536-22c65f834433' },
+    });
+    assert.strictEqual(second.jellyfinMediaId, 'jf-album-2');
+    assert.deepStrictEqual(getReleaseGroup.mock.calls[0].arguments, [
+      { releaseId: RELEASE_MBID },
+    ]);
   });
 });

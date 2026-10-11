@@ -1,4 +1,4 @@
-import { IssueStatus, IssueTypeName } from '@server/constants/issue';
+import { IssueStatus, getIssueTypeName } from '@server/constants/issue';
 import { MediaStatus } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
@@ -72,6 +72,7 @@ class PushbulletAgent
           status = intl.formatMessage(globalMessages.processing);
           break;
         case Notification.MEDIA_AVAILABLE:
+        case Notification.MEDIA_EPISODES_AVAILABLE:
           status = intl.formatMessage(globalMessages.available);
           break;
         case Notification.MEDIA_DECLINED:
@@ -89,7 +90,7 @@ class PushbulletAgent
       body += `\n\n${intl.formatMessage(globalMessages.commentFrom, { userName: payload.comment.user.displayName })}:\n${payload.comment.message}`;
     } else if (payload.issue) {
       body += `\n\n${intl.formatMessage(globalMessages.reportedBy)}: ${payload.issue.createdBy.displayName}`;
-      body += `\n${intl.formatMessage(globalMessages.issueType)}: ${IssueTypeName[payload.issue.issueType]}`;
+      body += `\n${intl.formatMessage(globalMessages.issueType)}: ${getIssueTypeName(payload.issue.issueType, payload.media?.mediaType)}`;
       body += `\n${intl.formatMessage(globalMessages.issueStatus)}: ${
         payload.issue.status === IssueStatus.OPEN
           ? intl.formatMessage(globalMessages.open)

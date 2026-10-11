@@ -7,11 +7,19 @@ import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import Season from '@server/entity/Season';
 import SeasonRequest from '@server/entity/SeasonRequest';
+import { getRequestStatusKey } from '@server/lib/bookRequests';
+import {
+  getFollowType,
+  getNewlyAvailable,
+  hasFollowers,
+  notifyFollowers,
+} from '@server/lib/followNotifications';
 import logger from '@server/logger';
 import { withNestedTransaction } from '@server/utils/nestedTransaction';
 import type {
   EntityManager,
   EntitySubscriberInterface,
+  InsertEvent,
   UpdateEvent,
 } from 'typeorm';
 import { EventSubscriber, In } from 'typeorm';
@@ -21,7 +29,8 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
   private async updateChildRequestStatus(
     manager: EntityManager,
     event: Media,
-    is4k: boolean
+    is4k: boolean,
+    isAudiobook = false
   ) {
     const requestRepository = manager.getRepository(MediaRequest);
 
@@ -32,6 +41,7 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
     for (const request of requests) {
       if (
         request.is4k === is4k &&
+        request.isAudiobook === isAudiobook &&
         request.status === MediaRequestStatus.PENDING
       ) {
         request.status = MediaRequestStatus.APPROVED;
@@ -44,7 +54,8 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
     manager: EntityManager,
     event: Media,
     databaseEvent: Media,
-    is4k: boolean
+    is4k: boolean,
+    isAudiobook = false
   ) {
     const requestRepository = manager.getRepository(MediaRequest);
     const seasonRequestRepository = manager.getRepository(SeasonRequest);
@@ -57,6 +68,7 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
         media: { id: event.id },
         status: In([MediaRequestStatus.APPROVED, MediaRequestStatus.FAILED]),
         is4k,
+        isAudiobook,
       },
     });
 
@@ -69,11 +81,11 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
         let shouldComplete = false;
 
         if (
-          (event[request.is4k ? 'status4k' : 'status'] ===
-            MediaStatus.AVAILABLE ||
-            event[request.is4k ? 'status4k' : 'status'] ===
-              MediaStatus.DELETED) &&
-          event.mediaType === MediaType.MOVIE
+          (event[getRequestStatusKey(request)] === MediaStatus.AVAILABLE ||
+            event[getRequestStatusKey(request)] === MediaStatus.DELETED) &&
+          (event.mediaType === MediaType.MOVIE ||
+            event.mediaType === MediaType.MUSIC ||
+            event.mediaType === MediaType.BOOK)
         ) {
           shouldComplete = true;
         } else if (event.mediaType === 'tv') {
@@ -189,6 +201,32 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
       );
     }
 
+    try {
+      if (
+        event.entity.statusAudio === MediaStatus.AVAILABLE &&
+        event.databaseEntity?.statusAudio === MediaStatus.PENDING
+      ) {
+        await withNestedTransaction(event.manager, async (manager) => {
+          await this.updateChildRequestStatus(
+            manager,
+            event.entity as Media,
+            false,
+            true
+          );
+        });
+      }
+    } catch (e) {
+      logger.error(
+        'Error while updating child request status in beforeUpdate subscriber',
+        {
+          label: 'Media',
+          mediaId: event.entity.id,
+          isAudiobook: true,
+          errorMessage: e instanceof Error ? e.message : String(e),
+        }
+      );
+    }
+
     // Manually load related seasons into databaseEntity
     // for seasonStatusCheck in afterUpdate
     const seasons = await event.manager
@@ -274,6 +312,96 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
           label: 'Media',
           mediaId: event.entity.id,
           is4k: true,
+          errorMessage: e instanceof Error ? e.message : String(e),
+        }
+      );
+    }
+
+    await this.afterUpdateAudiobook(event);
+
+    await this.notifyFollowersIfAvailable(
+      event.manager,
+      event.entity as Media,
+      event.databaseEntity
+    );
+  }
+
+  /**
+   * Media a scan adds can be available from the start
+   */
+  public async afterInsert(event: InsertEvent<Media>): Promise<void> {
+    if (event.entity) {
+      await this.notifyFollowersIfAvailable(event.manager, event.entity);
+    }
+  }
+
+  /**
+   * Tells the followers of its artists or authors once an album or book is
+   * available. Only the check for followers holds up the save, the metadata
+   * lookups and notifications run in the background.
+   */
+  private async notifyFollowersIfAvailable(
+    manager: EntityManager,
+    media: Media,
+    previous?: Media
+  ): Promise<void> {
+    const available = getNewlyAvailable(media, previous);
+    const followType = getFollowType(media.mediaType);
+
+    try {
+      if (
+        available &&
+        followType &&
+        (await hasFollowers(followType, manager))
+      ) {
+        void notifyFollowers(media, available);
+      }
+    } catch (e) {
+      logger.error('Error while checking for followers in subscriber', {
+        label: 'Media',
+        mediaId: media.id,
+        errorMessage: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  /**
+   * Completes a book's audiobook requests once the audiobook is available,
+   * as afterUpdate does for the ebook and 4K statuses
+   */
+  private async afterUpdateAudiobook(event: UpdateEvent<Media>): Promise<void> {
+    if (
+      !event.entity ||
+      !event.databaseEntity ||
+      event.entity.mediaType !== MediaType.BOOK
+    ) {
+      return;
+    }
+
+    try {
+      if (
+        event.entity.statusAudio !== event.databaseEntity.statusAudio &&
+        [MediaStatus.AVAILABLE, MediaStatus.DELETED].includes(
+          event.entity.statusAudio
+        )
+      ) {
+        await withNestedTransaction(event.manager, async (manager) => {
+          await this.updateRelatedMediaRequest(
+            manager,
+            event.entity as Media,
+            event.databaseEntity as Media,
+            false,
+            true
+          );
+        });
+      }
+    } catch (e) {
+      logger.error(
+        'Error while updating related requests in afterUpdate subscriber',
+        {
+          label: 'Media',
+          mediaId: event.entity.id,
+          isAudiobook: true,
           errorMessage: e instanceof Error ? e.message : String(e),
         }
       );

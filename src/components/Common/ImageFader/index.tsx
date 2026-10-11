@@ -35,11 +35,11 @@ const ImageFader: ForwardRefRenderFunction<HTMLDivElement, ImageFaderProps> = (
   }, [backgroundImages, rotationSpeed]);
 
   let gradient =
-    'linear-gradient(180deg, rgba(45, 55, 72, 0.47) 0%, #1A202E 100%)';
+    'linear-gradient(180deg, rgb(var(--tw-gray-800, 45 55 72) / 0.47) 0%, rgb(var(--tw-gray-900, 26 32 46)) 100%)';
 
   if (isDarker) {
     gradient =
-      'linear-gradient(180deg, rgba(17, 24, 39, 0.47) 0%, rgba(17, 24, 39, 1) 100%)';
+      'linear-gradient(180deg, rgb(var(--tw-gray-900, 17 24 39) / 0.47) 0%, rgb(var(--tw-gray-900, 17 24 39) / 1) 100%)';
   }
 
   let overrides = {};

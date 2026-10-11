@@ -7,6 +7,7 @@ import Tooltip from '@app/components/Common/Tooltip';
 import RequestModal from '@app/components/RequestModal';
 import ErrorCard from '@app/components/TitleCard/ErrorCard';
 import Placeholder from '@app/components/TitleCard/Placeholder';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { useIsTouch } from '@app/hooks/useIsTouch';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, UserType, useUser } from '@app/hooks/useUser';
@@ -69,6 +70,8 @@ const TitleCard = ({
   mutateParent,
 }: TitleCardProps) => {
   const isTouch = useIsTouch();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
   const intl = useIntl();
   const { user, hasPermission } = useUser();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -316,7 +319,13 @@ const TitleCard = ({
 
   return (
     <div
-      className={canExpand ? 'w-full' : 'w-36 sm:w-36 md:w-44'}
+      className={
+        canExpand
+          ? 'w-full'
+          : ambient
+            ? 'w-[150px] sm:w-[176px]'
+            : 'w-36 sm:w-36 md:w-44'
+      }
       data-testid="title-card"
       ref={cardRef}
     >
@@ -349,11 +358,17 @@ const TitleCard = ({
         isUpdating={isUpdating}
       />
       <div
-        className={`relative transform-gpu cursor-default overflow-hidden rounded-xl bg-gray-800 bg-cover outline-none ring-1 transition duration-300 ${
-          showDetail
-            ? 'scale-105 shadow-lg ring-gray-500'
-            : 'scale-100 shadow ring-gray-700'
-        }`}
+        className={
+          ambient
+            ? `relative transform-gpu cursor-default overflow-hidden rounded-[18px] bg-as-tile bg-cover outline-none transition duration-300 ${
+                showDetail ? 'scale-[1.03] shadow-xl shadow-black/40' : ''
+              }`
+            : `relative transform-gpu cursor-default overflow-hidden rounded-xl bg-gray-800 bg-cover outline-none ring-1 transition duration-300 ${
+                showDetail
+                  ? 'scale-105 shadow-lg ring-gray-500'
+                  : 'scale-100 shadow ring-gray-700'
+              }`
+        }
         style={{
           paddingBottom: '150%',
         }}
@@ -388,6 +403,8 @@ const TitleCard = ({
           <div className="absolute left-0 right-0 flex items-center justify-between p-2">
             <div
               className={`pointer-events-none z-40 self-start rounded-full border shadow-md ${
+                ambient ? 'invisible' : ''
+              } ${
                 mediaType === 'movie' || mediaType === 'collection'
                   ? 'border-blue-500 bg-blue-600/80'
                   : 'border-purple-600 bg-purple-600/80'
@@ -504,8 +521,9 @@ const TitleCard = ({
                 }
                 className="absolute inset-0 h-full w-full cursor-pointer overflow-hidden text-left"
                 style={{
-                  background:
-                    'linear-gradient(180deg, rgba(45, 55, 72, 0.4) 0%, rgba(45, 55, 72, 0.9) 100%)',
+                  background: ambient
+                    ? 'linear-gradient(180deg, rgb(var(--as-ground) / 0.2) 0%, rgb(var(--as-ground) / 0.92) 100%)'
+                    : 'linear-gradient(180deg, rgb(var(--tw-gray-800, 45 55 72) / 0.4) 0%, rgb(var(--tw-gray-800, 45 55 72) / 0.9) 100%)',
                 }}
               >
                 <div className="flex h-full w-full items-end">
@@ -519,10 +537,14 @@ const TitleCard = ({
                         : 'pb-11'
                     }`}
                   >
-                    {year && <div className="text-sm font-medium">{year}</div>}
+                    {year && !ambient && (
+                      <div className="text-sm font-medium">{year}</div>
+                    )}
 
                     <h1
-                      className="whitespace-normal text-xl font-bold leading-tight"
+                      className={`whitespace-normal text-xl font-bold leading-tight ${
+                        ambient ? 'hidden' : ''
+                      }`}
                       style={{
                         WebkitLineClamp: 3,
                         display: '-webkit-box',
@@ -568,7 +590,11 @@ const TitleCard = ({
                         e.preventDefault();
                         setShowRequestModal(true);
                       }}
-                      className="h-7 w-full"
+                      className={
+                        ambient
+                          ? 'h-8 w-full rounded-full border-transparent bg-as-accent font-bold text-as-ground hover:bg-as-accent hover:brightness-110'
+                          : 'h-7 w-full'
+                      }
                     >
                       <ArrowDownTrayIcon />
                       <span>{intl.formatMessage(globalMessages.request)}</span>
@@ -579,6 +605,30 @@ const TitleCard = ({
           </Transition>
         </div>
       </div>
+      {ambient && (
+        <Link
+          href={
+            mediaType === 'movie'
+              ? `/movie/${id}`
+              : mediaType === 'collection'
+                ? `/collection/${id}`
+                : `/tv/${id}`
+          }
+          className="mt-2.5 block"
+        >
+          <div className="line-clamp-2 whitespace-normal break-words font-bold text-as-ink hover:underline">
+            {title}
+          </div>
+          <div className="text-[13px] text-as-ink-faint">
+            {mediaType === 'movie'
+              ? intl.formatMessage(globalMessages.movie)
+              : mediaType === 'collection'
+                ? intl.formatMessage(globalMessages.collection)
+                : intl.formatMessage(globalMessages.tvshow)}
+            {year ? ` · ${year}` : ''}
+          </div>
+        </Link>
+      )}
     </div>
   );
 };

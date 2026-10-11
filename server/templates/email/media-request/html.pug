@@ -26,6 +26,8 @@ div(style='display: block; background-color: #111827; padding: 2.5rem 0;')
           else
             img(src=logoUrl style='margin: 0 1rem; width: 26rem; image-rendering: crisp-edges; image-rendering: -webkit-optimize-contrast;')
         else
+          if logoIconUrl
+            img(src=logoIconUrl alt='' width='96' height='96' style='display: block; margin: 0 auto 1rem; width: 6rem; height: 6rem;')
           div(style='margin: 0 1rem 2.5rem; font-size: 3em; font-weight: 700;')
             | #{applicationTitle}
     if recipientName !== recipientEmail
@@ -46,10 +48,11 @@ div(style='display: block; background-color: #111827; padding: 2.5rem 0;')
                 a(href=actionUrl style='display: block; max-width: 20rem; color: #fff; font-weight: 700; text-decoration: none; margin: 0 1rem 0.25rem 0; font-size: 1.3em; line-height: 1.25em; margin-bottom: 5px;' class='title')
                   | #{mediaName}
                 div(style='overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d1d5db; font-size: .975em; line-height: 1.45em; padding-top: .25rem; padding-bottom: .25rem;')
-                  span(style='display: block;')
-                    b(style='color: #9ca3af; font-weight: 700;')
-                      | Requested By&nbsp;
-                    | #{requestedBy.replace(/\.|@/g, ((x) => x + '\ufeff'))}
+                  if requestedBy
+                    span(style='display: block;')
+                      b(style='color: #9ca3af; font-weight: 700;')
+                        | Requested By&nbsp;
+                      | #{requestedBy.replace(/\.|@/g, ((x) => x + '\ufeff'))}
                   each extra in mediaExtra
                     span(style='display: block;')
                       b(style='color: #9ca3af; font-weight: 700;')
@@ -69,4 +72,7 @@ div(style='display: block; background-color: #111827; padding: 2.5rem 0;')
         td
           a(href=actionUrl style='display: block; margin: 1.5rem 3rem 0; text-decoration: none; font-size: 1.0em; line-height: 2.25em;')
             span(style='padding: 0.2rem; font-weight: 500; text-align: center; border-radius: 10px; background-color: rgb(99,102,241); color: #fff; display: block; border: 1px solid rgba(255,255,255,0.2);')
-              | View Media in #{applicationTitle}
+              if actionLabel
+                | #{actionLabel}
+              else
+                | View Media in #{applicationTitle}

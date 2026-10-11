@@ -1,31 +1,40 @@
+import AppLogo from '@app/components/Common/AppLogo';
 import Badge from '@app/components/Common/Badge';
 import VersionStatus from '@app/components/Layout/VersionStatus';
 import useClickOutside from '@app/hooks/useClickOutside';
 import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
+import { SPACES } from '@app/utils/spaces';
 import { Transition, TransitionChild } from '@headlessui/react';
 import {
+  BookOpenIcon,
+  BuildingLibraryIcon,
+  CalendarDaysIcon,
   ClockIcon,
   CogIcon,
   ExclamationTriangleIcon,
   EyeSlashIcon,
   FilmIcon,
+  MusicalNoteIcon,
   SparklesIcon,
   TvIcon,
   UsersIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { Fragment, useEffect, useRef } from 'react';
 import { useIntl } from 'react-intl';
 
 export const menuMessages = defineMessages('components.Layout.Sidebar', {
-  dashboard: 'Discover',
+  dashboard: 'For You',
   browsemovies: 'Movies',
   browsetv: 'Series',
+  browsemusic: 'Music',
+  browsebooks: 'Books',
+  library: 'Library',
   requests: 'Requests',
+  calendar: 'Calendar',
   blocklist: 'Blocklist',
   issues: 'Issues',
   users: 'Users',
@@ -41,7 +50,7 @@ interface SidebarProps {
   revalidateRequestsCount: () => void;
 }
 
-interface SidebarLinkProps {
+export interface SidebarLinkProps {
   href: string;
   svgIcon: React.ReactNode;
   messagesKey: keyof typeof menuMessages;
@@ -52,7 +61,7 @@ interface SidebarLinkProps {
   dataTestId?: string;
 }
 
-const SidebarLinks: SidebarLinkProps[] = [
+export const SidebarLinks: SidebarLinkProps[] = [
   {
     href: '/',
     messagesKey: 'dashboard',
@@ -60,22 +69,50 @@ const SidebarLinks: SidebarLinkProps[] = [
     activeRegExp: /^\/(discover\/?)?$/,
   },
   {
-    href: '/discover/movies',
+    href: SPACES.movies.path,
     messagesKey: 'browsemovies',
     svgIcon: <FilmIcon className="mr-3 h-6 w-6" />,
-    activeRegExp: /^\/discover\/movies$/,
+    // Lit on the space and on its title pages
+    activeRegExp: SPACES.movies.matches,
   },
   {
-    href: '/discover/tv',
+    href: SPACES.series.path,
     messagesKey: 'browsetv',
     svgIcon: <TvIcon className="mr-3 h-6 w-6" />,
-    activeRegExp: /^\/discover\/tv$/,
+    // Lit on the space and on its title pages
+    activeRegExp: SPACES.series.matches,
+  },
+  {
+    href: SPACES.music.path,
+    messagesKey: 'browsemusic',
+    svgIcon: <MusicalNoteIcon className="mr-3 h-6 w-6" />,
+    // Lit on the space and on its title pages
+    activeRegExp: SPACES.music.matches,
+  },
+  {
+    href: SPACES.books.path,
+    messagesKey: 'browsebooks',
+    svgIcon: <BookOpenIcon className="mr-3 h-6 w-6" />,
+    // Lit on the space and on its title pages
+    activeRegExp: SPACES.books.matches,
+  },
+  {
+    href: '/library/movies',
+    messagesKey: 'library',
+    svgIcon: <BuildingLibraryIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/library/,
   },
   {
     href: '/requests',
     messagesKey: 'requests',
     svgIcon: <ClockIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/requests/,
+  },
+  {
+    href: '/calendar',
+    messagesKey: 'calendar',
+    svgIcon: <CalendarDaysIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/calendar/,
   },
   {
     href: '/blocklist',
@@ -192,7 +229,7 @@ const Sidebar = ({
                     <div className="flex flex-shrink-0 items-center px-2">
                       <span className="w-full px-4 text-xl text-gray-50">
                         <Link href="/" className="relative block h-24 w-64">
-                          <Image src="/logo_full.svg" alt="Logo" fill />
+                          <AppLogo variant="full" />
                         </Link>
                       </span>
                     </div>
@@ -255,12 +292,7 @@ const Sidebar = ({
               <div className="flex flex-shrink-0 items-center">
                 <span className="w-full px-4 py-2 text-2xl text-gray-50">
                   <Link href="/" className="relative block h-24">
-                    <Image
-                      src="/logo_full.svg"
-                      alt="Logo"
-                      fill
-                      loading="eager"
-                    />
+                    <AppLogo variant="full" loading="eager" />
                   </Link>
                 </span>
               </div>

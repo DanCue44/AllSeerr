@@ -1,5 +1,5 @@
 import Button from '@app/components/Common/Button';
-import { issueOptions } from '@app/components/IssueModal/constants';
+import { getIssueOption } from '@app/components/IssueModal/constants';
 import { useUser } from '@app/hooks/useUser';
 import {
   CalendarIcon,
@@ -7,19 +7,22 @@ import {
   EyeIcon,
   UserIcon,
 } from '@heroicons/react/24/solid';
+import type { MediaType } from '@server/constants/media';
 import type Issue from '@server/entity/Issue';
 import Link from 'next/link';
 import { useIntl } from 'react-intl';
 
 interface IssueBlockProps {
   issue: Issue;
+  mediaType?: MediaType;
 }
 
-const IssueBlock = ({ issue }: IssueBlockProps) => {
+const IssueBlock = ({ issue, mediaType }: IssueBlockProps) => {
   const { user } = useUser();
   const intl = useIntl();
-  const issueOption = issueOptions.find(
-    (opt) => opt.issueType === issue.issueType
+  const issueOption = getIssueOption(
+    issue.issueType,
+    mediaType ?? issue.media?.mediaType
   );
 
   if (!issueOption) {

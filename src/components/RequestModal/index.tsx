@@ -1,5 +1,7 @@
+import BookRequestModal from '@app/components/RequestModal/BookRequestModal';
 import CollectionRequestModal from '@app/components/RequestModal/CollectionRequestModal';
 import MovieRequestModal from '@app/components/RequestModal/MovieRequestModal';
+import MusicRequestModal from '@app/components/RequestModal/MusicRequestModal';
 import TvRequestModal from '@app/components/RequestModal/TvRequestModal';
 import { Transition } from '@headlessui/react';
 import type { MediaStatus } from '@server/constants/media';
@@ -8,8 +10,12 @@ import type { NonFunctionProperties } from '@server/interfaces/api/common';
 
 interface RequestModalProps {
   show: boolean;
-  type: 'movie' | 'tv' | 'collection';
+  type: 'movie' | 'tv' | 'collection' | 'music' | 'book';
   tmdbId: number;
+  // Music is keyed on its MusicBrainz release group id instead of tmdbId
+  mbId?: string | null;
+  // and books on their OpenLibrary work id
+  olId?: string | null;
   is4k?: boolean;
   editRequest?: NonFunctionProperties<MediaRequest>;
   onComplete?: (newStatus: MediaStatus) => void;
@@ -21,6 +27,8 @@ const RequestModal = ({
   type,
   show,
   tmdbId,
+  mbId,
+  olId,
   is4k,
   editRequest,
   onComplete,
@@ -38,7 +46,23 @@ const RequestModal = ({
       leaveTo="opacity-0"
       show={show}
     >
-      {type === 'movie' ? (
+      {type === 'book' ? (
+        <BookRequestModal
+          onComplete={onComplete}
+          onCancel={onCancel}
+          olId={olId ?? ''}
+          onUpdating={onUpdating}
+          editRequest={editRequest}
+        />
+      ) : type === 'music' ? (
+        <MusicRequestModal
+          onComplete={onComplete}
+          onCancel={onCancel}
+          mbId={mbId ?? ''}
+          onUpdating={onUpdating}
+          editRequest={editRequest}
+        />
+      ) : type === 'movie' ? (
         <MovieRequestModal
           onComplete={onComplete}
           onCancel={onCancel}

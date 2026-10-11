@@ -15,6 +15,7 @@ import type {
 import { MediaServerType } from '@server/constants/server';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
+import { normalizeEpisodeNumbers } from '@server/lib/episodeNotifications';
 import type {
   ProcessableSeason,
   RunnableScanner,
@@ -24,6 +25,7 @@ import BaseScanner from '@server/lib/scanners/baseScanner';
 import type { Library } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { getHostname } from '@server/utils/getHostname';
+import { requestErrorLogFields } from '@server/utils/requestError';
 import { uniqWith } from 'lodash';
 
 interface JellyfinSyncStatus extends StatusBase {
@@ -42,7 +44,12 @@ class JellyfinScanner
   private processedAnidbSeason: Map<number, Map<number, number>>;
 
   constructor({ isRecentOnly }: { isRecentOnly?: boolean } = {}) {
-    super('Jellyfin Sync');
+    super('Jellyfin Sync', {
+      jobId: isRecentOnly
+        ? 'jellyfin-recently-added-scan'
+        : 'jellyfin-full-scan',
+      service: 'jellyfin',
+    });
     this.isRecentOnly = isRecentOnly ?? false;
   }
 
@@ -171,7 +178,7 @@ class JellyfinScanner
         `Failed to process Jellyfin item, id: ${jellyfinitem.Id}`,
         'error',
         {
-          errorMessage: e.message,
+          ...requestErrorLogFields(e),
           jellyfinitem,
         }
       );
@@ -309,6 +316,24 @@ class JellyfinScanner
           if (matchedJellyfinSeason) {
             let totalStandard = 0;
             let total4k = 0;
+            const standardEpisodeNumbers: number[] = [];
+            const episodeNumbers4k: number[] = [];
+
+            // Combined episodes cover every number in their range
+            const getEpisodeNumbers = (episode: JellyfinLibraryItem) => {
+              const first = episode.IndexNumber;
+
+              if (first === undefined) {
+                return [];
+              }
+
+              const last = episode.IndexNumberEnd ?? first;
+
+              return Array.from(
+                { length: Math.max(last - first + 1, 1) },
+                (_, i) => first + i
+              );
+            };
 
             if (!this.enable4kShow) {
               const episodes = await this.jfClient.getEpisodes(
@@ -329,6 +354,7 @@ class JellyfinScanner
                 }
 
                 totalStandard += episodeCount;
+                standardEpisodeNumbers.push(...getEpisodeNumbers(episode));
               }
             } else {
               // 4K detection enabled - request media info to check resolution
@@ -374,8 +400,14 @@ class JellyfinScanner
                 // as "standard" even though they're in the 4K library. This can cause
                 // non-4K users to see content as "available" when they can't access it.
                 // See issue https://github.com/seerr-team/seerr/issues/1744 for details.
-                if (hasStandard) totalStandard += episodeCount;
-                if (has4k) total4k += episodeCount;
+                if (hasStandard) {
+                  totalStandard += episodeCount;
+                  standardEpisodeNumbers.push(...getEpisodeNumbers(episode));
+                }
+                if (has4k) {
+                  total4k += episodeCount;
+                  episodeNumbers4k.push(...getEpisodeNumbers(episode));
+                }
               }
             }
 
@@ -400,6 +432,14 @@ class JellyfinScanner
               totalEpisodes: season.episode_count,
               episodes: totalStandard,
               episodes4k: total4k,
+              // AniDB seasons are spread across several Jellyfin shows, so
+              // episode numbers from a single show can't be compared
+              episodeNumbers: tvdbSeasonFromAnidb
+                ? undefined
+                : normalizeEpisodeNumbers(standardEpisodeNumbers),
+              episodeNumbers4k: tvdbSeasonFromAnidb
+                ? undefined
+                : normalizeEpisodeNumbers(episodeNumbers4k),
             });
           } else {
             processableSeasons.push({
@@ -407,6 +447,9 @@ class JellyfinScanner
               totalEpisodes: season.episode_count,
               episodes: 0,
               episodes4k: 0,
+              // Recorded as empty so the first episodes can be told apart later
+              episodeNumbers: tvdbSeasonFromAnidb ? undefined : [],
+              episodeNumbers4k: tvdbSeasonFromAnidb ? undefined : [],
             });
           }
         }
@@ -438,7 +481,52 @@ class JellyfinScanner
           jellyfinitem.SeriesId ?? jellyfinitem.SeasonId ?? jellyfinitem.Id
         }`,
         'error',
-        { errorMessage: e.message, jellyfinitem }
+        { ...requestErrorLogFields(e), jellyfinitem }
+      );
+    }
+  }
+
+  private async processJellyfinAlbum(jellyfinitem: JellyfinLibraryItem) {
+    try {
+      const metadata = await this.jfClient.getItemData(jellyfinitem.Id);
+
+      if (!metadata?.Id) {
+        this.log('No Id metadata for this title. Skipping', 'debug', {
+          jellyfinId: jellyfinitem.Id,
+        });
+        return;
+      }
+
+      const releaseGroupId =
+        metadata.ProviderIds?.MusicBrainzReleaseGroup ??
+        (metadata.ProviderIds?.MusicBrainzAlbum
+          ? await this.resolveReleaseGroupId(
+              metadata.ProviderIds.MusicBrainzAlbum
+            )
+          : undefined);
+
+      if (!releaseGroupId) {
+        this.log('No MusicBrainz ID found for album. Skipping.', 'debug', {
+          title: metadata.Name,
+        });
+        return;
+      }
+
+      await this.processMusic(releaseGroupId, {
+        mediaAddedAt: metadata.DateCreated
+          ? new Date(metadata.DateCreated)
+          : undefined,
+        jellyfinMediaId: metadata.Id,
+        title: metadata.Name,
+      });
+    } catch (e) {
+      this.log(
+        `Failed to process Jellyfin item, id: ${jellyfinitem.Id}`,
+        'error',
+        {
+          ...requestErrorLogFields(e),
+          jellyfinitem,
+        }
       );
     }
   }
@@ -446,6 +534,8 @@ class JellyfinScanner
   private async processItem(item: JellyfinLibraryItem): Promise<void> {
     if (item.Type === 'Movie') {
       await this.processJellyfinMovie(item);
+    } else if (item.Type === 'MusicAlbum') {
+      await this.processJellyfinAlbum(item);
     } else if (item.Type === 'Series') {
       await this.processJellyfinShow(item);
     } else if (
@@ -537,8 +627,9 @@ class JellyfinScanner
           : 'Full Scan Complete',
         'info'
       );
+      this.scanSucceeded();
     } catch (e) {
-      this.log('Sync interrupted', 'error', { errorMessage: e.message });
+      this.scanFailed(e, { logMessage: 'Sync interrupted' });
     } finally {
       this.endRun(sessionId);
     }

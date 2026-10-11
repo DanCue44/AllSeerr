@@ -1,5 +1,6 @@
 import { getRepository } from '@server/datasource';
 import DiscoverSlider from '@server/entity/DiscoverSlider';
+import { prepareCustomSliderData } from '@server/lib/discoverSliders';
 import logger from '@server/logger';
 import { Router } from 'express';
 
@@ -12,6 +13,20 @@ discoverSettingRoutes.post('/', async (req, res) => {
 
   if (!Array.isArray(sliders)) {
     return res.status(400).json({ message: 'Invalid request body.' });
+  }
+
+  // Check every slider first, so a bad one leaves all of them as they were.
+  // Built-in sliders keep their data, which the checks leave alone.
+  const sliderData: (string | undefined)[] = [];
+
+  for (const slider of sliders) {
+    const prepared = prepareCustomSliderData(slider.type, slider.data);
+
+    if (!prepared.valid) {
+      return res.status(400).json({ message: prepared.message });
+    }
+
+    sliderData.push(prepared.data);
   }
 
   for (let x = 0; x < sliders.length; x++) {
@@ -29,7 +44,7 @@ discoverSettingRoutes.post('/', async (req, res) => {
       // Only allow changes to the following when the slider is not built in
       if (!existingSlider.isBuiltIn) {
         existingSlider.title = slider.title;
-        existingSlider.data = slider.data;
+        existingSlider.data = sliderData[x];
         existingSlider.type = slider.type;
       }
 
@@ -37,7 +52,7 @@ discoverSettingRoutes.post('/', async (req, res) => {
     } else {
       const newSlider = new DiscoverSlider({
         isBuiltIn: false,
-        data: slider.data,
+        data: sliderData[x],
         title: slider.title,
         enabled: slider.enabled,
         order: x,
@@ -54,10 +69,15 @@ discoverSettingRoutes.post('/add', async (req, res) => {
   const sliderRepository = getRepository(DiscoverSlider);
 
   const slider = req.body as DiscoverSlider;
+  const prepared = prepareCustomSliderData(slider.type, slider.data);
+
+  if (!prepared.valid) {
+    return res.status(400).json({ message: prepared.message });
+  }
 
   const newSlider = new DiscoverSlider({
     isBuiltIn: false,
-    data: slider.data,
+    data: prepared.data,
     title: slider.title,
     enabled: false,
     order: -1,
@@ -91,8 +111,14 @@ discoverSettingRoutes.put('/:sliderId', async (req, res, next) => {
 
     // Only allow changes to the following when the slider is not built in
     if (!existingSlider.isBuiltIn) {
+      const prepared = prepareCustomSliderData(slider.type, slider.data);
+
+      if (!prepared.valid) {
+        return res.status(400).json({ message: prepared.message });
+      }
+
       existingSlider.title = slider.title;
-      existingSlider.data = slider.data;
+      existingSlider.data = prepared.data;
       existingSlider.type = slider.type;
     }
 

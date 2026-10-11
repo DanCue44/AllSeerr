@@ -13,14 +13,20 @@ interface OverrideStatus {
 }
 
 const useRequestOverride = (request: MediaRequest): OverrideStatus => {
+  const service =
+    request.type === 'movie'
+      ? 'radarr'
+      : request.type === 'music'
+        ? 'lidarr'
+        : 'sonarr';
+  // LazyLibrarian takes no request options, so books have no overrides
+  const hasOverrides = request.type !== 'book';
   const { data: allServers } = useSWR<ServiceCommonServer[]>(
-    `/api/v1/service/${request.type === 'movie' ? 'radarr' : 'sonarr'}`
+    hasOverrides ? `/api/v1/service/${service}` : null
   );
 
   const { data } = useSWR<ServiceCommonServerWithDetails>(
-    `/api/v1/service/${request.type === 'movie' ? 'radarr' : 'sonarr'}/${
-      request.serverId
-    }`
+    hasOverrides ? `/api/v1/service/${service}/${request.serverId}` : null
   );
 
   if (!data || !allServers) {

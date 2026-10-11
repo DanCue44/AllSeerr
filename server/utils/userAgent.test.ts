@@ -1,5 +1,5 @@
 import ExternalAPI from '@server/api/externalapi';
-import { getUserAgent } from '@server/utils/userAgent';
+import { getContactUserAgent, getUserAgent } from '@server/utils/userAgent';
 import axios, {
   type AxiosInstance,
   type AxiosRequestConfig,
@@ -28,8 +28,8 @@ const captureRequest = (instance: AxiosInstance) => {
 };
 
 class TestExternalAPI extends ExternalAPI {
-  public constructor() {
-    super('https://api.themoviedb.org/3', {}, {});
+  public constructor(headers?: Record<string, string>) {
+    super('https://api.themoviedb.org/3', {}, { headers });
   }
 
   public async sentUserAgent(
@@ -43,7 +43,7 @@ class TestExternalAPI extends ExternalAPI {
 
 describe('outbound user agent', () => {
   it('identifies the application by name and version', () => {
-    assert.match(getUserAgent(), /^Seerr\/.+$/);
+    assert.match(getUserAgent(), /^AllSeerr\/.+$/);
   });
 
   it('is sent by clients built on ExternalAPI', async () => {
@@ -61,6 +61,21 @@ describe('outbound user agent', () => {
     }
 
     assert.equal(captured.config?.headers.get('User-Agent'), getUserAgent());
+  });
+
+  it('adds the project link for services that ask for contact details', () => {
+    assert.equal(
+      getContactUserAgent(),
+      `${getUserAgent()} (+https://github.com/DanCue44/AllSeerr)`
+    );
+  });
+
+  it('keeps a user agent set on the client', async () => {
+    const sent = await new TestExternalAPI({
+      'User-Agent': getContactUserAgent(),
+    }).sentUserAgent();
+
+    assert.equal(sent, getContactUserAgent());
   });
 
   it('does not override a user agent set on the request', async () => {

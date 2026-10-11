@@ -15,10 +15,12 @@ import PlayButton from '@app/components/Common/PlayButton';
 import Tag from '@app/components/Common/Tag';
 import Tooltip from '@app/components/Common/Tooltip';
 import ExternalLinkBlock from '@app/components/ExternalLinkBlock';
+import FavoriteButton from '@app/components/FavoriteButton';
 import IssueModal from '@app/components/IssueModal';
 import ManageSlideOver from '@app/components/ManageSlideOver';
 import MediaSlider from '@app/components/MediaSlider';
 import PersonCard from '@app/components/PersonCard';
+import RemovalRequestButton from '@app/components/RemovalRequestButton';
 import RequestButton from '@app/components/RequestButton';
 import Slider from '@app/components/Slider';
 import StatusBadge from '@app/components/StatusBadge';
@@ -52,6 +54,7 @@ import { type RatingResponse } from '@server/api/ratings';
 import { IssueStatus } from '@server/constants/issue';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
+import { getMovieCertification } from '@server/lib/contentRatingLimit';
 import type { MovieDetails as MovieDetailsType } from '@server/models/Movie';
 import axios from 'axios';
 import { countries } from 'country-flag-icons';
@@ -456,7 +459,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
             className="absolute inset-0"
             style={{
               backgroundImage:
-                'linear-gradient(180deg, rgba(17, 24, 39, 0.47) 0%, rgba(17, 24, 39, 1) 100%)',
+                'linear-gradient(180deg, rgb(var(--tw-gray-900, 17 24 39) / 0.47) 0%, rgb(var(--tw-gray-900, 17 24 39) / 1) 100%)',
             }}
           />
         </div>
@@ -620,6 +623,11 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
                 )}
               </>
             )}
+          <FavoriteButton
+            tmdbId={data.id}
+            mediaType="movie"
+            title={data.title}
+          />
           <div className="z-20">
             <PlayButton links={mediaLinks} />
           </div>
@@ -627,8 +635,11 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
             mediaType="movie"
             media={data.mediaInfo}
             tmdbId={data.id}
+            watchProviders={data.watchProviders}
+            contentRating={getMovieCertification(data.releases)}
             onUpdate={() => revalidate()}
           />
+          <RemovalRequestButton media={data.mediaInfo} title={data.title} />
           {(data.mediaInfo?.status === MediaStatus.AVAILABLE ||
             (settings.currentSettings.movie4kEnabled &&
               hasPermission(
@@ -755,7 +766,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
                       className="absolute inset-0"
                       style={{
                         backgroundImage:
-                          'linear-gradient(180deg, rgba(31, 41, 55, 0.47) 0%, rgba(31, 41, 55, 0.80) 100%)',
+                          'linear-gradient(180deg, rgb(var(--tw-gray-800, 31 41 55) / 0.47) 0%, rgb(var(--tw-gray-800, 31 41 55) / 0.80) 100%)',
                       }}
                     />
                   </div>

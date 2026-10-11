@@ -4,12 +4,21 @@ import { Transition } from '@headlessui/react';
 interface IssueModalProps {
   show?: boolean;
   onCancel: () => void;
-  mediaType: 'movie' | 'tv';
-  tmdbId: number;
+  mediaType: 'movie' | 'tv' | 'music' | 'book';
+  tmdbId?: number;
+  mbId?: string;
+  olId?: string;
   issueId?: never;
 }
 
-const IssueModal = ({ show, mediaType, onCancel, tmdbId }: IssueModalProps) => (
+const IssueModal = ({
+  show,
+  mediaType,
+  onCancel,
+  tmdbId,
+  mbId,
+  olId,
+}: IssueModalProps) => (
   <Transition
     as="div"
     enter="transition-opacity duration-300"
@@ -24,6 +33,8 @@ const IssueModal = ({ show, mediaType, onCancel, tmdbId }: IssueModalProps) => (
       mediaType={mediaType}
       onCancel={onCancel}
       tmdbId={tmdbId}
+      mbId={mbId}
+      olId={olId}
     />
   </Transition>
 );

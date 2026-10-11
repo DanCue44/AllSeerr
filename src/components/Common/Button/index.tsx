@@ -1,3 +1,4 @@
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import type { ForwardedRef, JSX } from 'react';
 import React from 'react';
 import { twMerge } from 'tailwind-merge';
@@ -10,42 +11,33 @@ export type ButtonType =
   | 'success'
   | 'ghost';
 
-// Helper type to override types (overrides onClick)
-type MergeElementProps<
-  T extends React.ElementType,
-  P extends Record<string, unknown>,
-> = Omit<React.ComponentProps<T>, keyof P> & P;
-
-type ElementTypes = 'button' | 'a';
-
-type Element<P extends ElementTypes = 'button'> = P extends 'a'
-  ? HTMLAnchorElement
-  : HTMLButtonElement;
-
-type BaseProps<P> = {
-  buttonType?: ButtonType;
-  buttonSize?: 'default' | 'lg' | 'md' | 'sm';
-  // Had to do declare this manually as typescript would assume e was of type any otherwise
-  onClick?: (
-    e: React.MouseEvent<P extends 'a' ? HTMLAnchorElement : HTMLButtonElement>
-  ) => void;
+// Ambient pills, one per button type (the classic look is set below)
+const ambientTypes: Record<ButtonType, string> = {
+  primary:
+    'font-bold text-as-ground border-transparent bg-as-accent hover:brightness-110 active:brightness-95',
+  danger:
+    'text-[#f2b0aa] border-transparent bg-[#3b2427] hover:bg-[#4a2c30] active:bg-[#4a2c30]',
+  warning:
+    'text-[#f0d9a8] border-transparent bg-[#3b3424] hover:bg-[#4a412c] active:bg-[#4a412c]',
+  success:
+    'text-[#a8e6c4] border-transparent bg-[#1d3b33] hover:bg-[#244a40] active:bg-[#244a40]',
+  ghost:
+    'text-as-ink bg-transparent border-as-line-strong hover:bg-as-raised hover:border-as-ink-faint active:bg-as-raised',
+  default:
+    'text-as-ink bg-as-raised border-as-line-strong hover:bg-as-line group-hover:bg-as-line active:bg-as-line',
 };
 
-type ButtonProps<P extends React.ElementType> = {
-  as?: P;
-} & MergeElementProps<P, BaseProps<P>>;
+const ambientSizes = {
+  sm: 'px-3 py-1.5 text-xs button-sm',
+  lg: 'px-7 py-3 text-base button-lg',
+  md: 'px-5 py-2 text-sm button-md',
+};
 
-function Button<P extends ElementTypes = 'button'>(
-  {
-    buttonType = 'default',
-    buttonSize = 'default',
-    as,
-    children,
-    className,
-    ...props
-  }: ButtonProps<P>,
-  ref?: React.Ref<Element<P>>
-): JSX.Element {
+// Seerr's original button look, used by the classic interface
+const classicStyle = (
+  buttonType: ButtonType,
+  buttonSize: 'default' | 'lg' | 'md' | 'sm'
+): string[] => {
   const buttonStyle = [
     'inline-flex items-center justify-center border leading-5 font-medium rounded-md focus:outline-none transition ease-in-out duration-150 cursor-pointer disabled:opacity-50 whitespace-nowrap',
   ];
@@ -92,6 +84,56 @@ function Button<P extends ElementTypes = 'button'>(
     default:
       buttonStyle.push('px-4 py-2 text-sm button-md');
   }
+
+  return buttonStyle;
+};
+
+// Helper type to override types (overrides onClick)
+type MergeElementProps<
+  T extends React.ElementType,
+  P extends Record<string, unknown>,
+> = Omit<React.ComponentProps<T>, keyof P> & P;
+
+type ElementTypes = 'button' | 'a';
+
+type Element<P extends ElementTypes = 'button'> = P extends 'a'
+  ? HTMLAnchorElement
+  : HTMLButtonElement;
+
+type BaseProps<P> = {
+  buttonType?: ButtonType;
+  buttonSize?: 'default' | 'lg' | 'md' | 'sm';
+  // Had to do declare this manually as typescript would assume e was of type any otherwise
+  onClick?: (
+    e: React.MouseEvent<P extends 'a' ? HTMLAnchorElement : HTMLButtonElement>
+  ) => void;
+};
+
+type ButtonProps<P extends React.ElementType> = {
+  as?: P;
+} & MergeElementProps<P, BaseProps<P>>;
+
+function Button<P extends ElementTypes = 'button'>(
+  {
+    buttonType = 'default',
+    buttonSize = 'default',
+    as,
+    children,
+    className,
+    ...props
+  }: ButtonProps<P>,
+  ref?: React.Ref<Element<P>>
+): JSX.Element {
+  const [interfaceStyle] = useInterfaceStyle();
+
+  const buttonStyle =
+    interfaceStyle === 'ambient'
+      ? [
+          'inline-flex items-center justify-center border leading-5 font-semibold rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-as-accent transition ease-in-out duration-150 cursor-pointer disabled:opacity-50 disabled:hover:brightness-100 whitespace-nowrap',
+          ambientTypes[buttonType],
+          ambientSizes[buttonSize === 'default' ? 'md' : buttonSize],
+        ]
+      : classicStyle(buttonType, buttonSize);
 
   buttonStyle.push(className ?? '');
 

@@ -1,7 +1,13 @@
+import {
+  AmbientPageHeader,
+  listPageMessages,
+  PillSelect,
+} from '@app/components/AllSeerr/ListPage';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import PageTitle from '@app/components/Common/PageTitle';
 import useDiscover from '@app/hooks/useDiscover';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import globalMessages from '@app/i18n/globalMessages';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
@@ -11,6 +17,7 @@ import type {
   PersonResult,
   TvResult,
 } from '@server/models/Search';
+import { useRouter } from 'next/router';
 import { useState } from 'react';
 import { useIntl } from 'react-intl';
 
@@ -26,8 +33,15 @@ type TimeWindow = 'day' | 'week';
 
 const Trending = () => {
   const intl = useIntl();
-  const [currentMediaType, setCurrentMediaType] = useState<MediaType>('all');
+  const router = useRouter();
+  // Opened narrowed to movies or series from a Discover page showing one type
+  const [currentMediaType, setCurrentMediaType] = useState<MediaType>(() =>
+    router.query.mediaType === 'movie' || router.query.mediaType === 'tv'
+      ? router.query.mediaType
+      : 'all'
+  );
   const [currentTimeWindow, setCurrentTimeWindow] = useState<TimeWindow>('day');
+  const [interfaceStyle] = useInterfaceStyle();
   const {
     isLoadingInitialData,
     isEmpty,
@@ -43,6 +57,69 @@ const Trending = () => {
 
   if (error) {
     return <ErrorPage statusCode={500} />;
+  }
+
+  const mediaTypeOptions = (
+    <>
+      <option value="all">{intl.formatMessage(globalMessages.all)}</option>
+      <option value="movie">{intl.formatMessage(globalMessages.movies)}</option>
+      <option value="tv">{intl.formatMessage(globalMessages.tvshows)}</option>
+    </>
+  );
+
+  const timeWindowOptions = (
+    <>
+      <option value="day">{intl.formatMessage(messages.timeWindowDay)}</option>
+      <option value="week">
+        {intl.formatMessage(messages.timeWindowWeek)}
+      </option>
+    </>
+  );
+
+  if (interfaceStyle === 'ambient') {
+    return (
+      <>
+        <PageTitle title={intl.formatMessage(messages.trending)} />
+        <AmbientPageHeader
+          title={intl.formatMessage(messages.trending)}
+          controls={
+            <>
+              <PillSelect
+                id="mediaType"
+                label={intl.formatMessage(listPageMessages.mediaType)}
+                icon={<CircleStackIcon />}
+                value={currentMediaType}
+                onChange={(e) =>
+                  setCurrentMediaType(e.target.value as MediaType)
+                }
+              >
+                {mediaTypeOptions}
+              </PillSelect>
+              <PillSelect
+                id="timeWindow"
+                label={intl.formatMessage(listPageMessages.timeWindow)}
+                icon={<FunnelIcon />}
+                value={currentTimeWindow}
+                onChange={(e) =>
+                  setCurrentTimeWindow(e.target.value as TimeWindow)
+                }
+              >
+                {timeWindowOptions}
+              </PillSelect>
+            </>
+          }
+        />
+        <ListView
+          items={titles}
+          isEmpty={isEmpty}
+          isLoading={
+            isLoadingInitialData || (isLoadingMore && (titles?.length ?? 0) > 0)
+          }
+          isReachingEnd={isReachingEnd}
+          onScrollBottom={fetchMore}
+        />
+      </>
+    );
   }
 
   return (
@@ -62,15 +139,7 @@ const Trending = () => {
               value={currentMediaType}
               className="rounded-r-only"
             >
-              <option value="all">
-                {intl.formatMessage(globalMessages.all)}
-              </option>
-              <option value="movie">
-                {intl.formatMessage(globalMessages.movies)}
-              </option>
-              <option value="tv">
-                {intl.formatMessage(globalMessages.tvshows)}
-              </option>
+              {mediaTypeOptions}
             </select>
           </div>
           <div className="mb-2 flex flex-grow sm:mb-0 sm:mr-2 lg:flex-grow-0">
@@ -86,12 +155,7 @@ const Trending = () => {
               value={currentTimeWindow}
               className="rounded-r-only"
             >
-              <option value="day">
-                {intl.formatMessage(messages.timeWindowDay)}
-              </option>
-              <option value="week">
-                {intl.formatMessage(messages.timeWindowWeek)}
-              </option>
+              {timeWindowOptions}
             </select>
           </div>
         </div>

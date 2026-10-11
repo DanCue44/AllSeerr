@@ -1,4 +1,9 @@
-import { IssueStatus, IssueType } from '@server/constants/issue';
+import {
+  IssueStatus,
+  IssueType,
+  issueTypesByMediaType,
+} from '@server/constants/issue';
+import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Issue from '@server/entity/Issue';
 import IssueComment from '@server/entity/IssueComment';
@@ -122,6 +127,31 @@ issueRoutes.post<Record<string, string>, Issue, IssueRequestBody>(
       return next({ status: 404, message: 'Media does not exist.' });
     }
 
+    if (
+      !(issueTypesByMediaType[media.mediaType] ?? []).includes(
+        Number(req.body.issueType)
+      )
+    ) {
+      return next({
+        status: 400,
+        message: 'This issue type cannot be reported for this media.',
+      });
+    }
+
+    const isBook = media.mediaType === MediaType.BOOK;
+
+    if (
+      isBook &&
+      req.body.bookFormat != null &&
+      req.body.bookFormat !== 'ebook' &&
+      req.body.bookFormat !== 'audiobook'
+    ) {
+      return next({
+        status: 400,
+        message: 'Book format must be ebook or audiobook.',
+      });
+    }
+
     let createdBy = req.user;
 
     if (req.body.userId != null && req.body.userId !== req.user.id) {
@@ -147,8 +177,10 @@ issueRoutes.post<Record<string, string>, Issue, IssueRequestBody>(
     const issue = new Issue({
       createdBy,
       issueType: req.body.issueType,
-      problemSeason: req.body.problemSeason,
-      problemEpisode: req.body.problemEpisode,
+      // Music issues use these for the affected disc and track
+      problemSeason: isBook ? 0 : req.body.problemSeason,
+      problemEpisode: isBook ? 0 : req.body.problemEpisode,
+      bookFormat: isBook ? (req.body.bookFormat ?? null) : null,
       media,
       comments: [
         new IssueComment({

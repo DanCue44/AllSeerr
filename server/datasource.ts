@@ -1,12 +1,19 @@
 import { Blocklist } from '@server/entity/Blocklist';
 import DiscoverSlider from '@server/entity/DiscoverSlider';
+import Favorite from '@server/entity/Favorite';
 import Issue from '@server/entity/Issue';
 import IssueComment from '@server/entity/IssueComment';
 import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
+import MetadataAlbum from '@server/entity/MetadataAlbum';
+import MetadataArtist from '@server/entity/MetadataArtist';
+import MetadataBookAudio from '@server/entity/MetadataBookAudio';
+import MetadataBookEbook from '@server/entity/MetadataBookEbook';
 import OverrideRule from '@server/entity/OverrideRule';
+import RemovalRequest from '@server/entity/RemovalRequest';
 import Season from '@server/entity/Season';
 import SeasonRequest from '@server/entity/SeasonRequest';
+import SeasonRollover from '@server/entity/SeasonRollover';
 import { Session } from '@server/entity/Session';
 import { User } from '@server/entity/User';
 import { UserPushSubscription } from '@server/entity/UserPushSubscription';
@@ -27,13 +34,20 @@ const DB_SSL_PREFIX = 'DB_SSL_';
 const entities = [
   Blocklist,
   DiscoverSlider,
+  Favorite,
   Issue,
   IssueComment,
   Media,
   MediaRequest,
+  MetadataAlbum,
+  MetadataArtist,
+  MetadataBookAudio,
+  MetadataBookEbook,
   OverrideRule,
+  RemovalRequest,
   Season,
   SeasonRequest,
+  SeasonRollover,
   Session,
   User,
   UserPushSubscription,

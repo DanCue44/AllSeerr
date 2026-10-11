@@ -136,6 +136,7 @@ const UserEmailSettings = () => {
             </div>
             <NotificationTypeSelector
               user={user}
+              showNewsletter
               currentTypes={values.types}
               onUpdate={(newTypes) => {
                 setFieldValue('types', newTypes);

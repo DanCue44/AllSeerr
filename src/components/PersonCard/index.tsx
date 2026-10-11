@@ -1,4 +1,5 @@
 import CachedImage from '@app/components/Common/CachedImage';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { UserCircleIcon } from '@heroicons/react/24/solid';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -19,6 +20,46 @@ const PersonCard = ({
   canExpand = false,
 }: PersonCardProps) => {
   const [isHovered, setHovered] = useState(false);
+  const [interfaceStyle] = useInterfaceStyle();
+
+  if (interfaceStyle === 'ambient') {
+    // Round portrait with the name and role underneath
+    return (
+      <Link
+        href={`/person/${personId}`}
+        className={`group block ${
+          canExpand ? 'w-full' : 'w-[150px] sm:w-[176px]'
+        }`}
+      >
+        <div className="relative mx-auto aspect-square w-full overflow-hidden rounded-full bg-as-tile transition duration-300 group-hover:scale-[1.03]">
+          {profilePath ? (
+            <CachedImage
+              type="tmdb"
+              src={`https://image.tmdb.org/t/p/w600_and_h900_bestv2${profilePath}`}
+              alt=""
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'center 20%',
+              }}
+              fill
+            />
+          ) : (
+            <UserCircleIcon className="h-full w-full text-as-ink-faint" />
+          )}
+        </div>
+        <div className="mt-2.5 line-clamp-2 break-words text-center font-bold text-as-ink group-hover:underline">
+          {name}
+        </div>
+        {subName && (
+          <div className="line-clamp-2 text-center text-[13px] text-as-ink-faint">
+            {subName}
+          </div>
+        )}
+      </Link>
+    );
+  }
 
   return (
     <Link

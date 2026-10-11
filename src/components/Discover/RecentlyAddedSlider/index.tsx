@@ -2,6 +2,7 @@ import Slider from '@app/components/Slider';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
+import type { MediaType } from '@server/constants/media';
 import type { MediaResultsResponse } from '@server/interfaces/api/mediaInterfaces';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
@@ -10,11 +11,18 @@ const messages = defineMessages('components.Discover.RecentlyAddedSlider', {
   recentlyAdded: 'Recently Added',
 });
 
-const RecentlyAddedSlider = () => {
+interface RecentlyAddedSliderProps {
+  /** Only show this media type */
+  mediaType?: `${MediaType}`;
+}
+
+const RecentlyAddedSlider = ({ mediaType }: RecentlyAddedSliderProps) => {
   const intl = useIntl();
   const { hasPermission } = useUser();
   const { data: media, error: mediaError } = useSWR<MediaResultsResponse>(
-    '/api/v1/media?filter=allavailable&take=20&sort=mediaAdded',
+    `/api/v1/media?filter=allavailable&take=20&sort=mediaAdded${
+      mediaType ? `&mediaType=${mediaType}` : ''
+    }`,
     { revalidateOnMount: true }
   );
 
@@ -35,7 +43,7 @@ const RecentlyAddedSlider = () => {
         </div>
       </div>
       <Slider
-        sliderKey="media"
+        sliderKey={mediaType ? `media-${mediaType}` : 'media'}
         isLoading={!media}
         items={(media?.results ?? []).map((item) => (
           <TmdbTitleCard
@@ -43,6 +51,8 @@ const RecentlyAddedSlider = () => {
             id={item.id}
             tmdbId={item.tmdbId}
             tvdbId={item.tvdbId}
+            mbId={item.mbId}
+            olId={item.olId}
             type={item.mediaType}
           />
         ))}

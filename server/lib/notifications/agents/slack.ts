@@ -1,4 +1,4 @@
-import { IssueStatus, IssueTypeName } from '@server/constants/issue';
+import { IssueStatus, getIssueTypeName } from '@server/constants/issue';
 import { getIntl } from '@server/i18n';
 import globalMessages from '@server/i18n/globalMessages';
 import type { NotificationAgentSlack } from '@server/lib/settings';
@@ -7,7 +7,7 @@ import logger from '@server/logger';
 import axios from 'axios';
 import { Notification, hasNotificationType } from '..';
 import type { NotificationAgent, NotificationPayload } from './agent';
-import { BaseAgent } from './agent';
+import { BaseAgent, getPayloadPath } from './agent';
 
 interface EmbedField {
   type: 'plain_text' | 'mrkdwn';
@@ -88,6 +88,7 @@ class SlackAgent
           status = intl.formatMessage(globalMessages.processing);
           break;
         case Notification.MEDIA_AVAILABLE:
+        case Notification.MEDIA_EPISODES_AVAILABLE:
           status = intl.formatMessage(globalMessages.available);
           break;
         case Notification.MEDIA_DECLINED:
@@ -117,7 +118,7 @@ class SlackAgent
         },
         {
           type: 'mrkdwn',
-          text: `*${intl.formatMessage(globalMessages.issueType)}*\n${IssueTypeName[payload.issue.issueType]}`,
+          text: `*${intl.formatMessage(globalMessages.issueType)}*\n${getIssueTypeName(payload.issue.issueType, payload.media?.mediaType)}`,
         },
         {
           type: 'mrkdwn',
@@ -188,7 +189,7 @@ class SlackAgent
       ? payload.issue
         ? `${applicationUrl}/issues/${payload.issue.id}`
         : payload.media
-          ? `${applicationUrl}/${payload.media.mediaType}/${payload.media.tmdbId}`
+          ? `${applicationUrl}${getPayloadPath(payload)}`
           : undefined
       : undefined;
 

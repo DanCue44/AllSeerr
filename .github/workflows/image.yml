@@ -1,0 +1,239 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Image
+
+# develop -> :develop, :develop-<sha> (linux/amd64), the testing channel
+# main    -> :main, :main-<sha> (linux/amd64), every merged change
+# v* tag  -> :<version>, :<major.minor>, :latest (linux/amd64 + linux/arm64) and a GitHub release
+# :latest only moves on releases, so it always has both architectures
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
+
+env:
+  IMAGE: ghcr.io/dancue44/allseerr
+
+jobs:
+  branch:
+    name: Build and push branch image
+    if: github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit timestamp
+        id: ts
+        run: echo "timestamp=$(git log -1 --pretty=%ct)" >> "$GITHUB_OUTPUT"
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=main,enable=${{ github.ref_name == 'main' }}
+            type=raw,value=develop,enable=${{ github.ref_name == 'develop' }}
+            type=sha,prefix=${{ github.ref_name }}-,format=short
+          labels: |
+            org.opencontainers.image.title=AllSeerr
+            org.opencontainers.image.description=Request management for movies, series, music, books and audiobooks, based on Seerr
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          build-args: |
+            COMMIT_TAG=${{ github.sha }}
+            SOURCE_DATE_EPOCH=${{ steps.ts.outputs.timestamp }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=linux/amd64
+          cache-to: type=gha,mode=max,scope=linux/amd64
+
+  verify-tag:
+    name: Check tag matches allseerr.json
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Compare tag with the app version
+        id: check
+        env:
+          TAG: ${{ github.ref_name }}
+        # The app reports its version from allseerr.json, so a tag that does not
+        # match it would publish an image that shows a different version.
+        run: |
+          expected="v$(jq -r '"\(.seerrVersion).\(.revision)"' allseerr.json)"
+          base="${TAG%%-*}"
+          if [ "$base" != "$expected" ]; then
+            echo "::error::Tag $TAG does not match allseerr.json ($expected)"
+            exit 1
+          fi
+          if [ "$base" != "$TAG" ]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  warm-cache:
+    name: Build ${{ matrix.platform }}
+    needs: verify-tag
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Commit timestamp
+        id: ts
+        run: echo "timestamp=$(git log -1 --pretty=%ct)" >> "$GITHUB_OUTPUT"
+
+      # Each platform builds natively and fills its own cache scope, so the
+      # multi-arch push below only has to assemble cached layers.
+      - name: Build (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: false
+          provenance: false
+          build-args: |
+            COMMIT_TAG=${{ github.ref_name }}
+            SOURCE_DATE_EPOCH=${{ steps.ts.outputs.timestamp }}
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+
+  release:
+    name: Push multi-arch image and create release
+    needs: [verify-tag, warm-cache]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Only used if a cache entry was evicted between jobs
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit timestamp
+        id: ts
+        run: echo "timestamp=$(git log -1 --pretty=%ct)" >> "$GITHUB_OUTPUT"
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=match,pattern=^v(.*)$,group=1
+            type=match,pattern=^v(\d+\.\d+)\.,group=1,enable=${{ needs.verify-tag.outputs.prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ needs.verify-tag.outputs.prerelease == 'false' }}
+          labels: |
+            org.opencontainers.image.title=AllSeerr
+            org.opencontainers.image.description=Request management for movies, series, music, books and audiobooks, based on Seerr
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          build-args: |
+            COMMIT_TAG=${{ github.ref_name }}
+            SOURCE_DATE_EPOCH=${{ steps.ts.outputs.timestamp }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: |
+            type=gha,scope=linux/amd64
+            type=gha,scope=linux/arm64
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.verify-tag.outputs.prerelease }}
+        run: |
+          flags=(--verify-tag --generate-notes --title "AllSeerr $TAG")
+          if [ "$PRERELEASE" = "true" ]; then
+            flags+=(--prerelease --latest=false)
+          fi
+          gh release create "$TAG" "${flags[@]}"

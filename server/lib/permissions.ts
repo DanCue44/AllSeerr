@@ -28,7 +28,11 @@ export enum Permission {
   RECENT_VIEW = 67108864,
   WATCHLIST_VIEW = 134217728,
   MANAGE_BLOCKLIST = 268435456,
+  REQUEST_MUSIC = 536870912,
   VIEW_BLOCKLIST = 1073741824,
+  // Every bit up to 2^30 is taken and 2^31 does not fit the signed 32-bit
+  // permissions column, so books use bit 0, which was never assigned
+  REQUEST_BOOK = 1,
 }
 
 export interface PermissionCheckOptions {

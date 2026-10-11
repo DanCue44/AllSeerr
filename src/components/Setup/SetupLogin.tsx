@@ -1,6 +1,7 @@
 import Button from '@app/components/Common/Button';
 import PlexLoginButton from '@app/components/Login/PlexLoginButton';
 import JellyfinSetup from '@app/components/Setup/JellyfinSetup';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { MediaServerType } from '@server/constants/server';
@@ -9,7 +10,7 @@ import { useEffect, useState } from 'react';
 import { FormattedMessage } from 'react-intl';
 
 const messages = defineMessages('components.Setup', {
-  welcome: 'Welcome to Seerr',
+  welcome: 'Welcome to AllSeerr',
   signinMessage: 'Get started by signing in',
   signin: 'Sign in to your account',
   signinWithJellyfin: 'Enter your Jellyfin details',
@@ -34,6 +35,8 @@ const SetupLogin: React.FC<LoginWithMediaServerProps> = ({
     MediaServerType.NOT_CONFIGURED
   );
   const { user, revalidate } = useUser();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
 
   // Effect that is triggered when the `authToken` comes back from the Plex OAuth
   // We take the token and attempt to login. If we get a success message, we will
@@ -67,10 +70,18 @@ const SetupLogin: React.FC<LoginWithMediaServerProps> = ({
 
   return (
     <div className="p-4">
-      <div className="mb-2 flex justify-center text-xl font-bold">
+      <div
+        className={`mb-2 flex justify-center ${
+          ambient ? 'font-display text-[22px] font-medium' : 'text-xl font-bold'
+        }`}
+      >
         <FormattedMessage {...messages.signin} />
       </div>
-      <div className="mb-2 flex justify-center pb-6 text-sm">
+      <div
+        className={`mb-2 flex justify-center pb-6 text-sm ${
+          ambient ? 'text-as-ink-faint' : ''
+        }`}
+      >
         {serverType === MediaServerType.JELLYFIN ? (
           <FormattedMessage {...messages.signinWithJellyfin} />
         ) : serverType === MediaServerType.EMBY ? (
@@ -81,7 +92,11 @@ const SetupLogin: React.FC<LoginWithMediaServerProps> = ({
       </div>
       {serverType === MediaServerType.PLEX && (
         <>
-          <div className="flex justify-center bg-black/30 px-10 py-8">
+          <div
+            className={`flex justify-center px-10 py-8 ${
+              ambient ? 'rounded-[22px] bg-as-tile' : 'bg-black/30'
+            }`}
+          >
             <PlexLoginButton
               large
               onAuthToken={(authToken) => {

@@ -7,6 +7,7 @@ import {
   ArrowRightCircleIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
+import type { MediaType } from '@server/constants/media';
 import type { RequestResultsResponse } from '@server/interfaces/api/requestInterfaces';
 import Link from 'next/link';
 import { useIntl } from 'react-intl';
@@ -17,12 +18,19 @@ const messages = defineMessages('components.Discover.RecentRequestsSlider', {
     'Unable to connect to {services}. Some information may be unavailable.',
 });
 
-const RecentRequestsSlider = () => {
+interface RecentRequestsSliderProps {
+  /** Only show requests for this media type */
+  mediaType?: `${MediaType}`;
+}
+
+const RecentRequestsSlider = ({ mediaType }: RecentRequestsSliderProps) => {
   const intl = useIntl();
   const { hasPermission } = useUser();
   const { data: requests, error: requestError } =
     useSWR<RequestResultsResponse>(
-      '/api/v1/request?filter=all&take=10&sort=added&skip=0',
+      `/api/v1/request?filter=all&take=10&sort=added&skip=0${
+        mediaType ? `&mediaType=${mediaType}` : ''
+      }`,
       {
         revalidateOnMount: true,
       }
@@ -63,7 +71,7 @@ const RecentRequestsSlider = () => {
         )}
 
       <Slider
-        sliderKey="requests"
+        sliderKey={mediaType ? `requests-${mediaType}` : 'requests'}
         isLoading={!requests}
         items={(requests?.results ?? []).map((request) => (
           <RequestCard

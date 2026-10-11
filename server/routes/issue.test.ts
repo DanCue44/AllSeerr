@@ -222,6 +222,109 @@ describe('POST /issue', () => {
   });
 });
 
+describe('POST /issue (music and books)', () => {
+  it('creates an album issue with the affected disc and track', async () => {
+    const media = await getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.MUSIC,
+        mbId: '1dc4c347-a1db-32aa-b14f-bc9cc507b843',
+        status: MediaStatus.AVAILABLE,
+      })
+    );
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/issue').send({
+      issueType: IssueType.MISSING_CONTENT,
+      message: 'The last track is missing.',
+      mediaId: media.id,
+      problemSeason: 1,
+      problemEpisode: 12,
+      bookFormat: 'audiobook',
+    });
+
+    assert.strictEqual(res.status, 201);
+    const persisted = await getRepository(Issue).findOneOrFail({
+      where: { id: res.body.id },
+    });
+    assert.strictEqual(persisted.issueType, IssueType.MISSING_CONTENT);
+    assert.strictEqual(persisted.problemSeason, 1);
+    assert.strictEqual(persisted.problemEpisode, 12);
+    assert.strictEqual(persisted.bookFormat, null);
+    assert.strictEqual(persisted.media.mediaType, MediaType.MUSIC);
+    assert.strictEqual(sendIssueNotificationMock.callCount(), 1);
+  });
+
+  it('creates a book issue for one format', async () => {
+    const media = await getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.BOOK,
+        olId: 'OL45804W',
+        status: MediaStatus.AVAILABLE,
+        statusAudio: MediaStatus.AVAILABLE,
+      })
+    );
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/issue').send({
+      issueType: IssueType.WRONG_CONTENT,
+      message: 'This is the abridged edition.',
+      mediaId: media.id,
+      problemSeason: 3,
+      bookFormat: 'audiobook',
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.bookFormat, 'audiobook');
+    assert.strictEqual(res.body.problemSeason, 0);
+  });
+
+  it('refuses an issue type that does not fit the media', async () => {
+    const media = await getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.MUSIC,
+        mbId: '1dc4c347-a1db-32aa-b14f-bc9cc507b843',
+        status: MediaStatus.AVAILABLE,
+      })
+    );
+    const movie = await seedMedia();
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const subtitles = await agent.post('/issue').send({
+      issueType: IssueType.SUBTITLES,
+      message: 'No subtitles.',
+      mediaId: media.id,
+    });
+    const wrongEdition = await agent.post('/issue').send({
+      issueType: IssueType.WRONG_CONTENT,
+      message: 'Wrong movie.',
+      mediaId: movie.id,
+    });
+
+    assert.strictEqual(subtitles.status, 400);
+    assert.strictEqual(wrongEdition.status, 400);
+  });
+
+  it('refuses an unknown book format', async () => {
+    const media = await getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.BOOK,
+        olId: 'OL45804W',
+        status: MediaStatus.AVAILABLE,
+      })
+    );
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/issue').send({
+      issueType: IssueType.OTHER,
+      message: 'Something else.',
+      mediaId: media.id,
+      bookFormat: 'paperback',
+    });
+
+    assert.strictEqual(res.status, 400);
+  });
+});
+
 describe('GET /issueComment/:commentId', () => {
   it('omits notification settings from the comment author', async () => {
     const userRepo = getRepository(User);

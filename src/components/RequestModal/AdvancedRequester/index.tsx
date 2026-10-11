@@ -65,14 +65,18 @@ export type RequestOverrides = {
 };
 
 interface AdvancedRequesterProps {
-  type: 'movie' | 'tv';
+  type: 'movie' | 'tv' | 'music';
   tmdbId?: number;
   is4k: boolean;
   isAnime?: boolean;
   defaultOverrides?: RequestOverrides;
   requestUser?: User;
   requestId?: number;
-  quota?: { movie: { limit?: number }; tv: { limit?: number } };
+  quota?: {
+    movie: { limit?: number };
+    tv: { limit?: number };
+    music?: { limit?: number };
+  };
   onChange: (overrides: RequestOverrides) => void;
 }
 
@@ -90,8 +94,10 @@ const AdvancedRequester = ({
   const intl = useIntl();
   const { addToast } = useToasts();
   const { user: currentUser, hasPermission: currentHasPermission } = useUser();
+  const service =
+    type === 'movie' ? 'radarr' : type === 'music' ? 'lidarr' : 'sonarr';
   const { data, error } = useSWR<ServiceCommonServer[]>(
-    `/api/v1/service/${type === 'movie' ? 'radarr' : 'sonarr'}`,
+    `/api/v1/service/${service}`,
     {
       refreshInterval: 0,
       refreshWhenHidden: false,
@@ -124,14 +130,16 @@ const AdvancedRequester = ({
   );
   const isIgnoreQuotaVisible =
     currentHasPermission([Permission.MANAGE_REQUESTS]) &&
-    ((type === 'movie' ? quota?.movie.limit : quota?.tv.limit) ?? 0) > 0;
+    ((type === 'movie'
+      ? quota?.movie.limit
+      : type === 'music'
+        ? quota?.music?.limit
+        : quota?.tv.limit) ?? 0) > 0;
 
   const { data: serverData, isValidating } =
     useSWR<ServiceCommonServerWithDetails>(
       selectedServer !== null
-        ? `/api/v1/service/${
-            type === 'movie' ? 'radarr' : 'sonarr'
-          }/${selectedServer}`
+        ? `/api/v1/service/${service}/${selectedServer}`
         : null,
       {
         refreshInterval: 0,
@@ -166,7 +174,9 @@ const AdvancedRequester = ({
                 Permission.REQUEST,
                 type === 'movie'
                   ? Permission.REQUEST_MOVIE
-                  : Permission.REQUEST_TV,
+                  : type === 'music'
+                    ? Permission.REQUEST_MUSIC
+                    : Permission.REQUEST_TV,
               ],
           user.permissions,
           { type: 'or' }
@@ -341,7 +351,11 @@ const AdvancedRequester = ({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (tmdbId && serverData?.server.id === selectedServer) {
+      // Music rules only match on users, so they need no TMDB id
+      if (
+        (tmdbId || type === 'music') &&
+        serverData?.server.id === selectedServer
+      ) {
         try {
           const { data: override } = await axios.post<OverrideRulesResult>(
             '/api/v1/overrideRule/advancedRequest',

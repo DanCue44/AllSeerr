@@ -48,14 +48,14 @@ const messages = defineMessages('components.Settings', {
   jellyfinSyncFailedGenericError:
     'Something went wrong while syncing libraries',
   jellyfinSyncFailedConnectionError:
-    'Unable to reach the {mediaServerName} server. Check that it is running and reachable from Seerr.',
+    'Unable to reach the {mediaServerName} server. Check that it is running and reachable from AllSeerr.',
   toggleLibraryFailure: 'Failed to update library.',
   invalidurlerror: 'Unable to connect to {mediaServerName} server.',
   syncing: 'Syncing',
   syncJellyfin: 'Sync Libraries',
   manualscanJellyfin: 'Manual Library Scan',
   manualscanDescriptionJellyfin:
-    "Normally, this will only be run once every 24 hours. Seerr will check your {mediaServerName} server's recently added more aggressively. If this is your first time configuring Seerr, a one-time full manual library scan is recommended!",
+    "Normally, this will only be run once every 24 hours. AllSeerr will check your {mediaServerName} server's recently added more aggressively. If this is your first time configuring Seerr, a one-time full manual library scan is recommended!",
   notrunning: 'Not Running',
   currentlibrary: 'Current Library: {name}',
   librariesRemaining: 'Libraries Remaining: {count}',

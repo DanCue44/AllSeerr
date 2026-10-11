@@ -10,7 +10,9 @@ import KeywordTag from '@app/components/KeywordTag';
 import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
-import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import type { DiscoverMediaFilter } from '@app/utils/discoverMediaFilter';
+import { getSliderPlacements } from '@app/utils/discoverMediaFilter';
+import { BookOpenIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import {
   ArrowUturnLeftIcon,
   Bars3Icon,
@@ -21,9 +23,11 @@ import {
 } from '@heroicons/react/24/solid';
 import { DiscoverSliderType } from '@server/constants/discover';
 import type DiscoverSlider from '@server/entity/DiscoverSlider';
+import { getBookSubjectLabel } from '@server/lib/bookSubjects';
 import axios from 'axios';
 import { useRef, useState } from 'react';
 import { useDrag, useDrop } from 'react-aria';
+import type { MessageDescriptor } from 'react-intl';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.Discover.DiscoverSliderEdit', {
@@ -31,7 +35,17 @@ const messages = defineMessages('components.Discover.DiscoverSliderEdit', {
   deletefail: 'Failed to delete slider.',
   remove: 'Remove',
   enable: 'Toggle Visibility',
+  shownin: 'Shown in {places}',
+  foryou: 'For You',
 });
+
+const PLACEMENT_TITLES: Record<DiscoverMediaFilter, MessageDescriptor> = {
+  all: messages.foryou,
+  movie: globalMessages.movies,
+  tv: globalMessages.tvshows,
+  music: globalMessages.music,
+  book: globalMessages.books,
+};
 
 const Position = {
   None: 'None',
@@ -151,6 +165,10 @@ const DiscoverSliderEdit = ({
         return intl.formatMessage(sliderTitles.upcomingtv);
       case DiscoverSliderType.NETWORKS:
         return intl.formatMessage(sliderTitles.networks);
+      case DiscoverSliderType.POPULAR_MUSIC:
+        return intl.formatMessage(sliderTitles.popularmusic);
+      case DiscoverSliderType.NEW_MUSIC:
+        return intl.formatMessage(sliderTitles.newmusic);
       case DiscoverSliderType.TMDB_MOVIE_KEYWORD:
         return intl.formatMessage(sliderTitles.tmdbmoviekeyword);
       case DiscoverSliderType.TMDB_TV_KEYWORD:
@@ -169,10 +187,21 @@ const DiscoverSliderEdit = ({
         return intl.formatMessage(sliderTitles.tmdbmoviestreamingservices);
       case DiscoverSliderType.TMDB_TV_STREAMING_SERVICES:
         return intl.formatMessage(sliderTitles.tmdbtvstreamingservices);
+      case DiscoverSliderType.TRENDING_BOOKS:
+        return intl.formatMessage(sliderTitles.trendingbooks);
+      case DiscoverSliderType.POPULAR_BOOKS:
+        return intl.formatMessage(sliderTitles.popularbooks);
+      case DiscoverSliderType.COMING_UP:
+        return intl.formatMessage(sliderTitles.comingup);
+      case DiscoverSliderType.BOOK_SUBJECT:
+        return intl.formatMessage(sliderTitles.booksubject);
       default:
         return 'Unknown Slider';
     }
   };
+
+  // The home and the spaces share these rows, so each says where it shows
+  const placements = getSliderPlacements(slider);
 
   return (
     <div
@@ -200,8 +229,19 @@ const DiscoverSliderEdit = ({
           className={`${slider.data ? 'mb-4' : 'mb-0'} flex space-x-2 md:mb-0`}
         >
           <Bars3Icon className="h-6 w-6" />
-          <div className="w-7/12 truncate md:w-full">
-            {getSliderTitle(slider)}
+          <div className="w-7/12 min-w-0 md:w-full">
+            <div className="truncate">{getSliderTitle(slider)}</div>
+            {placements.length > 0 && (
+              <div className="truncate text-xs text-gray-500">
+                {intl.formatMessage(messages.shownin, {
+                  places: intl.formatList(
+                    placements.map((place) =>
+                      intl.formatMessage(PLACEMENT_TITLES[place])
+                    )
+                  ),
+                })}
+              </div>
+            )}
           </div>
         </div>
         <div
@@ -244,6 +284,11 @@ const DiscoverSliderEdit = ({
           )}
           {slider.type === DiscoverSliderType.TMDB_SEARCH && (
             <Tag iconSvg={<MagnifyingGlassIcon />}>{slider.data}</Tag>
+          )}
+          {slider.type === DiscoverSliderType.BOOK_SUBJECT && slider.data && (
+            <Tag iconSvg={<BookOpenIcon />}>
+              {getBookSubjectLabel(slider.data)}
+            </Tag>
           )}
         </div>
         <div className="flex items-center space-x-2">

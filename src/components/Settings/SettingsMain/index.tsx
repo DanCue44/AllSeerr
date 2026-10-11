@@ -5,22 +5,30 @@ import PageTitle from '@app/components/Common/PageTitle';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
 import LanguageSelector from '@app/components/LanguageSelector';
 import RegionSelector from '@app/components/RegionSelector';
+import { WatchProviderSelector } from '@app/components/Selector';
+import AccentColorPicker from '@app/components/Settings/AccentColorPicker';
 import CopyButton from '@app/components/Settings/CopyButton';
 import SettingsBadge from '@app/components/Settings/SettingsBadge';
+import ApplicationLogo from '@app/components/Settings/SettingsMain/ApplicationLogo';
+import useHomeScreenNotice from '@app/components/Settings/SettingsMain/useHomeScreenNotice';
 import { availableLanguages } from '@app/context/LanguageContext';
+import useBookLanguages from '@app/hooks/useBookLanguages';
 import useLocale from '@app/hooks/useLocale';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { isValidURL } from '@app/utils/urlValidationHelper';
-import { ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
+import { parseBlockedWatchProviders } from '@app/utils/watchProviderBlock';
+import { ArrowDownOnSquareIcon, BeakerIcon } from '@heroicons/react/24/outline';
 import { ArrowPathIcon } from '@heroicons/react/24/solid';
 import type { UserSettingsGeneralResponse } from '@server/interfaces/api/userSettingsInterfaces';
 import type { MainSettings } from '@server/lib/settings';
 import type { AvailableLocale } from '@server/types/languages';
+import { DEFAULT_ACCENT_COLOR } from '@server/utils/accentColor';
 import axios from 'axios';
 import { Field, Form, Formik } from 'formik';
+import { useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR, { mutate } from 'swr';
 import * as Yup from 'yup';
@@ -29,10 +37,16 @@ const messages = defineMessages('components.Settings.SettingsMain', {
   general: 'General',
   generalsettings: 'General Settings',
   generalsettingsDescription:
-    'Configure global and default settings for Seerr.',
+    'Configure global and default settings for AllSeerr.',
   apikey: 'API Key',
   apikeyCopied: 'Copied API key to clipboard.',
   applicationTitle: 'Application Title',
+  applicationTitleTip:
+    'Shown in the top bar, on the sign in page, in page titles, in emails and when the app is installed',
+  accentColor: 'Accent Color',
+  accentColorTip:
+    'Accent color of the Ambient interface. Users can pick their own in their profile settings.',
+  resetAccentColor: 'Reset to Default',
   applicationurl: 'Application URL',
   discoverRegion: 'Discover Region',
   discoverRegionTip: 'Filter content by regional availability',
@@ -44,6 +58,9 @@ const messages = defineMessages('components.Settings.SettingsMain', {
   blocklistLanguage: 'Blocklist Language',
   blocklistLanguageTip:
     'Language used for blocklist content scanning (independent of discover settings)',
+  blockedWatchProviders: 'Block Requests for Streaming Services',
+  blockedWatchProvidersTip:
+    'Titles included with a subscription to these services in the streaming region cannot be requested. Users with Manage Requests can still request them by hand.',
   blocklistedTags: 'Blocklist Content with Tags',
   blocklistedTagsTip:
     'Automatically add content with tags to the blocklist using the "Process Blocklisted Tags" job',
@@ -72,7 +89,26 @@ const messages = defineMessages('components.Settings.SettingsMain', {
   validationApplicationUrl: 'You must provide a valid URL',
   validationApplicationUrlTrailingSlash: 'URL must not end in a trailing slash',
   partialRequestsEnabled: 'Allow Partial Series Requests',
+  allowCurrentSeasonRequests: 'Allow Users to Request Only the Current Season',
+  allowCurrentSeasonRequestsTip:
+    'Lets users request only the current season of a series. Admins can always make these requests. When a new season starts, older seasons the request brought in are deleted from disk after the notice period, while seasons that were already here are kept unless an admin approves deleting them',
+  currentSeasonRolloverDelayDays: 'Days Notice Before Deleting Seasons',
+  currentSeasonRolloverDelayDaysTip:
+    'How long admins have to keep older seasons once a new season of a current season request starts. Set to 0 to delete them right away',
+  validationCurrentSeasonRolloverDelayDays:
+    'You must provide a whole number of days, 0 or more',
   enableSpecialEpisodes: 'Allow Special Episodes Requests',
+  defaultBookFormat: 'Default Book Format',
+  defaultBookFormatTip: 'Format preselected when requesting a book',
+  bookLanguage: 'Book Language',
+  bookLanguageTip:
+    'Language books are requested in, unless a user picks their own. Managers can pick another when requesting.',
+  bookFormatBoth: 'Both',
+  googleBooksApiKey: 'Google Books API Key',
+  googleBooksApiKeyTip:
+    'Used to check whether books have ebook editions. Without a key, ebook editions are not checked.',
+  toastGoogleBooksSuccess: 'Google Books accepted the API key!',
+  toastGoogleBooksFailure: 'Google Books rejected the API key.',
   locale: 'Display Language',
   youtubeUrl: 'YouTube URL',
   youtubeUrlTip:
@@ -84,9 +120,12 @@ const messages = defineMessages('components.Settings.SettingsMain', {
 
 const SettingsMain = () => {
   const { addToast } = useToasts();
+  const showHomeScreenNotice = useHomeScreenNotice();
   const { user: currentUser, hasPermission: userHasPermission } = useUser();
   const intl = useIntl();
   const { setLocale } = useLocale();
+  const bookLanguages = useBookLanguages();
+  const [isTestingGoogleBooks, setIsTestingGoogleBooks] = useState(false);
   const {
     data,
     error,
@@ -122,6 +161,17 @@ const SettingsMain = () => {
         'Number must be less than or equal to 250.',
         (value) => (value ?? 0) <= 250
       ),
+    currentSeasonRolloverDelayDays: Yup.number()
+      .typeError(
+        intl.formatMessage(messages.validationCurrentSeasonRolloverDelayDays)
+      )
+      .integer(
+        intl.formatMessage(messages.validationCurrentSeasonRolloverDelayDays)
+      )
+      .min(
+        0,
+        intl.formatMessage(messages.validationCurrentSeasonRolloverDelayDays)
+      ),
     youtubeUrl: Yup.string().url(intl.formatMessage(messages.validationUrl)),
   });
 
@@ -139,6 +189,26 @@ const SettingsMain = () => {
         autoDismiss: true,
         appearance: 'error',
       });
+    }
+  };
+
+  const testGoogleBooks = async (apiKey?: string) => {
+    setIsTestingGoogleBooks(true);
+
+    try {
+      await axios.post('/api/v1/settings/googlebooks/test', { apiKey });
+
+      addToast(intl.formatMessage(messages.toastGoogleBooksSuccess), {
+        autoDismiss: true,
+        appearance: 'success',
+      });
+    } catch {
+      addToast(intl.formatMessage(messages.toastGoogleBooksFailure), {
+        autoDismiss: true,
+        appearance: 'error',
+      });
+    } finally {
+      setIsTestingGoogleBooks(false);
     }
   };
 
@@ -174,15 +244,23 @@ const SettingsMain = () => {
             discoverRegion: data?.discoverRegion,
             originalLanguage: data?.originalLanguage,
             streamingRegion: data?.streamingRegion || 'US',
+            blockedWatchProviders: data?.blockedWatchProviders ?? '',
             blocklistRegion: data?.blocklistRegion || '',
             blocklistLanguage: data?.blocklistLanguage || '',
             blocklistedTags: data?.blocklistedTags,
             blocklistedTagsLimit: data?.blocklistedTagsLimit || 50,
             partialRequestsEnabled: data?.partialRequestsEnabled,
+            allowCurrentSeasonRequests: data?.allowCurrentSeasonRequests,
+            currentSeasonRolloverDelayDays:
+              data?.currentSeasonRolloverDelayDays ?? 3,
             enableSpecialEpisodes: data?.enableSpecialEpisodes,
+            defaultBookFormat: data?.defaultBookFormat ?? 'both',
+            bookLanguage: data?.bookLanguage ?? 'en',
+            googleBooksApiKey: data?.googleBooksApiKey ?? '',
             cacheImages: data?.cacheImages,
             youtubeUrl: data?.youtubeUrl,
             versionCheck: data?.versionCheck,
+            accentColor: data?.accentColor || DEFAULT_ACCENT_COLOR,
           }}
           enableReinitialize
           validationSchema={MainSettingsSchema}
@@ -197,16 +275,28 @@ const SettingsMain = () => {
                 locale: values.locale,
                 discoverRegion: values.discoverRegion,
                 streamingRegion: values.streamingRegion,
+                blockedWatchProviders: values.blockedWatchProviders,
                 originalLanguage: values.originalLanguage,
                 blocklistRegion: values.blocklistRegion,
                 blocklistLanguage: values.blocklistLanguage,
                 blocklistedTags: values.blocklistedTags,
                 blocklistedTagsLimit: values.blocklistedTagsLimit,
                 partialRequestsEnabled: values.partialRequestsEnabled,
+                allowCurrentSeasonRequests: values.allowCurrentSeasonRequests,
+                currentSeasonRolloverDelayDays: Number(
+                  values.currentSeasonRolloverDelayDays
+                ),
                 enableSpecialEpisodes: values.enableSpecialEpisodes,
+                defaultBookFormat: values.defaultBookFormat,
+                bookLanguage: values.bookLanguage,
+                // Only admins see the key, so only they can change it
+                ...(userHasPermission(Permission.ADMIN)
+                  ? { googleBooksApiKey: values.googleBooksApiKey.trim() }
+                  : {}),
                 cacheImages: values.cacheImages,
                 youtubeUrl: values.youtubeUrl,
                 versionCheck: values?.versionCheck,
+                accentColor: values.accentColor,
               });
               mutate('/api/v1/settings/public');
               mutate('/api/v1/status?checkUpdateAvailable=false');
@@ -223,6 +313,10 @@ const SettingsMain = () => {
                 autoDismiss: true,
                 appearance: 'success',
               });
+
+              if (values.applicationTitle !== data?.applicationTitle) {
+                showHomeScreenNotice(values.applicationTitle);
+              }
             } catch {
               addToast(intl.formatMessage(messages.toastSettingsFailure), {
                 autoDismiss: true,
@@ -281,6 +375,9 @@ const SettingsMain = () => {
                 <div className="form-row">
                   <label htmlFor="applicationTitle" className="text-label">
                     {intl.formatMessage(messages.applicationTitle)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.applicationTitleTip)}
+                    </span>
                   </label>
                   <div className="form-input-area">
                     <div className="form-input-field">
@@ -295,6 +392,46 @@ const SettingsMain = () => {
                       typeof errors.applicationTitle === 'string' && (
                         <div className="error">{errors.applicationTitle}</div>
                       )}
+                  </div>
+                </div>
+                <ApplicationLogo
+                  logoVersion={data?.applicationLogoVersion}
+                  applicationTitle={values.applicationTitle}
+                  onChange={() => revalidate()}
+                />
+                <div className="form-row">
+                  <label
+                    id="accentColor-label"
+                    htmlFor="accentColor"
+                    className="text-label"
+                  >
+                    {intl.formatMessage(messages.accentColor)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.accentColorTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <AccentColorPicker
+                        id="accentColor"
+                        value={values.accentColor}
+                        onChange={(color) =>
+                          setFieldValue('accentColor', color)
+                        }
+                      />
+                      {values.accentColor !== DEFAULT_ACCENT_COLOR && (
+                        <Button
+                          type="button"
+                          buttonType="ghost"
+                          buttonSize="sm"
+                          onClick={() =>
+                            setFieldValue('accentColor', DEFAULT_ACCENT_COLOR)
+                          }
+                        >
+                          {intl.formatMessage(messages.resetAccentColor)}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="form-row">
@@ -411,6 +548,34 @@ const SettingsMain = () => {
                         onChange={setFieldValue}
                         regionType="streaming"
                         disableAll
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label htmlFor="blockedWatchProviders" className="text-label">
+                    <span>
+                      {intl.formatMessage(messages.blockedWatchProviders)}
+                    </span>
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.blockedWatchProvidersTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field block">
+                      <WatchProviderSelector
+                        type="movie"
+                        region={values.streamingRegion || 'US'}
+                        activeProviders={parseBlockedWatchProviders(
+                          values.blockedWatchProviders
+                        )}
+                        onChange={(_region, providers) =>
+                          setFieldValue(
+                            'blockedWatchProviders',
+                            providers.join('|')
+                          )
+                        }
+                        hideRegion
                       />
                     </div>
                   </div>
@@ -585,6 +750,69 @@ const SettingsMain = () => {
                 </div>
                 <div className="form-row">
                   <label
+                    htmlFor="allowCurrentSeasonRequests"
+                    className="checkbox-label"
+                  >
+                    <span className="mr-2">
+                      {intl.formatMessage(messages.allowCurrentSeasonRequests)}
+                    </span>
+                    <span className="label-tip">
+                      {intl.formatMessage(
+                        messages.allowCurrentSeasonRequestsTip
+                      )}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <Field
+                      type="checkbox"
+                      id="allowCurrentSeasonRequests"
+                      name="allowCurrentSeasonRequests"
+                      onChange={() => {
+                        setFieldValue(
+                          'allowCurrentSeasonRequests',
+                          !values.allowCurrentSeasonRequests
+                        );
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label
+                    htmlFor="currentSeasonRolloverDelayDays"
+                    className="text-label"
+                  >
+                    <span className="mr-2">
+                      {intl.formatMessage(
+                        messages.currentSeasonRolloverDelayDays
+                      )}
+                    </span>
+                    <span className="label-tip">
+                      {intl.formatMessage(
+                        messages.currentSeasonRolloverDelayDaysTip
+                      )}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <Field
+                      id="currentSeasonRolloverDelayDays"
+                      name="currentSeasonRolloverDelayDays"
+                      type="text"
+                      inputMode="numeric"
+                      className="short"
+                      placeholder={3}
+                    />
+                    {errors.currentSeasonRolloverDelayDays &&
+                      touched.currentSeasonRolloverDelayDays &&
+                      typeof errors.currentSeasonRolloverDelayDays ===
+                        'string' && (
+                        <div className="error">
+                          {errors.currentSeasonRolloverDelayDays}
+                        </div>
+                      )}
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label
                     htmlFor="enableSpecialEpisodes"
                     className="checkbox-label"
                   >
@@ -606,6 +834,96 @@ const SettingsMain = () => {
                     />
                   </div>
                 </div>
+                <div className="form-row">
+                  <label htmlFor="defaultBookFormat" className="text-label">
+                    <span>
+                      {intl.formatMessage(messages.defaultBookFormat)}
+                    </span>
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.defaultBookFormatTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field">
+                      <Field
+                        as="select"
+                        id="defaultBookFormat"
+                        name="defaultBookFormat"
+                      >
+                        <option value="ebook">
+                          {intl.formatMessage(globalMessages.ebook)}
+                        </option>
+                        <option value="audiobook">
+                          {intl.formatMessage(globalMessages.audiobook)}
+                        </option>
+                        <option value="both">
+                          {intl.formatMessage(messages.bookFormatBoth)}
+                        </option>
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label htmlFor="bookLanguage" className="text-label">
+                    <span>{intl.formatMessage(messages.bookLanguage)}</span>
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.bookLanguageTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field">
+                      <Field as="select" id="bookLanguage" name="bookLanguage">
+                        {bookLanguages.options.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+                {userHasPermission(Permission.ADMIN) && (
+                  <div className="form-row">
+                    <label htmlFor="googleBooksApiKey" className="text-label">
+                      <span>
+                        {intl.formatMessage(messages.googleBooksApiKey)}
+                      </span>
+                      <span className="label-tip">
+                        {intl.formatMessage(messages.googleBooksApiKeyTip)}
+                      </span>
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <SensitiveInput
+                          as="field"
+                          id="googleBooksApiKey"
+                          name="googleBooksApiKey"
+                          autoComplete="one-time-code"
+                        />
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            testGoogleBooks(values.googleBooksApiKey.trim());
+                          }}
+                          className="input-action"
+                          type="button"
+                          disabled={
+                            isTestingGoogleBooks ||
+                            !values.googleBooksApiKey.trim()
+                          }
+                          data-testid="test-google-books"
+                        >
+                          <BeakerIcon />
+                          <span>
+                            {isTestingGoogleBooks
+                              ? intl.formatMessage(globalMessages.testing)
+                              : intl.formatMessage(globalMessages.test)}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="form-row">
                   <label htmlFor="youtubeUrl" className="text-label">
                     {intl.formatMessage(messages.youtubeUrl)}

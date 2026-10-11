@@ -1,4 +1,4 @@
-import type { SonarrSeries } from '@server/api/servarr/sonarr';
+import type { EpisodeResult, SonarrSeries } from '@server/api/servarr/sonarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
 import type {
@@ -6,14 +6,18 @@ import type {
   TmdbTvSeasonResult,
 } from '@server/api/themoviedb/interfaces';
 import {
+  MediaRequestMonitorMode,
   MediaRequestStatus,
   MediaStatus,
   MediaType,
+  SeasonRolloverStatus,
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import MediaRequest from '@server/entity/MediaRequest';
 import Season from '@server/entity/Season';
+import SeasonRequest from '@server/entity/SeasonRequest';
+import SeasonRollover from '@server/entity/SeasonRollover';
 import { User } from '@server/entity/User';
 import { sonarrScanner } from '@server/lib/scanners/sonarr';
 import type { SonarrSettings } from '@server/lib/settings';
@@ -21,7 +25,7 @@ import { getSettings } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
 import { runWithMockTimers } from '@server/test/runWithMockTimers';
 import assert from 'node:assert/strict';
-import { beforeEach, describe, it, mock } from 'node:test';
+import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 
 let getSeriesImpl: () => Promise<SonarrSeries[]> = async () => [];
 Object.defineProperty(SonarrAPI.prototype, 'getSeries', {
@@ -39,6 +43,17 @@ Object.defineProperty(SonarrAPI.prototype, 'getLibrarySeriesByTvdbId', {
   set() {},
   get() {
     return async (tvdbId: number) => getLibrarySeriesByTvdbIdImpl(tvdbId);
+  },
+  configurable: true,
+});
+
+let getEpisodesImpl: (
+  seriesId: number
+) => Promise<EpisodeResult[]> = async () => [];
+Object.defineProperty(SonarrAPI.prototype, 'getEpisodes', {
+  set() {},
+  get() {
+    return async (seriesId: number) => getEpisodesImpl(seriesId);
   },
   configurable: true,
 });
@@ -199,6 +214,7 @@ function configureSonarr(overrides: Partial<SonarrSettings>[] = [{}]): void {
 describe('Sonarr Scanner', () => {
   beforeEach(() => {
     getSeriesImpl = async () => [];
+    getEpisodesImpl = async () => [];
     getLibrarySeriesByTvdbIdImpl = async () => [];
     getShowByTvdbIdImpl = async () => fakeTmdbShow(1);
     getTvShowImpl = async () => fakeTmdbShow(1);
@@ -929,6 +945,791 @@ describe('Sonarr Scanner', () => {
       assert.strictEqual(updatedMedia.status4k, MediaStatus.UNKNOWN);
       assert.strictEqual(updatedStandard.status, MediaRequestStatus.APPROVED);
       assert.strictEqual(updated4k.status, MediaRequestStatus.DECLINED);
+    });
+  });
+  describe('partial request completion', () => {
+    const season = (
+      seasonNumber: number,
+      episodeFileCount: number,
+      monitored = false
+    ) => ({
+      seasonNumber,
+      monitored,
+      statistics: {
+        episodeFileCount,
+        totalEpisodeCount: 10,
+        episodeCount: 10,
+        percentOfEpisodes: 0,
+        sizeOnDisk: 0,
+        previousAiring: undefined,
+      },
+    });
+
+    const episode = (
+      seasonNumber: number,
+      episodeNumber: number,
+      {
+        hasFile = false,
+        monitored = true,
+        airDateUtc = '2024-01-01T00:00:00Z',
+      }: { hasFile?: boolean; monitored?: boolean; airDateUtc?: string } = {}
+    ) =>
+      ({
+        id: seasonNumber * 100 + episodeNumber,
+        seasonNumber,
+        episodeNumber,
+        hasFile,
+        monitored,
+        airDateUtc,
+      }) as EpisodeResult;
+
+    const seedPartialRequest = async (
+      tmdbId: number,
+      tvdbId: number,
+      seasons: { seasonNumber: number; episodes?: number[] }[],
+      monitorMode?: MediaRequestMonitorMode
+    ) => {
+      const media = await getRepository(Media).save(
+        new Media({
+          tmdbId,
+          tvdbId,
+          mediaType: MediaType.TV,
+          status: MediaStatus.PROCESSING,
+        })
+      );
+      const requestedBy = await getRepository(User).findOneOrFail({
+        where: { email: 'admin@seerr.dev' },
+      });
+
+      // No Sonarr server yet, so saving the request does not send it
+      getSettings().sonarr = [];
+      getSettings().radarr = [];
+
+      return getRepository(MediaRequest).save(
+        new MediaRequest({
+          type: MediaType.TV,
+          status: MediaRequestStatus.APPROVED,
+          media,
+          requestedBy,
+          is4k: false,
+          monitorMode,
+          seasons: seasons.map(
+            (s) =>
+              new SeasonRequest({
+                seasonNumber: s.seasonNumber,
+                episodes: s.episodes ?? null,
+                status: MediaRequestStatus.APPROVED,
+              })
+          ),
+        })
+      );
+    };
+
+    const showSeasons = (seasonNumbers: number[]) =>
+      seasonNumbers.map((seasonNumber) => ({
+        id: seasonNumber,
+        air_date: '2024-01-01',
+        episode_count: 10,
+        name: `Season ${seasonNumber}`,
+        overview: '',
+        season_number: seasonNumber,
+      }));
+
+    it('completes an episode request once every requested episode has a file', async () => {
+      const request = await seedPartialRequest(3001, 701, [
+        { seasonNumber: 2, episodes: [3, 5] },
+      ]);
+
+      configureSonarr([{ syncEnabled: true }]);
+      getTvShowImpl = async ({ tvId }) => fakeTmdbShow(tvId, showSeasons([2]));
+      getSeriesImpl = async () => [
+        fakeSonarrSeries({ tvdbId: 701, seasons: [season(2, 2)] }),
+      ];
+      getEpisodesImpl = async () => [
+        episode(2, 3, { hasFile: true }),
+        episode(2, 4),
+        episode(2, 5, { hasFile: true }),
+      ];
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      const updated = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      const media = await getRepository(Media).findOneOrFail({
+        where: { tmdbId: 3001 },
+      });
+      assert.strictEqual(updated.status, MediaRequestStatus.COMPLETED);
+      assert.strictEqual(
+        updated.seasons[0].status,
+        MediaRequestStatus.COMPLETED
+      );
+      assert.strictEqual(
+        media.seasons[0].status,
+        MediaStatus.PARTIALLY_AVAILABLE
+      );
+    });
+
+    it('keeps an episode request processing while a requested episode is missing', async () => {
+      const request = await seedPartialRequest(3002, 702, [
+        { seasonNumber: 2, episodes: [3, 5] },
+      ]);
+
+      configureSonarr([{ syncEnabled: true }]);
+      getTvShowImpl = async ({ tvId }) => fakeTmdbShow(tvId, showSeasons([2]));
+      getSeriesImpl = async () => [
+        fakeSonarrSeries({ tvdbId: 702, seasons: [season(2, 0)] }),
+      ];
+      getEpisodesImpl = async () => [episode(2, 3), episode(2, 5)];
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      const updated = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      const media = await getRepository(Media).findOneOrFail({
+        where: { tmdbId: 3002 },
+      });
+      assert.strictEqual(updated.status, MediaRequestStatus.APPROVED);
+      assert.strictEqual(media.seasons[0].status, MediaStatus.PROCESSING);
+      assert.strictEqual(media.status, MediaStatus.PROCESSING);
+    });
+
+    it('completes a future only season once it has aired and its monitored episodes are in', async () => {
+      const request = await seedPartialRequest(
+        3003,
+        703,
+        [{ seasonNumber: 3 }, { seasonNumber: 4 }],
+        MediaRequestMonitorMode.FUTURE
+      );
+
+      configureSonarr([{ syncEnabled: true }]);
+      getTvShowImpl = async ({ tvId }) =>
+        fakeTmdbShow(tvId, showSeasons([3, 4]));
+      getSeriesImpl = async () => [
+        fakeSonarrSeries({
+          tvdbId: 703,
+          seasons: [season(3, 1, true), season(4, 0, true)],
+        }),
+      ];
+      getEpisodesImpl = async () => [
+        // Aired before the request, so Sonarr never monitored it
+        episode(3, 1, { monitored: false }),
+        episode(3, 2, { hasFile: true }),
+        episode(4, 1, { airDateUtc: '2099-01-01T00:00:00Z' }),
+      ];
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      const updated = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.strictEqual(updated.status, MediaRequestStatus.APPROVED);
+      assert.deepStrictEqual(
+        updated.seasons.map((s) => [s.seasonNumber, s.status]),
+        [
+          [3, MediaRequestStatus.COMPLETED],
+          [4, MediaRequestStatus.APPROVED],
+        ]
+      );
+    });
+  });
+
+  describe('current season requests', () => {
+    const sonarrSeason = (
+      seasonNumber: number,
+      episodeFileCount: number,
+      monitored: boolean
+    ) => ({
+      seasonNumber,
+      monitored,
+      statistics: {
+        episodeFileCount,
+        totalEpisodeCount: 2,
+        episodeCount: 2,
+        percentOfEpisodes: 0,
+        sizeOnDisk: 0,
+        previousAiring: undefined,
+      },
+    });
+
+    const episode = (
+      seasonNumber: number,
+      episodeNumber: number,
+      {
+        hasFile = false,
+        monitored = true,
+        airDateUtc = '2024-01-01T00:00:00Z',
+      }: { hasFile?: boolean; monitored?: boolean; airDateUtc?: string } = {}
+    ) =>
+      ({
+        id: seasonNumber * 100 + episodeNumber,
+        seasonNumber,
+        episodeNumber,
+        hasFile,
+        episodeFileId: hasFile ? seasonNumber * 1000 + episodeNumber : 0,
+        monitored,
+        airDateUtc,
+      }) as EpisodeResult;
+
+    const showSeasons = (seasonNumbers: number[]) =>
+      seasonNumbers.map((seasonNumber) => ({
+        id: seasonNumber,
+        air_date: '2024-01-01',
+        episode_count: 2,
+        name: `Season ${seasonNumber}`,
+        overview: '',
+        season_number: seasonNumber,
+      }));
+
+    const seedRequest = async (
+      tmdbId: number,
+      tvdbId: number,
+      {
+        seasonNumber = 1,
+        status = MediaRequestStatus.APPROVED,
+        monitorMode = MediaRequestMonitorMode.CURRENT,
+        preexistingSeasons = [],
+        media,
+      }: {
+        seasonNumber?: number;
+        status?: MediaRequestStatus;
+        monitorMode?: MediaRequestMonitorMode | null;
+        preexistingSeasons?: number[] | null;
+        media?: Media;
+      } = {}
+    ) => {
+      const savedMedia =
+        media ??
+        (await getRepository(Media).save(
+          new Media({
+            tmdbId,
+            tvdbId,
+            mediaType: MediaType.TV,
+            status: MediaStatus.PROCESSING,
+          })
+        ));
+      const requestedBy = await getRepository(User).findOneOrFail({
+        where: { email: 'admin@seerr.dev' },
+      });
+
+      // No Sonarr server yet, so saving the request does not send it
+      getSettings().sonarr = [];
+      getSettings().radarr = [];
+
+      return getRepository(MediaRequest).save(
+        new MediaRequest({
+          type: MediaType.TV,
+          status,
+          media: savedMedia,
+          requestedBy,
+          is4k: false,
+          monitorMode,
+          preexistingSeasons,
+          seasons: [
+            new SeasonRequest({
+              seasonNumber,
+              episodes: null,
+              status,
+            }),
+          ],
+        })
+      );
+    };
+
+    // Season 1 is in, season 2 has just aired its first episode
+    const mockSeries = (tvdbId: number, { newSeasonHasFile = true } = {}) => {
+      getTvShowImpl = async ({ tvId }) =>
+        fakeTmdbShow(tvId, showSeasons([1, 2]));
+      getSeriesImpl = async () => [
+        fakeSonarrSeries({
+          tvdbId,
+          monitorNewItems: 'all',
+          seasons: [
+            sonarrSeason(1, 2, true),
+            sonarrSeason(2, newSeasonHasFile ? 1 : 0, false),
+          ],
+        }),
+      ];
+      getEpisodesImpl = async () => [
+        episode(1, 1, { hasFile: true }),
+        episode(1, 2, { hasFile: true }),
+        episode(2, 1, { hasFile: newSeasonHasFile, monitored: false }),
+        episode(2, 2, {
+          monitored: false,
+          airDateUtc: '2099-01-01T00:00:00Z',
+        }),
+      ];
+    };
+
+    const mockSonarrActions = () => ({
+      updateSeasonMonitoring: mock.method(
+        SonarrAPI.prototype,
+        'updateSeasonMonitoring',
+        async () => undefined
+      ),
+      monitorEpisodes: mock.method(
+        SonarrAPI.prototype,
+        'monitorEpisodes',
+        async () => undefined
+      ),
+      searchEpisodes: mock.method(
+        SonarrAPI.prototype,
+        'searchEpisodes',
+        async () => undefined
+      ),
+      unmonitorEpisodes: mock.method(
+        SonarrAPI.prototype,
+        'unmonitorEpisodes',
+        async () => undefined
+      ),
+      deleteEpisodeFiles: mock.method(
+        SonarrAPI.prototype,
+        'deleteEpisodeFiles',
+        async () => undefined
+      ),
+    });
+
+    beforeEach(() => {
+      getSettings().main.allowCurrentSeasonRequests = true;
+      // Most tests roll off right away, the notice period has its own tests
+      getSettings().main.currentSeasonRolloverDelayDays = 0;
+    });
+
+    afterEach(() => {
+      getSettings().main.allowCurrentSeasonRequests = false;
+      getSettings().main.currentSeasonRolloverDelayDays = 3;
+      mock.restoreAll();
+      mock.method(MediaRequest, 'sendNotification', async () => undefined);
+    });
+
+    it('rolls off the older season once the new season has an aired file', async () => {
+      const request = await seedRequest(4001, 801);
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(801);
+      const sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.deepStrictEqual(
+        sonarr.updateSeasonMonitoring.mock.calls[0].arguments,
+        [1, { monitor: [2], unmonitor: [1], monitorNewSeasons: true }]
+      );
+      assert.deepStrictEqual(sonarr.monitorEpisodes.mock.calls[0].arguments, [
+        [201, 202],
+      ]);
+      // The aired episode of season 2 already has a file
+      assert.strictEqual(sonarr.searchEpisodes.mock.callCount(), 0);
+      assert.deepStrictEqual(sonarr.unmonitorEpisodes.mock.calls[0].arguments, [
+        [101, 102],
+      ]);
+      assert.deepStrictEqual(
+        sonarr.deleteEpisodeFiles.mock.calls[0].arguments,
+        [[1001, 1002]]
+      );
+
+      const media = await getRepository(Media).findOneOrFail({
+        where: { tmdbId: 4001 },
+      });
+      assert.deepStrictEqual(
+        media.seasons
+          .map((season) => [season.seasonNumber, season.status])
+          .sort((a, b) => a[0] - b[0]),
+        [
+          [1, MediaStatus.DELETED],
+          [2, MediaStatus.PARTIALLY_AVAILABLE],
+        ]
+      );
+
+      const updated = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.strictEqual(updated.status, MediaRequestStatus.APPROVED);
+      assert.deepStrictEqual(
+        updated.seasons.map((season) => [season.seasonNumber, season.status]),
+        [[2, MediaRequestStatus.APPROVED]]
+      );
+    });
+
+    it('reopens a completed request on the new season', async () => {
+      const request = await seedRequest(4002, 802, {
+        status: MediaRequestStatus.COMPLETED,
+      });
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(802);
+      const sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.strictEqual(sonarr.deleteEpisodeFiles.mock.callCount(), 1);
+      const updated = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.strictEqual(updated.status, MediaRequestStatus.APPROVED);
+      assert.deepStrictEqual(
+        updated.seasons.map((season) => season.seasonNumber),
+        [2]
+      );
+    });
+
+    it('keeps the older season until the new season has a file', async () => {
+      const request = await seedRequest(4003, 803);
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(803, { newSeasonHasFile: false });
+      const sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      // Sonarr is told to follow and search the new season
+      assert.deepStrictEqual(
+        sonarr.updateSeasonMonitoring.mock.calls[0].arguments,
+        [1, { monitor: [2], unmonitor: [], monitorNewSeasons: true }]
+      );
+      assert.deepStrictEqual(sonarr.searchEpisodes.mock.calls[0].arguments, [
+        [201],
+      ]);
+      assert.strictEqual(sonarr.unmonitorEpisodes.mock.callCount(), 0);
+      assert.strictEqual(sonarr.deleteEpisodeFiles.mock.callCount(), 0);
+
+      const updated = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.deepStrictEqual(
+        updated.seasons.map((season) => season.seasonNumber),
+        [1]
+      );
+    });
+
+    it('does not search when the server prevents searches', async () => {
+      await seedRequest(4004, 804);
+      configureSonarr([{ syncEnabled: true, preventSearch: true }]);
+      mockSeries(804, { newSeasonHasFile: false });
+      const sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.strictEqual(sonarr.monitorEpisodes.mock.callCount(), 1);
+      assert.strictEqual(sonarr.searchEpisodes.mock.callCount(), 0);
+    });
+
+    it('keeps honoring current season requests when users cannot make them', async () => {
+      await seedRequest(4005, 805);
+      getSettings().main.allowCurrentSeasonRequests = false;
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(805);
+      const sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.strictEqual(sonarr.updateSeasonMonitoring.mock.callCount(), 1);
+      assert.strictEqual(sonarr.deleteEpisodeFiles.mock.callCount(), 1);
+    });
+
+    it('deletes nothing when another request wants the older seasons', async () => {
+      const first = await seedRequest(4006, 806);
+      await seedRequest(4006, 806, {
+        seasonNumber: 2,
+        monitorMode: null,
+        media: first.media,
+      });
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(806);
+      const sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.strictEqual(sonarr.updateSeasonMonitoring.mock.callCount(), 0);
+      assert.strictEqual(sonarr.unmonitorEpisodes.mock.callCount(), 0);
+      assert.strictEqual(sonarr.deleteEpisodeFiles.mock.callCount(), 0);
+    });
+
+    it('deletes nothing for series without a current season request', async () => {
+      await seedRequest(4007, 807, { monitorMode: null });
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(807);
+      const sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.strictEqual(sonarr.deleteEpisodeFiles.mock.callCount(), 0);
+      assert.strictEqual(sonarr.unmonitorEpisodes.mock.callCount(), 0);
+    });
+
+    it('leaves the request and seasons alone when deleting fails', async () => {
+      const request = await seedRequest(4008, 808);
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(808);
+      mockSonarrActions();
+      mock.method(SonarrAPI.prototype, 'deleteEpisodeFiles', async () => {
+        throw new Error('Failed to delete episode files');
+      });
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      const media = await getRepository(Media).findOneOrFail({
+        where: { tmdbId: 4008 },
+      });
+      assert.notStrictEqual(
+        media.seasons.find((season) => season.seasonNumber === 1)?.status,
+        MediaStatus.DELETED
+      );
+      const updated = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.deepStrictEqual(
+        updated.seasons.map((season) => season.seasonNumber),
+        [1]
+      );
+    });
+
+    it('finds nothing to delete on the next scan', async () => {
+      await seedRequest(4009, 809);
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(809);
+      mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      // Sonarr after the roll off
+      getSeriesImpl = async () => [
+        fakeSonarrSeries({
+          tvdbId: 809,
+          monitorNewItems: 'all',
+          seasons: [sonarrSeason(1, 0, false), sonarrSeason(2, 1, true)],
+        }),
+      ];
+      getEpisodesImpl = async () => [
+        episode(1, 1, { monitored: false }),
+        episode(1, 2, { monitored: false }),
+        episode(2, 1, { hasFile: true }),
+        episode(2, 2, { airDateUtc: '2099-01-01T00:00:00Z' }),
+      ];
+      mock.restoreAll();
+      mock.method(MediaRequest, 'sendNotification', async () => undefined);
+      const sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.strictEqual(sonarr.updateSeasonMonitoring.mock.callCount(), 0);
+      assert.strictEqual(sonarr.monitorEpisodes.mock.callCount(), 0);
+      assert.strictEqual(sonarr.unmonitorEpisodes.mock.callCount(), 0);
+      assert.strictEqual(sonarr.deleteEpisodeFiles.mock.callCount(), 0);
+
+      const media = await getRepository(Media).findOneOrFail({
+        where: { tmdbId: 4009 },
+      });
+      assert.strictEqual(
+        media.seasons.find((season) => season.seasonNumber === 1)?.status,
+        MediaStatus.DELETED
+      );
+    });
+
+    const findRollover = (tmdbId: number) =>
+      getRepository(SeasonRollover).findOneOrFail({
+        where: { media: { tmdbId } },
+      });
+
+    it('waits for the notice period before deleting', async () => {
+      getSettings().main.currentSeasonRolloverDelayDays = 3;
+      const request = await seedRequest(4010, 810);
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(810);
+      let sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      // Unmonitored right away, deleted later
+      assert.deepStrictEqual(sonarr.unmonitorEpisodes.mock.calls[0].arguments, [
+        [101, 102],
+      ]);
+      assert.strictEqual(sonarr.deleteEpisodeFiles.mock.callCount(), 0);
+
+      const rollover = await findRollover(4010);
+      assert.strictEqual(rollover.status, SeasonRolloverStatus.PENDING);
+      assert.strictEqual(rollover.currentSeason, 2);
+      assert.deepStrictEqual(rollover.seasons, [1]);
+      assert.deepStrictEqual(rollover.preexistingSeasons, []);
+      assert.ok(rollover.deleteAfter > new Date());
+
+      const waiting = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.deepStrictEqual(
+        waiting.seasons.map((season) => season.seasonNumber),
+        [1]
+      );
+
+      // The notice period is over
+      rollover.deleteAfter = new Date(Date.now() - 1000);
+      await getRepository(SeasonRollover).save(rollover);
+      mock.restoreAll();
+      mock.method(MediaRequest, 'sendNotification', async () => undefined);
+      sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.deepStrictEqual(
+        sonarr.deleteEpisodeFiles.mock.calls[0].arguments,
+        [[1001, 1002]]
+      );
+      assert.strictEqual(
+        (await findRollover(4010)).status,
+        SeasonRolloverStatus.COMPLETED
+      );
+      const moved = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.deepStrictEqual(
+        moved.seasons.map((season) => season.seasonNumber),
+        [2]
+      );
+    });
+
+    it('holds seasons that were already there for review', async () => {
+      const request = await seedRequest(4011, 811, {
+        preexistingSeasons: [1],
+      });
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(811);
+      let sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.strictEqual(sonarr.deleteEpisodeFiles.mock.callCount(), 0);
+      const rollover = await findRollover(4011);
+      assert.deepStrictEqual(rollover.seasons, []);
+      assert.deepStrictEqual(rollover.preexistingSeasons, [1]);
+      assert.strictEqual(rollover.status, SeasonRolloverStatus.REVIEW);
+
+      // The request follows the new season, the old one stays
+      const moved = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.deepStrictEqual(
+        moved.seasons.map((season) => season.seasonNumber),
+        [2]
+      );
+      const media = await getRepository(Media).findOneOrFail({
+        where: { tmdbId: 4011 },
+      });
+      assert.notStrictEqual(
+        media.seasons.find((season) => season.seasonNumber === 1)?.status,
+        MediaStatus.DELETED
+      );
+
+      // An admin approves deleting every older season
+      rollover.status = SeasonRolloverStatus.PENDING;
+      rollover.deletePreexisting = true;
+      rollover.deleteAfter = new Date();
+      await getRepository(SeasonRollover).save(rollover);
+      mock.restoreAll();
+      mock.method(MediaRequest, 'sendNotification', async () => undefined);
+      sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.deepStrictEqual(
+        sonarr.deleteEpisodeFiles.mock.calls[0].arguments,
+        [[1001, 1002]]
+      );
+      assert.strictEqual(
+        (await findRollover(4011)).status,
+        SeasonRolloverStatus.COMPLETED
+      );
+    });
+
+    it('holds every older season for requests that never recorded them', async () => {
+      await seedRequest(4012, 812, { preexistingSeasons: null });
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(812);
+      const sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.strictEqual(sonarr.deleteEpisodeFiles.mock.callCount(), 0);
+      assert.deepStrictEqual(
+        (await findRollover(4012)).preexistingSeasons,
+        [1]
+      );
+    });
+
+    it('never deletes kept seasons but still moves the request', async () => {
+      getSettings().main.currentSeasonRolloverDelayDays = 3;
+      const request = await seedRequest(4013, 813);
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(813);
+      mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      const rollover = await findRollover(4013);
+      rollover.status = SeasonRolloverStatus.KEPT;
+      rollover.deleteAfter = new Date(Date.now() - 1000);
+      await getRepository(SeasonRollover).save(rollover);
+      mock.restoreAll();
+      mock.method(MediaRequest, 'sendNotification', async () => undefined);
+      const sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.strictEqual(sonarr.deleteEpisodeFiles.mock.callCount(), 0);
+      assert.strictEqual(
+        (await findRollover(4013)).status,
+        SeasonRolloverStatus.KEPT
+      );
+      const moved = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.deepStrictEqual(
+        moved.seasons.map((season) => season.seasonNumber),
+        [2]
+      );
+    });
+
+    it('replaces an open notice when a newer season starts', async () => {
+      getSettings().main.currentSeasonRolloverDelayDays = 3;
+      await seedRequest(4014, 814);
+      configureSonarr([{ syncEnabled: true }]);
+      mockSeries(814);
+      mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      // Season 3 starts before the season 2 notice is over
+      getTvShowImpl = async ({ tvId }) =>
+        fakeTmdbShow(tvId, showSeasons([1, 2, 3]));
+      getSeriesImpl = async () => [
+        fakeSonarrSeries({
+          tvdbId: 814,
+          monitorNewItems: 'all',
+          seasons: [
+            sonarrSeason(1, 2, false),
+            sonarrSeason(2, 2, true),
+            sonarrSeason(3, 1, true),
+          ],
+        }),
+      ];
+      getEpisodesImpl = async () => [
+        episode(1, 1, { hasFile: true, monitored: false }),
+        episode(1, 2, { hasFile: true, monitored: false }),
+        episode(2, 1, { hasFile: true }),
+        episode(2, 2, { hasFile: true }),
+        episode(3, 1, { hasFile: true }),
+        episode(3, 2, { airDateUtc: '2099-01-01T00:00:00Z' }),
+      ];
+      mock.restoreAll();
+      mock.method(MediaRequest, 'sendNotification', async () => undefined);
+      const sonarr = mockSonarrActions();
+
+      await runWithMockTimers(() => sonarrScanner.run());
+
+      assert.strictEqual(sonarr.deleteEpisodeFiles.mock.callCount(), 0);
+      const rollovers = await getRepository(SeasonRollover).find({
+        where: { media: { tmdbId: 4014 } },
+      });
+      assert.strictEqual(rollovers.length, 1);
+      assert.strictEqual(rollovers[0].currentSeason, 3);
+      assert.deepStrictEqual(rollovers[0].seasons, [1, 2]);
     });
   });
 

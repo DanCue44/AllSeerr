@@ -1,20 +1,20 @@
 ---
 title: Terraform/OpenTofu Provider (Advanced)
-description: Manage Seerr settings and integrations with the community Terraform/OpenTofu provider.
+description: Manage AllSeerr settings and integrations with the community Terraform/OpenTofu provider.
 sidebar_position: 4
 ---
 
 # Terraform/OpenTofu Provider (Advanced)
 
 :::warning
-This provider is maintained by the community, not by the Seerr team. Please report bugs or feature requests in the [provider repository](https://github.com/Josh-Archer/terraform-provider-seerr).
+This provider is maintained by the community, not by the Seerr team or AllSeerr. Please report bugs or feature requests in the [provider repository](https://github.com/Josh-Archer/terraform-provider-seerr).
 :::
 
-The community-maintained [Seerr Terraform/OpenTofu provider](https://search.opentofu.org/provider/josh-archer/seerr/latest) can manage Seerr settings and integrations from infrastructure-as-code workflows.
+The community-maintained [Seerr Terraform/OpenTofu provider](https://search.opentofu.org/provider/josh-archer/seerr/latest) was written for Seerr. Because AllSeerr keeps the Seerr API, it can manage the settings and integrations the two share from infrastructure-as-code workflows. It does not know about the AllSeerr additions (music, books, Bazarr and so on).
 
 ## Basic Example
 
-Configure the provider with your Seerr URL and API key, then manage Seerr resources in the same configuration as the rest of your infrastructure.
+Configure the provider with your AllSeerr URL and API key, then manage AllSeerr resources in the same configuration as the rest of your infrastructure.
 
 ```hcl
 terraform {
@@ -37,7 +37,7 @@ provider "seerr" {
 }
 
 resource "seerr_main_settings" "main" {
-  app_title               = "Seerr"
+  app_title               = "AllSeerr"
   application_url         = "https://seerr.example.com"
   locale                  = "en"
   movie_requests_enabled  = true

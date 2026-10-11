@@ -190,7 +190,7 @@ const Slider = ({
             </div>
           ))}
         {isEmpty && (
-          <div className="mb-16 mt-16 text-center font-medium text-gray-400">
+          <div className="mb-16 mt-16 whitespace-normal px-4 text-center font-medium text-gray-400">
             {emptyMessage
               ? emptyMessage
               : intl.formatMessage(globalMessages.noresults)}

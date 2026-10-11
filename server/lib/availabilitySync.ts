@@ -2,6 +2,7 @@ import type { JellyfinLibraryItem } from '@server/api/jellyfin';
 import JellyfinAPI from '@server/api/jellyfin';
 import type { PlexMetadata } from '@server/api/plexapi';
 import PlexAPI from '@server/api/plexapi';
+import LidarrAPI, { type LidarrAlbum } from '@server/api/servarr/lidarr';
 import RadarrAPI, { type RadarrMovie } from '@server/api/servarr/radarr';
 import type { SonarrSeason, SonarrSeries } from '@server/api/servarr/sonarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
@@ -17,7 +18,12 @@ import Media from '@server/entity/Media';
 import MediaRequest from '@server/entity/MediaRequest';
 import type Season from '@server/entity/Season';
 import { User } from '@server/entity/User';
-import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
+import { getLidarrAlbumState } from '@server/lib/scanners/lidarr';
+import type {
+  LidarrSettings,
+  RadarrSettings,
+  SonarrSettings,
+} from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { getHostname } from '@server/utils/getHostname';
@@ -35,6 +41,7 @@ class AvailabilitySync {
   private sonarrSeasonsCache: Record<string, SonarrSeason[]>;
   private radarrServers: RadarrSettings[];
   private sonarrServers: SonarrSettings[];
+  private lidarrServers: LidarrSettings[];
   private enable4kMovie: boolean;
   private enable4kShow: boolean;
 
@@ -51,6 +58,7 @@ class AvailabilitySync {
     this.sonarrSeasonsCache = {};
     this.radarrServers = settings.radarr;
     this.sonarrServers = settings.sonarr;
+    this.lidarrServers = settings.lidarr;
     this.enable4kMovie = this.radarrServers.some((server) => server.is4k);
     this.enable4kShow = this.sonarrServers.some((server) => server.is4k);
 
@@ -218,6 +226,35 @@ class AvailabilitySync {
 
           if (!movieExists4k && media.status4k === MediaStatus.AVAILABLE) {
             await this.mediaUpdater(media, true, mediaServerType);
+          }
+        }
+
+        // Albums have no 4K version, so only the media server and Lidarr
+        // are asked
+        if (media.mediaType === 'music') {
+          const existsInLidarr = await this.mediaExistsInLidarr(media);
+          let existsInMediaServer = false;
+
+          if (mediaServerType === MediaServerType.PLEX) {
+            ({ existsInPlex: existsInMediaServer } =
+              await this.mediaExistsInPlex(media, false));
+          } else if (
+            mediaServerType === MediaServerType.JELLYFIN ||
+            mediaServerType === MediaServerType.EMBY
+          ) {
+            ({ existsInJellyfin: existsInMediaServer } =
+              await this.mediaExistsInJellyfin(media, false));
+          }
+
+          if (existsInMediaServer || existsInLidarr) {
+            logger.debug(
+              `The album [MusicBrainz ID ${media.mbId}] still exists. Preventing removal.`,
+              {
+                label: 'AvailabilitySync',
+              }
+            );
+          } else if (media.status === MediaStatus.AVAILABLE) {
+            await this.mediaUpdater(media, false, mediaServerType);
           }
         }
 
@@ -565,9 +602,21 @@ class AvailabilitySync {
       }
       logger.debug(
         `The ${is4k ? '4K' : 'non-4K'} ${
-          media.mediaType === 'movie' ? 'movie' : 'show'
-        } [TMDB ID ${media.tmdbId}] was not found in any ${
-          media.mediaType === 'movie' ? 'Radarr' : 'Sonarr'
+          media.mediaType === 'movie'
+            ? 'movie'
+            : media.mediaType === 'music'
+              ? 'album'
+              : 'show'
+        } [${
+          media.mediaType === 'music'
+            ? `MusicBrainz ID ${media.mbId}`
+            : `TMDB ID ${media.tmdbId}`
+        }] was not found in any ${
+          media.mediaType === 'movie'
+            ? 'Radarr'
+            : media.mediaType === 'music'
+              ? 'Lidarr'
+              : 'Sonarr'
         } and ${
           mediaServerType === MediaServerType.PLEX
             ? 'plex'
@@ -736,6 +785,46 @@ class AvailabilitySync {
     }
 
     return existsInRadarr;
+  }
+
+  private async mediaExistsInLidarr(media: Media): Promise<boolean> {
+    // Check every Lidarr server, if any has all of the album's tracks we
+    // will assume the media exists
+    for (const server of this.lidarrServers) {
+      const lidarrAPI = new LidarrAPI({
+        apiKey: server.apiKey,
+        url: LidarrAPI.buildUrl(server, '/api/v1'),
+      });
+
+      try {
+        let album: LidarrAlbum | undefined;
+
+        if (media.externalServiceId && media.serviceId === server.id) {
+          album = await lidarrAPI.getAlbumById(media.externalServiceId);
+        }
+
+        if (
+          album &&
+          album.foreignAlbumId === media.mbId &&
+          getLidarrAlbumState(album) === 'available'
+        ) {
+          return true;
+        }
+      } catch (ex) {
+        if (!ex.message.includes('404')) {
+          logger.debug(
+            `Failure retrieving the album [MusicBrainz ID ${media.mbId}] from Lidarr.`,
+            {
+              errorMessage: ex.message,
+              label: 'AvailabilitySync',
+            }
+          );
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   private async mediaExistsInSonarr(

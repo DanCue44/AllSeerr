@@ -48,6 +48,9 @@ overrideRuleRoutes.post<
     tags?: string;
     radarrServiceId?: number;
     sonarrServiceId?: number;
+    lidarrServiceId?: number;
+    autoApprove?: boolean;
+    maxSeasons?: number | null;
   }
 >('/', isAuthenticated(Permission.ADMIN), async (req, res, next) => {
   const overrideRuleRepository = getRepository(OverrideRule);
@@ -63,6 +66,9 @@ overrideRuleRoutes.post<
       tags: req.body.tags,
       radarrServiceId: req.body.radarrServiceId,
       sonarrServiceId: req.body.sonarrServiceId,
+      lidarrServiceId: req.body.lidarrServiceId,
+      autoApprove: !!req.body.autoApprove,
+      maxSeasons: req.body.maxSeasons,
     });
 
     const newRule = await overrideRuleRepository.save(rule);
@@ -93,12 +99,14 @@ overrideRuleRoutes.post<
   async (req, res, next) => {
     try {
       const tmdb = new TheMovieDb();
-      let tmdbMedia: TmdbMovieDetails | TmdbTvDetails;
+      // Music has no TMDB details, its rules only match on users
+      let tmdbMedia: TmdbMovieDetails | TmdbTvDetails | undefined;
       try {
-        tmdbMedia =
-          req.body.mediaType === MediaType.MOVIE
-            ? await tmdb.getMovie({ movieId: req.body.tmdbId })
-            : await tmdb.getTvShow({ tvId: req.body.tmdbId });
+        if (req.body.mediaType === MediaType.MOVIE) {
+          tmdbMedia = await tmdb.getMovie({ movieId: req.body.tmdbId });
+        } else if (req.body.mediaType === MediaType.TV) {
+          tmdbMedia = await tmdb.getTvShow({ tvId: req.body.tmdbId });
+        }
       } catch {
         return next({ status: 404, message: 'Media not found' });
       }
@@ -207,6 +215,9 @@ overrideRuleRoutes.put<
     tags?: string;
     radarrServiceId?: number;
     sonarrServiceId?: number;
+    lidarrServiceId?: number;
+    autoApprove?: boolean;
+    maxSeasons?: number | null;
   }
 >('/:ruleId', isAuthenticated(Permission.ADMIN), async (req, res, next) => {
   const overrideRuleRepository = getRepository(OverrideRule);
@@ -231,6 +242,9 @@ overrideRuleRoutes.put<
     rule.tags = req.body.tags;
     rule.radarrServiceId = req.body.radarrServiceId;
     rule.sonarrServiceId = req.body.sonarrServiceId;
+    rule.lidarrServiceId = req.body.lidarrServiceId;
+    rule.autoApprove = !!req.body.autoApprove;
+    rule.maxSeasons = req.body.maxSeasons;
 
     const newRule = await overrideRuleRepository.save(rule);
 

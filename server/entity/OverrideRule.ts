@@ -17,6 +17,9 @@ class OverrideRule {
   @Column({ type: 'int', nullable: true })
   public sonarrServiceId?: number;
 
+  @Column({ type: 'int', nullable: true })
+  public lidarrServiceId?: number;
+
   @Column({ nullable: true })
   public users?: string;
 
@@ -37,6 +40,12 @@ class OverrideRule {
 
   @Column({ nullable: true })
   public tags?: string;
+
+  @Column({ default: false })
+  public autoApprove: boolean;
+
+  @Column({ type: 'int', nullable: true })
+  public maxSeasons?: number | null;
 
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public createdAt: Date;

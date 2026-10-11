@@ -1,4 +1,5 @@
 import Button from '@app/components/Common/Button';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -38,12 +39,26 @@ const IssueDescription = ({
 }: IssueDescriptionProps) => {
   const intl = useIntl();
   const { hasPermission } = useUser();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
   const [isEditing, setIsEditing] = useState(false);
 
   return (
-    <div className="relative">
+    <div
+      className={
+        ambient
+          ? 'relative rounded-[22px] bg-as-surface px-6 py-[22px]'
+          : 'relative'
+      }
+    >
       <div className="flex items-center justify-between">
-        <div className="font-semibold text-gray-100 lg:text-xl">
+        <div
+          className={
+            ambient
+              ? 'font-display text-lg font-medium text-as-ink lg:text-xl'
+              : 'font-semibold text-gray-100 lg:text-xl'
+          }
+        >
           {intl.formatMessage(messages.description)}
         </div>
         {(hasPermission(Permission.MANAGE_ISSUES) || belongsToUser) && (
@@ -72,7 +87,11 @@ const IssueDescription = ({
                 >
                   <MenuItems
                     static
-                    className="absolute right-0 mt-2 w-56 origin-top-right rounded-md bg-gray-700 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+                    className={`absolute right-0 mt-2 w-56 origin-top-right shadow-lg focus:outline-none ${
+                      ambient
+                        ? 'overflow-hidden rounded-2xl bg-as-raised ring-1 ring-as-line-strong'
+                        : 'rounded-md bg-gray-700 ring-1 ring-black ring-opacity-5'
+                    }`}
                   >
                     <div className="py-1">
                       {belongsToUser && (
@@ -151,7 +170,7 @@ const IssueDescription = ({
           }}
         </Formik>
       ) : (
-        <div className="prose mt-4">
+        <div className="prose mt-4 [overflow-wrap:anywhere]">
           <ReactMarkdown
             allowedElements={['p', 'em', 'strong', 'ul', 'ol', 'li']}
             skipHtml

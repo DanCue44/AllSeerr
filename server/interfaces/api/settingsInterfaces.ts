@@ -1,3 +1,6 @@
+import type { BookLanguage } from '@server/constants/bookLanguages';
+import type { BookFormatChoice } from '@server/constants/media';
+import type { BookService } from '@server/lib/settings';
 import type { DnsEntries, DnsStats } from 'dns-caching';
 import type { PaginatedResponse } from './common';
 
@@ -15,6 +18,7 @@ export interface LogsResultsResponse extends PaginatedResponse {
 
 export interface SettingsAboutResponse {
   version: string;
+  releaseBuild: boolean;
   totalRequests: number;
   totalMediaItems: number;
   tz?: string;
@@ -29,6 +33,8 @@ export interface PublicSettingsResponse {
   initialized: boolean;
   applicationTitle: string;
   applicationUrl: string;
+  applicationLogoVersion: string;
+  accentColor: string;
   hideAvailable: boolean;
   hideBlocklisted: boolean;
   hideRequested: boolean;
@@ -36,11 +42,20 @@ export interface PublicSettingsResponse {
   mediaServerLogin: boolean;
   movie4kEnabled: boolean;
   series4kEnabled: boolean;
+  booksEnabled: boolean;
+  bookService?: BookService;
   discoverRegion: string;
   streamingRegion: string;
+  blockedWatchProviders: string;
+  musicEnabled: boolean;
+  // Whether Bazarr is set up, so subtitles can be checked and requested
+  subtitlesEnabled: boolean;
   originalLanguage: string;
   mediaServerType: number;
   partialRequestsEnabled: boolean;
+  allowCurrentSeasonRequests: boolean;
+  defaultBookFormat: BookFormatChoice;
+  bookLanguage: BookLanguage;
   enableSpecialEpisodes: boolean;
   cacheImages: boolean;
   vapidPublic: string;
@@ -77,6 +92,7 @@ export interface CacheResponse {
 export interface StatusResponse {
   version: string;
   commitTag: string;
+  releaseBuild: boolean;
   updateAvailable?: boolean;
   commitsBehind?: number;
   restartRequired: boolean;

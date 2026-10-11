@@ -627,11 +627,14 @@ describe('GET /auth/me', () => {
 
     assert.strictEqual(res.status, 200);
     assert.deepStrictEqual(Object.keys(res.body.settings).sort(), [
+      'accentColor',
+      'bookLanguage',
       'discoverRegion',
       'locale',
       'notificationTypes',
       'originalLanguage',
       'streamingRegion',
+      'tourVersion',
       'watchlistSyncMovies',
       'watchlistSyncTv',
     ]);

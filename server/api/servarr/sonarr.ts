@@ -1,5 +1,7 @@
+import type { RequestedEpisodes } from '@server/lib/episodeRequests';
 import logger from '@server/logger';
 import type { AxiosResponse } from 'axios';
+import type { ServarrHistoryRecord, ServarrRelease } from './base';
 import ServarrBase from './base';
 
 export interface SonarrSeason {
@@ -14,7 +16,7 @@ export interface SonarrSeason {
     percentOfEpisodes: number;
   };
 }
-interface EpisodeResult {
+export interface EpisodeResult {
   seriesId: number;
   episodeFileId: number;
   seasonNumber: number;
@@ -30,6 +32,46 @@ interface EpisodeResult {
   id: number;
 }
 
+export interface SonarrEpisodeFile {
+  id: number;
+  seriesId: number;
+  seasonNumber: number;
+  relativePath?: string;
+  path?: string;
+  size: number;
+  dateAdded: string;
+  sceneName?: string;
+  releaseGroup?: string;
+  languages?: {
+    id: number;
+    name: string;
+  }[];
+  quality?: {
+    quality: {
+      id: number;
+      name: string;
+      resolution: number;
+    };
+  };
+  mediaInfo?: {
+    audioBitrate: number;
+    audioChannels: number;
+    audioCodec?: string;
+    audioLanguages?: string;
+    audioStreamCount: number;
+    videoBitDepth: number;
+    videoBitrate: number;
+    videoCodec?: string;
+    videoFps: number;
+    videoDynamicRange?: string;
+    videoDynamicRangeType?: string;
+    resolution?: string;
+    runTime?: string;
+    scanType?: string;
+    subtitles?: string;
+  };
+}
+
 export interface SonarrSeries {
   title: string;
   sortTitle: string;
@@ -41,6 +83,7 @@ export interface SonarrSeries {
   images: {
     coverType: string;
     url: string;
+    remoteUrl?: string;
   }[];
   remotePoster: string;
   seasons: SonarrSeason[];
@@ -54,6 +97,7 @@ export interface SonarrSeries {
   useSceneNumbering: boolean;
   runtime: number;
   tvdbId: number;
+  tmdbId?: number;
   tvRageId: number;
   tvMazeId: number;
   firstAired: string;
@@ -74,6 +118,7 @@ export interface SonarrSeries {
   id?: number;
   rootFolderPath?: string;
   addOptions?: {
+    monitor?: 'future';
     ignoreEpisodesWithFiles?: boolean;
     ignoreEpisodesWithoutFiles?: boolean;
     searchForMissingEpisodes?: boolean;
@@ -102,6 +147,19 @@ export interface AddSeriesOptions {
   monitored?: boolean;
   monitorNewItems?: SonarrSeries['monitorNewItems'];
   searchNow?: boolean;
+  // Seasons where only these episodes are monitored and searched
+  episodes?: RequestedEpisodes[];
+  // Monitor only the episodes that have not aired yet, without searching
+  monitor?: 'future';
+  // Monitor seasons Sonarr adds later, also on a series it already has
+  monitorNewSeasons?: boolean;
+}
+
+const isUnaired = (episode: EpisodeResult, now = new Date()): boolean =>
+  !episode.airDateUtc || new Date(episode.airDateUtc) > now;
+
+export interface SonarrCalendarEpisode extends EpisodeResult {
+  series?: SonarrSeries;
 }
 
 export interface LanguageProfile {
@@ -114,6 +172,10 @@ class SonarrAPI extends ServarrBase<{
   episodeId: number;
   episode: EpisodeResult;
 }> {
+  // How long to wait for the episodes of a newly added series
+  public static episodeLookupAttempts = 10;
+  public static episodeLookupDelay = 3000;
+
   constructor({ url, apiKey }: { url: string; apiKey: string }) {
     super({ url, apiKey, apiName: 'Sonarr', cacheName: 'sonarr' });
   }
@@ -125,6 +187,30 @@ class SonarrAPI extends ServarrBase<{
       return response.data;
     } catch (e) {
       throw new Error(`[Sonarr] Failed to retrieve series: ${e.message}`, {
+        cause: e,
+      });
+    }
+  }
+
+  public async getCalendar({
+    start,
+    end,
+  }: {
+    start: string;
+    end: string;
+  }): Promise<SonarrCalendarEpisode[]> {
+    try {
+      const data = await this.get<SonarrCalendarEpisode[]>(
+        '/calendar',
+        {
+          params: { start, end, unmonitored: false, includeSeries: true },
+        },
+        300
+      );
+
+      return data;
+    } catch (e) {
+      throw new Error(`[Sonarr] Failed to retrieve calendar: ${e.message}`, {
         cause: e,
       });
     }
@@ -211,13 +297,24 @@ class SonarrAPI extends ServarrBase<{
     try {
       const series = await this.getSeriesByTvdbId(options.tvdbid);
 
+      const isFutureOnly = options.monitor === 'future';
+
       // If the series already exists, we will simply just update it
       if (series.id) {
         series.monitored = options.monitored ?? series.monitored;
         series.tags = options.tags
           ? Array.from(new Set([...series.tags, ...options.tags]))
           : series.tags;
-        series.seasons = this.buildSeasonList(options.seasons, series.seasons);
+        // A future only request monitors episodes one by one below, as a season
+        // that is still airing would also monitor the episodes that have aired
+        series.seasons = this.buildSeasonList(
+          isFutureOnly ? [] : options.seasons,
+          series.seasons
+        );
+
+        if (isFutureOnly || options.monitorNewSeasons) {
+          series.monitorNewItems = 'all';
+        }
 
         const newSeriesResponse = await this.axios.put<SonarrSeries>(
           '/series',
@@ -240,7 +337,9 @@ class SonarrAPI extends ServarrBase<{
             const episodeIdsToMonitor = episodes
               .filter(
                 (ep) =>
-                  options.seasons.includes(ep.seasonNumber) && !ep.monitored
+                  options.seasons.includes(ep.seasonNumber) &&
+                  !ep.monitored &&
+                  (!isFutureOnly || isUnaired(ep))
               )
               .map((ep) => ep.id);
 
@@ -263,8 +362,21 @@ class SonarrAPI extends ServarrBase<{
             });
           }
 
-          if (options.searchNow) {
+          // Episode only requests search for their own episodes instead
+          if (
+            options.searchNow &&
+            !isFutureOnly &&
+            options.seasons.length > 0
+          ) {
             this.searchSeries(newSeriesResponse.data.id);
+          }
+
+          if (options.episodes?.length) {
+            await this.monitorRequestedEpisodes(
+              newSeriesResponse.data.id,
+              options.episodes,
+              options.searchNow
+            );
           }
 
           return newSeriesResponse.data;
@@ -295,12 +407,17 @@ class SonarrAPI extends ServarrBase<{
           tags: options.tags,
           seasonFolder: options.seasonFolder,
           monitored: options.monitored,
-          monitorNewItems: options.monitorNewItems,
+          monitorNewItems:
+            isFutureOnly || options.monitorNewSeasons
+              ? 'all'
+              : options.monitorNewItems,
           rootFolderPath: options.rootFolderPath,
           seriesType: options.seriesType,
           addOptions: {
+            ...(isFutureOnly ? { monitor: 'future' } : {}),
             ignoreEpisodesWithFiles: true,
-            searchForMissingEpisodes: options.searchNow,
+            searchForMissingEpisodes:
+              options.searchNow && !isFutureOnly && options.seasons.length > 0,
           },
         } as Partial<SonarrSeries>
       );
@@ -311,6 +428,14 @@ class SonarrAPI extends ServarrBase<{
           label: 'Sonarr',
           series: createdSeriesResponse.data,
         });
+
+        if (options.episodes?.length) {
+          await this.monitorRequestedEpisodes(
+            createdSeriesResponse.data.id,
+            options.episodes,
+            options.searchNow
+          );
+        }
       } else {
         logger.error('Failed to add series to Sonarr', {
           label: 'Sonarr',
@@ -373,6 +498,89 @@ class SonarrAPI extends ServarrBase<{
     }
   }
 
+  public async searchEpisodes(episodeIds: number[]): Promise<void> {
+    logger.info('Executing episode search command.', {
+      label: 'Sonarr API',
+      episodeIds,
+    });
+
+    try {
+      await this.runCommand('EpisodeSearch', { episodeIds });
+    } catch (e) {
+      logger.error(
+        'Something went wrong while executing Sonarr episode search.',
+        {
+          label: 'Sonarr API',
+          errorMessage: e.message,
+          episodeIds,
+        }
+      );
+    }
+  }
+
+  /**
+   * Monitors the requested episodes of a series and searches for them. A newly
+   * added series gets its episodes from a refresh Sonarr runs in the
+   * background, so we wait for them to show up first.
+   */
+  public async monitorRequestedEpisodes(
+    seriesId: number,
+    requested: RequestedEpisodes[],
+    searchNow?: boolean
+  ): Promise<void> {
+    const isRequested = (episode: EpisodeResult) =>
+      requested.some(
+        (season) =>
+          season.seasonNumber === episode.seasonNumber &&
+          season.episodeNumbers.includes(episode.episodeNumber)
+      );
+    const requestedCount = requested.reduce(
+      (count, season) => count + season.episodeNumbers.length,
+      0
+    );
+
+    let episodes: EpisodeResult[] = [];
+
+    for (
+      let attempt = 0;
+      attempt < SonarrAPI.episodeLookupAttempts;
+      attempt++
+    ) {
+      if (attempt > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, SonarrAPI.episodeLookupDelay)
+        );
+      }
+
+      episodes = (await this.getEpisodes(seriesId)).filter(isRequested);
+
+      if (episodes.length >= requestedCount) {
+        break;
+      }
+    }
+
+    if (episodes.length === 0) {
+      throw new Error('Requested episodes not found in Sonarr');
+    }
+
+    if (episodes.length < requestedCount) {
+      logger.warn('Some requested episodes were not found in Sonarr', {
+        label: 'Sonarr API',
+        seriesId,
+        requested,
+        found: episodes.map((ep) => `S${ep.seasonNumber}E${ep.episodeNumber}`),
+      });
+    }
+
+    const episodeIds = episodes.map((ep) => ep.id);
+
+    await this.monitorEpisodes(episodeIds);
+
+    if (searchNow) {
+      await this.searchEpisodes(episodeIds);
+    }
+  }
+
   public async getEpisodes(seriesId: number): Promise<EpisodeResult[]> {
     try {
       const response = await this.axios.get<EpisodeResult[]>('/episode', {
@@ -389,6 +597,25 @@ class SonarrAPI extends ServarrBase<{
     }
   }
 
+  public async getEpisodeFiles(seriesId: number): Promise<SonarrEpisodeFile[]> {
+    try {
+      const response = await this.axios.get<SonarrEpisodeFile[]>(
+        '/episodefile',
+        {
+          params: { seriesId },
+        }
+      );
+      return response.data;
+    } catch (e) {
+      logger.error('Failed to retrieve episode files', {
+        label: 'Sonarr API',
+        errorMessage: e.message,
+        seriesId,
+      });
+      throw new Error('Failed to get episode files', { cause: e });
+    }
+  }
+
   public async monitorEpisodes(episodeIds: number[]): Promise<void> {
     try {
       await this.axios.put('/episode/monitor', {
@@ -402,6 +629,119 @@ class SonarrAPI extends ServarrBase<{
         episodeIds,
       });
       throw new Error('Failed to monitor episodes', { cause: e });
+    }
+  }
+
+  public async unmonitorEpisodes(episodeIds: number[]): Promise<void> {
+    try {
+      await this.axios.put('/episode/monitor', {
+        episodeIds,
+        monitored: false,
+      });
+    } catch (e) {
+      logger.error('Failed to unmonitor episodes', {
+        label: 'Sonarr API',
+        errorMessage: e.message,
+        episodeIds,
+      });
+      throw new Error('Failed to unmonitor episodes', { cause: e });
+    }
+  }
+
+  /**
+   * Searches the indexers for releases of a season, or of one episode
+   */
+  public async getReleases(
+    params: { seriesId: number; seasonNumber: number } | { episodeId: number }
+  ): Promise<ServarrRelease[]> {
+    return this.fetchReleases<ServarrRelease[]>(params);
+  }
+
+  public async getSeriesHistory(
+    seriesId: number,
+    seasonNumber?: number
+  ): Promise<ServarrHistoryRecord[]> {
+    return this.fetchHistory('/history/series', { seriesId, seasonNumber });
+  }
+
+  /**
+   * Deletes episode files from disk through Sonarr.
+   */
+  public async deleteEpisodeFiles(episodeFileIds: number[]): Promise<void> {
+    if (episodeFileIds.length === 0) {
+      return;
+    }
+
+    try {
+      await this.axios.delete('/episodefile/bulk', {
+        data: { episodeFileIds },
+      });
+      logger.info('Deleted episode files', {
+        label: 'Sonarr API',
+        episodeFileIds,
+      });
+    } catch (e) {
+      logger.error('Failed to delete episode files', {
+        label: 'Sonarr API',
+        errorMessage: e.message,
+        episodeFileIds,
+      });
+      throw new Error('Failed to delete episode files', { cause: e });
+    }
+  }
+
+  /**
+   * Changes which seasons of a series are monitored, and optionally has Sonarr
+   * monitor seasons it adds later. Specials are left as they are.
+   */
+  public async updateSeasonMonitoring(
+    seriesId: number,
+    {
+      monitor = [],
+      unmonitor = [],
+      monitorNewSeasons = false,
+    }: { monitor?: number[]; unmonitor?: number[]; monitorNewSeasons?: boolean }
+  ): Promise<void> {
+    try {
+      const series = await this.getSeriesById(seriesId);
+      let hasChanges = monitorNewSeasons && series.monitorNewItems !== 'all';
+
+      series.seasons = series.seasons.map((season) => {
+        if (season.seasonNumber === 0) {
+          return season;
+        }
+
+        const monitored = monitor.includes(season.seasonNumber)
+          ? true
+          : unmonitor.includes(season.seasonNumber)
+            ? false
+            : season.monitored;
+
+        if (monitored !== season.monitored) {
+          hasChanges = true;
+        }
+
+        return { ...season, monitored };
+      });
+
+      if (monitorNewSeasons) {
+        series.monitorNewItems = 'all';
+      }
+
+      if (!hasChanges) {
+        return;
+      }
+
+      await this.axios.put<SonarrSeries>(`/series/${seriesId}`, series);
+    } catch (e) {
+      logger.error('Failed to update season monitoring', {
+        label: 'Sonarr API',
+        errorMessage: e.message,
+        seriesId,
+        monitor,
+        unmonitor,
+      });
+      throw new Error('Failed to update season monitoring', { cause: e });
     }
   }
 

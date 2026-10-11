@@ -1,4 +1,6 @@
+import AmbientCollectionDetails from '@app/components/AllSeerr/CollectionDetails';
 import CollectionDetails from '@app/components/CollectionDetails';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { getHostAndPort } from '@app/utils/urlHelper';
 import type { Collection } from '@server/models/Collection';
 import axios from 'axios';
@@ -9,7 +11,13 @@ interface CollectionPageProps {
 }
 
 const CollectionPage: NextPage<CollectionPageProps> = ({ collection }) => {
-  return <CollectionDetails collection={collection} />;
+  const [interfaceStyle] = useInterfaceStyle();
+
+  return interfaceStyle === 'ambient' ? (
+    <AmbientCollectionDetails collection={collection} />
+  ) : (
+    <CollectionDetails collection={collection} />
+  );
 };
 
 export const getServerSideProps: GetServerSideProps<

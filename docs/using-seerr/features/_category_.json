@@ -1,0 +1,9 @@
+{
+  "label": "AllSeerr Features",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "title": "AllSeerr Features",
+    "description": "Features AllSeerr adds on top of Seerr"
+  }
+}

@@ -1,12 +1,20 @@
+import { ALLSEERR_REPO_URL } from '@server/constants/repository';
 import { getAppVersion } from '@server/utils/appVersion';
 import type { InternalAxiosRequestConfig } from 'axios';
 import axios from 'axios';
 
-const USER_AGENT = `Seerr/${getAppVersion()}`;
+const USER_AGENT = `AllSeerr/${getAppVersion()}`;
 
 export const getUserAgent = (): string => {
   return USER_AGENT;
 };
+
+/**
+ * For services that ask clients to say how to reach them, such as the
+ * MetaBrainz ones and OpenLibrary
+ */
+export const getContactUserAgent = (): string =>
+  `${USER_AGENT} (+${ALLSEERR_REPO_URL})`;
 
 export function userAgentRequestInterceptor(
   config: InternalAxiosRequestConfig

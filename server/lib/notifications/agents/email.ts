@@ -1,10 +1,11 @@
-import { IssueType, IssueTypeName } from '@server/constants/issue';
+import { IssueType, getIssueTypeName } from '@server/constants/issue';
 import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import { defineMessages, getIntl } from '@server/i18n';
-import globalMessages from '@server/i18n/globalMessages';
+import { getEmailLogo } from '@server/lib/branding';
 import PreparedEmail from '@server/lib/email';
+import { getPayloadMediaTypeName } from '@server/lib/notifications/mediaTypeName';
 import type { NotificationAgentEmail } from '@server/lib/settings';
 import { NotificationAgentKey, getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -14,10 +15,7 @@ import path from 'path';
 import validator from 'validator';
 import { Notification, shouldSendAdminNotification } from '..';
 import type { NotificationAgent, NotificationPayload } from './agent';
-import { BaseAgent } from './agent';
-
-const PUBLIC_LOGO_URL =
-  'https://raw.githubusercontent.com/seerr-team/seerr/refs/heads/develop/public/logo_full.svg';
+import { BaseAgent, getPayloadPath } from './agent';
 
 const messages = defineMessages('notifications.agents.email', {
   issueType: '{type} issue',
@@ -42,6 +40,10 @@ const messages = defineMessages('notifications.agents.email', {
     'Your request for the following {mediaType} is now available:',
   availableRequest4k:
     'Your request for the following {mediaType} in 4K is now available:',
+  episodesAvailable:
+    'New episodes of the following {mediaType} you requested are now available:',
+  episodesAvailable4k:
+    'New episodes of the following {mediaType} you requested in 4K are now available:',
   declinedRequest: 'Your request for the following {mediaType} was declined:',
   declinedRequest4k:
     'Your request for the following {mediaType} in 4K was declined:',
@@ -57,6 +59,12 @@ const messages = defineMessages('notifications.agents.email', {
     'The {issueType} for the {mediaType} {subject} was marked as resolved by {userName}!',
   issueReopened:
     'The {issueType} for the {mediaType} {subject} was reopened by {userName}.',
+  removalPending:
+    '{userName} asked for the following {mediaType} to be removed:',
+  removalApproved:
+    'Your request to remove the following {mediaType} was approved:',
+  removalDeclined:
+    'Your request to remove the following {mediaType} was declined:',
 });
 
 class EmailAgent
@@ -99,12 +107,7 @@ class EmailAgent
     const settings = getSettings();
     const { applicationUrl, applicationTitle } = settings.main;
     const { embedPoster } = settings.notifications.agents.email;
-    const { usePublicLogo } = settings.notifications.agents.email.options;
-    const logoUrl = usePublicLogo
-      ? PUBLIC_LOGO_URL
-      : applicationUrl
-        ? `${applicationUrl}/logo_full.svg`
-        : undefined;
+    const { logoUrl, logoIconUrl } = getEmailLogo();
 
     if (type === Notification.TEST_NOTIFICATION) {
       return {
@@ -117,17 +120,45 @@ class EmailAgent
           applicationUrl,
           applicationTitle,
           logoUrl,
+          logoIconUrl,
           recipientName,
           recipientEmail,
         },
       };
     }
 
-    const mediaType = payload.media
-      ? payload.media.mediaType === MediaType.MOVIE
-        ? intl.formatMessage(globalMessages.movie)
-        : intl.formatMessage(globalMessages.series)
-      : undefined;
+    if (type === Notification.SCAN_FAILURE) {
+      return {
+        template: path.join(
+          __dirname,
+          '../../../templates/email/media-request'
+        ),
+        message: {
+          to: recipientEmail,
+        },
+        locals: {
+          event: payload.event,
+          body: payload.message,
+          mediaName: payload.subject,
+          mediaExtra: payload.extra ?? [],
+          timestamp: new Date().toTimeString(),
+          actionUrl: applicationUrl
+            ? `${applicationUrl}${getPayloadPath(payload)}`
+            : undefined,
+          actionLabel: `Open ${applicationTitle} Settings`,
+          applicationUrl,
+          applicationTitle,
+          logoUrl,
+          logoIconUrl,
+          recipientName,
+          recipientEmail,
+        },
+      };
+    }
+
+    const mediaType = getPayloadMediaTypeName(payload, intl, {
+      plural: true,
+    });
     const is4k = payload.request?.is4k;
 
     if (payload.request) {
@@ -164,6 +195,12 @@ class EmailAgent
             { mediaType }
           );
           break;
+        case Notification.MEDIA_EPISODES_AVAILABLE:
+          body = intl.formatMessage(
+            is4k ? messages.episodesAvailable4k : messages.episodesAvailable,
+            { mediaType }
+          );
+          break;
         case Notification.MEDIA_DECLINED:
           body = intl.formatMessage(
             is4k ? messages.declinedRequest4k : messages.declinedRequest,
@@ -178,7 +215,13 @@ class EmailAgent
               service:
                 payload.media?.mediaType === MediaType.MOVIE
                   ? 'Radarr'
-                  : 'Sonarr',
+                  : payload.media?.mediaType === MediaType.MUSIC
+                    ? 'Lidarr'
+                    : payload.media?.mediaType === MediaType.BOOK
+                      ? getSettings().bookService === 'chaptarr'
+                        ? 'Chaptarr'
+                        : 'LazyLibrarian'
+                      : 'Sonarr',
             }
           );
           break;
@@ -201,11 +244,84 @@ class EmailAgent
           timestamp: new Date().toTimeString(),
           requestedBy: payload.request.requestedBy.displayName,
           actionUrl: applicationUrl
-            ? `${applicationUrl}/${payload.media?.mediaType}/${payload.media?.tmdbId}`
+            ? `${applicationUrl}${getPayloadPath(payload)}`
             : undefined,
           applicationUrl,
           applicationTitle,
           logoUrl,
+          logoIconUrl,
+          recipientName,
+          recipientEmail,
+        },
+      };
+    } else if (payload.removal) {
+      let body = '';
+
+      switch (type) {
+        case Notification.REMOVAL_PENDING:
+          body = intl.formatMessage(messages.removalPending, {
+            userName: payload.removal.requestedBy.displayName,
+            mediaType,
+          });
+          break;
+        case Notification.REMOVAL_APPROVED:
+          body = intl.formatMessage(messages.removalApproved, { mediaType });
+          break;
+        case Notification.REMOVAL_DECLINED:
+          body = intl.formatMessage(messages.removalDeclined, { mediaType });
+          break;
+      }
+
+      return {
+        template: path.join(
+          __dirname,
+          '../../../templates/email/media-request'
+        ),
+        message: {
+          to: recipientEmail,
+        },
+        locals: {
+          event: payload.event,
+          body,
+          mediaName: payload.subject,
+          mediaExtra: payload.extra ?? [],
+          imageUrl: embedPoster ? payload.image : undefined,
+          timestamp: new Date().toTimeString(),
+          requestedBy: payload.removal.requestedBy.displayName,
+          actionUrl: applicationUrl
+            ? `${applicationUrl}${getPayloadPath(payload)}`
+            : undefined,
+          applicationUrl,
+          applicationTitle,
+          logoUrl,
+          logoIconUrl,
+          recipientName,
+          recipientEmail,
+        },
+      };
+    } else if (payload.rollover) {
+      return {
+        template: path.join(
+          __dirname,
+          '../../../templates/email/media-request'
+        ),
+        message: {
+          to: recipientEmail,
+        },
+        locals: {
+          event: payload.event,
+          body: payload.message,
+          mediaName: payload.subject,
+          mediaExtra: payload.extra ?? [],
+          imageUrl: embedPoster ? payload.image : undefined,
+          timestamp: new Date().toTimeString(),
+          actionUrl: applicationUrl
+            ? `${applicationUrl}${getPayloadPath(payload)}`
+            : undefined,
+          applicationUrl,
+          applicationTitle,
+          logoUrl,
+          logoIconUrl,
           recipientName,
           recipientEmail,
         },
@@ -214,7 +330,10 @@ class EmailAgent
       const issueType =
         payload.issue && payload.issue.issueType !== IssueType.OTHER
           ? intl.formatMessage(messages.issueType, {
-              type: IssueTypeName[payload.issue.issueType].toLowerCase(),
+              type: getIssueTypeName(
+                payload.issue.issueType,
+                payload.media?.mediaType
+              ).toLowerCase(),
             })
           : intl.formatMessage(messages.issue);
 
@@ -275,6 +394,7 @@ class EmailAgent
           applicationUrl,
           applicationTitle,
           logoUrl,
+          logoIconUrl,
           recipientName,
           recipientEmail,
         },

@@ -7,10 +7,15 @@ import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
-import { MediaStatus } from '@server/constants/media';
+import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { QuotaResponse } from '@server/interfaces/api/userInterfaces';
+import {
+  MOVIE_RATINGS,
+  exceedsRatingLimit,
+  getMovieCertification,
+} from '@server/lib/contentRatingLimit';
 import { Permission } from '@server/lib/permissions';
 import type { MovieDetails } from '@server/models/Movie';
 import axios from 'axios';
@@ -35,6 +40,7 @@ const messages = defineMessages('components.RequestModal', {
   requestApproved: 'Request for <strong>{title}</strong> approved!',
   requesterror: 'Something went wrong while submitting the request.',
   pendingapproval: 'Your request is pending approval.',
+  ratingrestricted: 'This title is not available for your profile.',
 });
 
 interface RequestModalProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -102,15 +108,9 @@ const MovieRequestModal = ({
 
       if (response.data) {
         if (onComplete) {
+          // An auto-approve rule can approve the request without the permission
           onComplete(
-            hasPermission(
-              is4k ? Permission.AUTO_APPROVE_4K : Permission.AUTO_APPROVE
-            ) ||
-              hasPermission(
-                is4k
-                  ? Permission.AUTO_APPROVE_4K_MOVIE
-                  : Permission.AUTO_APPROVE_MOVIE
-              )
+            response.data.status === MediaRequestStatus.APPROVED
               ? MediaStatus.PROCESSING
               : MediaStatus.PENDING
           );
@@ -141,7 +141,6 @@ const MovieRequestModal = ({
     onComplete,
     addToast,
     intl,
-    hasPermission,
   ]);
 
   const cancelRequest = async () => {
@@ -319,6 +318,15 @@ const MovieRequestModal = ({
     { type: 'or' }
   );
 
+  // Mirrors the content rating limit checked when the request is created
+  const ratingRestricted =
+    !hasPermission(Permission.MANAGE_REQUESTS) &&
+    exceedsRatingLimit(
+      MOVIE_RATINGS,
+      getMovieCertification(data?.releases),
+      user?.movieRatingLimit
+    );
+
   return (
     <Modal
       loading={(!data && !error) || !quota}
@@ -327,6 +335,7 @@ const MovieRequestModal = ({
       onOk={sendRequest}
       okDisabled={
         isUpdating ||
+        ratingRestricted ||
         (quota?.movie.restricted && !requestOverrides?.ignoreQuota)
       }
       title={intl.formatMessage(
@@ -343,7 +352,15 @@ const MovieRequestModal = ({
       okButtonType={'primary'}
       backdrop={`https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${data?.backdropPath}`}
     >
-      {hasAutoApprove && !quota?.movie.restricted && (
+      {ratingRestricted && (
+        <div className="mt-6">
+          <Alert
+            title={intl.formatMessage(messages.ratingrestricted)}
+            type="warning"
+          />
+        </div>
+      )}
+      {hasAutoApprove && !quota?.movie.restricted && !ratingRestricted && (
         <div className="mt-6">
           <Alert
             title={intl.formatMessage(messages.requestadmin)}

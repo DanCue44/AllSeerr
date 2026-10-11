@@ -1,4 +1,4 @@
-import { IssueStatus, IssueTypeName } from '@server/constants/issue';
+import { IssueStatus, getIssueTypeName } from '@server/constants/issue';
 import { MediaStatus } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
@@ -15,7 +15,7 @@ import {
   shouldSendAdminNotification,
 } from '..';
 import type { NotificationAgent, NotificationPayload } from './agent';
-import { BaseAgent } from './agent';
+import { BaseAgent, getPayloadPath } from './agent';
 
 interface PushoverImagePayload {
   attachment_base64: string;
@@ -124,6 +124,7 @@ class PushoverAgent
           status = intl.formatMessage(globalMessages.processing);
           break;
         case Notification.MEDIA_AVAILABLE:
+        case Notification.MEDIA_EPISODES_AVAILABLE:
           status = intl.formatMessage(globalMessages.available);
           break;
         case Notification.MEDIA_DECLINED:
@@ -143,7 +144,7 @@ class PushoverAgent
       message += `<small>\n\n<b>${intl.formatMessage(globalMessages.commentFrom, { userName: payload.comment.user.displayName })}:</b> ${payload.comment.message}</small>`;
     } else if (payload.issue) {
       message += `<small>\n\n<b>${intl.formatMessage(globalMessages.reportedBy)}:</b> ${payload.issue.createdBy.displayName}</small>`;
-      message += `<small>\n<b>${intl.formatMessage(globalMessages.issueType)}:</b> ${IssueTypeName[payload.issue.issueType]}</small>`;
+      message += `<small>\n<b>${intl.formatMessage(globalMessages.issueType)}:</b> ${getIssueTypeName(payload.issue.issueType, payload.media?.mediaType)}</small>`;
       message += `<small>\n<b>${intl.formatMessage(globalMessages.issueStatus)}:</b> ${
         payload.issue.status === IssueStatus.OPEN
           ? intl.formatMessage(globalMessages.open)
@@ -163,7 +164,7 @@ class PushoverAgent
       ? payload.issue
         ? `${applicationUrl}/issues/${payload.issue.id}`
         : payload.media
-          ? `${applicationUrl}/${payload.media.mediaType}/${payload.media.tmdbId}`
+          ? `${applicationUrl}${getPayloadPath(payload)}`
           : undefined
       : undefined;
     const url_title = url

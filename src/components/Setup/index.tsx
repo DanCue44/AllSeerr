@@ -1,8 +1,14 @@
 import EmbyLogo from '@app/assets/services/emby.svg';
 import JellyfinLogo from '@app/assets/services/jellyfin.svg';
 import PlexLogo from '@app/assets/services/plex.svg';
+import {
+  AuthBackdrop,
+  authCard,
+  authPage,
+} from '@app/components/AllSeerr/Auth';
 import AppDataWarning from '@app/components/AppDataWarning';
 import Alert from '@app/components/Common/Alert';
+import AppLogo from '@app/components/Common/AppLogo';
 import Button from '@app/components/Common/Button';
 import ImageFader from '@app/components/Common/ImageFader';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -11,13 +17,13 @@ import SettingsJellyfin from '@app/components/Settings/SettingsJellyfin';
 import SettingsPlex from '@app/components/Settings/SettingsPlex';
 import SettingsServices from '@app/components/Settings/SettingsServices';
 import SetupSteps from '@app/components/Setup/SetupSteps';
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import useLocale from '@app/hooks/useLocale';
 import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
 import { MediaServerType } from '@server/constants/server';
 import type { Library } from '@server/lib/settings';
 import axios from 'axios';
-import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
@@ -25,7 +31,7 @@ import useSWR, { mutate } from 'swr';
 import SetupLogin from './SetupLogin';
 
 const messages = defineMessages('components.Setup', {
-  welcome: 'Welcome to Seerr',
+  welcome: 'Welcome to AllSeerr',
   subtitle: 'Get started by choosing your media server',
   configjellyfin: 'Configure Jellyfin',
   configplex: 'Configure Plex',
@@ -44,6 +50,8 @@ const messages = defineMessages('components.Setup', {
 
 const Setup = () => {
   const intl = useIntl();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
   const [isUpdating, setIsUpdating] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [mediaServerType, setMediaServerType] = useState(
@@ -115,28 +123,61 @@ const Setup = () => {
 
   if (settings.currentSettings.initialized) return <></>;
 
+  const backdropImages =
+    backdrops?.map(
+      (backdrop) => `https://image.tmdb.org/t/p/original${backdrop}`
+    ) ?? [];
+
+  // Server choice tiles on the first step
+  const serverColumn = ambient
+    ? [
+        'flex flex-col items-center gap-4 rounded-[22px] bg-as-tile p-5',
+        'flex flex-col items-center gap-4 rounded-[22px] bg-as-tile p-5',
+        'flex flex-col items-center gap-4 rounded-[22px] bg-as-tile p-5',
+      ]
+    : [
+        'flex flex-col divide-y divide-gray-600 rounded-l border border-gray-600 py-2',
+        'flex flex-col divide-y divide-gray-600 border-y border-gray-600 py-2',
+        'flex flex-col divide-y divide-gray-600 rounded-r border border-gray-600 py-2',
+      ];
+  const serverLogo = ambient
+    ? 'flex h-14 flex-1 items-center justify-center px-2'
+    : 'mb-2 flex flex-1 items-center justify-center px-2 py-2';
+  const serverButtonWrap = ambient ? 'w-full' : 'px-2 pt-2';
+  const serverButton = ambient
+    ? 'button-md relative z-10 inline-flex h-11 w-full items-center justify-center rounded-full border border-as-line-strong bg-as-raised px-4 text-sm font-semibold text-as-ink transition hover:bg-as-line focus:outline-none focus-visible:ring-2 focus-visible:ring-as-accent'
+    : 'button-md relative z-10 inline-flex h-full w-full items-center justify-center rounded-md border border-gray-600 bg-transparent px-4 py-2 text-sm font-medium leading-5 text-white transition duration-150 ease-in-out hover:z-20 hover:border-gray-200 focus:z-20 focus:border-gray-100 focus:outline-none active:border-gray-100';
+
   return (
-    <div className="relative flex min-h-screen flex-col justify-center bg-gray-900 py-12">
+    <div
+      className={
+        ambient
+          ? `${authPage} justify-center !py-12`
+          : 'relative flex min-h-screen flex-col justify-center bg-gray-900 py-12'
+      }
+    >
       <PageTitle title={intl.formatMessage(messages.setup)} />
-      <ImageFader
-        backgroundImages={
-          backdrops?.map(
-            (backdrop) => `https://image.tmdb.org/t/p/original${backdrop}`
-          ) ?? []
-        }
-      />
+      {ambient ? (
+        <AuthBackdrop images={backdropImages} />
+      ) : (
+        <ImageFader backgroundImages={backdropImages} />
+      )}
       <div className="absolute right-4 top-4 z-50">
         <LanguagePicker />
       </div>
       <div className="relative z-40 px-4 sm:mx-auto sm:w-full sm:max-w-4xl">
         <div className="relative mb-10 h-48 max-w-full sm:mx-auto sm:h-64 sm:max-w-md">
-          <Image src="/logo_stacked.svg" alt="Logo" fill />
+          <AppLogo variant="stacked" />
         </div>
         <AppDataWarning />
         <nav className="relative z-50">
           <ul
-            className="divide-y divide-gray-600 rounded-md border border-gray-600 bg-gray-800/50 md:flex md:divide-y-0"
-            style={{ backdropFilter: 'blur(5px)' }}
+            className={
+              ambient
+                ? 'divide-y divide-as-line overflow-hidden rounded-[22px] bg-as-surface/80 ring-1 ring-as-line backdrop-blur-xl md:flex md:divide-y-0'
+                : 'divide-y divide-gray-600 rounded-md border border-gray-600 bg-gray-800/50 md:flex md:divide-y-0'
+            }
+            style={ambient ? undefined : { backdropFilter: 'blur(5px)' }}
           >
             <SetupSteps
               stepNumber={1}
@@ -164,59 +205,81 @@ const Setup = () => {
             />
           </ul>
         </nav>
-        <div className="mt-10 w-full rounded-md border border-gray-600 bg-gray-800/50 p-4 text-white">
+        <div
+          className={
+            ambient
+              ? `mt-6 w-full p-4 text-as-ink sm:p-6 ${authCard}`
+              : 'mt-10 w-full rounded-md border border-gray-600 bg-gray-800/50 p-4 text-white'
+          }
+        >
           {currentStep === 1 && (
             <div className="flex flex-col items-center pb-6">
-              <div className="mb-2 flex justify-center text-xl font-bold">
+              <div
+                className={`mb-2 flex justify-center ${
+                  ambient
+                    ? 'font-display text-[22px] font-medium'
+                    : 'text-xl font-bold'
+                }`}
+              >
                 {intl.formatMessage(messages.welcome)}
               </div>
-              <div className="mb-2 flex justify-center pb-6 text-sm">
+              <div
+                className={`mb-2 flex justify-center pb-6 text-sm ${
+                  ambient ? 'text-as-ink-faint' : ''
+                }`}
+              >
                 {intl.formatMessage(messages.subtitle)}
               </div>
-              <div className="grid grid-cols-3">
-                <div className="flex flex-col divide-y divide-gray-600 rounded-l border border-gray-600 py-2">
-                  <div className="mb-2 flex flex-1 items-center justify-center px-2 py-2">
+              <div
+                className={
+                  ambient
+                    ? 'grid w-full gap-3 sm:grid-cols-3'
+                    : 'grid grid-cols-3'
+                }
+              >
+                <div className={serverColumn[0]}>
+                  <div className={serverLogo}>
                     <JellyfinLogo className="h-10" />
                   </div>
-                  <div className="px-2 pt-2">
+                  <div className={serverButtonWrap}>
                     <button
                       onClick={() => {
                         setMediaServerType(MediaServerType.JELLYFIN);
                         setCurrentStep(2);
                       }}
-                      className="button-md relative z-10 inline-flex h-full w-full items-center justify-center rounded-md border border-gray-600 bg-transparent px-4 py-2 text-sm font-medium leading-5 text-white transition duration-150 ease-in-out hover:z-20 hover:border-gray-200 focus:z-20 focus:border-gray-100 focus:outline-none active:border-gray-100"
+                      className={serverButton}
                     >
                       {intl.formatMessage(messages.configjellyfin)}
                     </button>
                   </div>
                 </div>
-                <div className="flex flex-col divide-y divide-gray-600 border-y border-gray-600 py-2">
-                  <div className="mb-2 flex flex-1 items-center justify-center px-2 py-2">
+                <div className={serverColumn[1]}>
+                  <div className={serverLogo}>
                     <PlexLogo className="h-8" />
                   </div>
-                  <div className="px-2 pt-2">
+                  <div className={serverButtonWrap}>
                     <button
                       onClick={() => {
                         setMediaServerType(MediaServerType.PLEX);
                         setCurrentStep(2);
                       }}
-                      className="button-md relative z-10 inline-flex h-full w-full items-center justify-center rounded-md border border-gray-600 bg-transparent px-4 py-2 text-sm font-medium leading-5 text-white transition duration-150 ease-in-out hover:z-20 hover:border-gray-200 focus:z-20 focus:border-gray-100 focus:outline-none active:border-gray-100"
+                      className={serverButton}
                     >
                       {intl.formatMessage(messages.configplex)}
                     </button>
                   </div>
                 </div>
-                <div className="flex flex-col divide-y divide-gray-600 rounded-r border border-gray-600 py-2">
-                  <div className="mb-2 flex flex-1 items-center justify-center px-2 py-2">
+                <div className={serverColumn[2]}>
+                  <div className={serverLogo}>
                     <EmbyLogo className="h-9" />
                   </div>
-                  <div className="px-2 pt-2">
+                  <div className={serverButtonWrap}>
                     <button
                       onClick={() => {
                         setMediaServerType(MediaServerType.EMBY);
                         setCurrentStep(2);
                       }}
-                      className="button-md relative z-10 inline-flex h-full w-full items-center justify-center rounded-md border border-gray-600 bg-transparent px-4 py-2 text-sm font-medium leading-5 text-white transition duration-150 ease-in-out hover:z-20 hover:border-gray-200 focus:z-20 focus:border-gray-100 focus:outline-none active:border-gray-100"
+                      className={serverButton}
                     >
                       {intl.formatMessage(messages.configemby)}
                     </button>

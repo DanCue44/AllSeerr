@@ -1,3 +1,4 @@
+import ArrActions from '@app/components/ArrActions';
 import BlocklistBlock from '@app/components/BlocklistBlock';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
@@ -27,8 +28,13 @@ import {
 import { MediaServerType } from '@server/constants/server';
 import type { MediaWatchDataResponse } from '@server/interfaces/api/mediaInterfaces';
 import type { DownloadingItem } from '@server/lib/downloadtracker';
-import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
+import type {
+  LidarrSettings,
+  RadarrSettings,
+  SonarrSettings,
+} from '@server/lib/settings';
 import type { MovieDetails } from '@server/models/Movie';
+import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
 import axios from 'axios';
 import Link from 'next/link';
@@ -80,9 +86,12 @@ const messages = defineMessages('components.ManageSlideOver', {
   playedby: 'Played By',
   movie: 'movie',
   tvshow: 'series',
+  album: 'album',
 });
 
-const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
+const isMovie = (
+  movie: MovieDetails | TvDetails | MusicDetails
+): movie is MovieDetails | MusicDetails => {
   return (movie as MovieDetails).title !== undefined;
 };
 
@@ -103,13 +112,21 @@ interface ManageSlideOverTvProps extends ManageSlideOverProps {
   data: TvDetails;
 }
 
+interface ManageSlideOverMusicProps extends ManageSlideOverProps {
+  mediaType: 'music';
+  data: MusicDetails;
+}
+
 const ManageSlideOver = ({
   show,
   mediaType,
   onClose,
   data,
   revalidate,
-}: ManageSlideOverMovieProps | ManageSlideOverTvProps) => {
+}:
+  | ManageSlideOverMovieProps
+  | ManageSlideOverTvProps
+  | ManageSlideOverMusicProps) => {
   const { user: currentUser, hasPermission } = useUser();
   const intl = useIntl();
   const { addToast } = useToasts();
@@ -127,6 +144,23 @@ const ManageSlideOver = ({
   const { data: sonarrData } = useSWR<SonarrSettings[]>(
     hasPermission(Permission.ADMIN) ? '/api/v1/settings/sonarr' : null
   );
+  const { data: lidarrData } = useSWR<LidarrSettings[]>(
+    hasPermission(Permission.ADMIN) && mediaType === 'music'
+      ? '/api/v1/settings/lidarr'
+      : null
+  );
+  const arrName =
+    mediaType === 'movie'
+      ? 'Radarr'
+      : mediaType === 'music'
+        ? 'Lidarr'
+        : 'Sonarr';
+  const mediaTypeMessage =
+    mediaType === 'movie'
+      ? messages.movie
+      : mediaType === 'music'
+        ? messages.album
+        : messages.tvshow;
 
   const deleteMedia = async () => {
     if (data.mediaInfo) {
@@ -166,7 +200,14 @@ const ManageSlideOver = ({
 
   const isDefaultService = () => {
     if (data.mediaInfo) {
-      if (data.mediaInfo.mediaType === MediaType.MOVIE) {
+      if (data.mediaInfo.mediaType === MediaType.MUSIC) {
+        return (
+          lidarrData?.find(
+            (lidarr) =>
+              lidarr.isDefault && lidarr.id === data.mediaInfo?.serviceId
+          ) !== undefined
+        );
+      } else if (data.mediaInfo.mediaType === MediaType.MOVIE) {
         return (
           radarrData?.find(
             (radarr) =>
@@ -250,7 +291,11 @@ const ManageSlideOver = ({
       show={show}
       title={intl.formatMessage(messages.manageModalTitle, {
         mediaType: intl.formatMessage(
-          mediaType === 'movie' ? globalMessages.movie : globalMessages.tvshow
+          mediaType === 'movie'
+            ? globalMessages.movie
+            : mediaType === 'music'
+              ? globalMessages.album
+              : globalMessages.tvshow
         ),
       })}
       onClose={() => onClose()}
@@ -308,7 +353,10 @@ const ManageSlideOver = ({
                       key={`manage-issue-${issue.id}`}
                       className="border-b border-gray-700 last:border-b-0"
                     >
-                      <IssueBlock issue={issue} />
+                      <IssueBlock
+                        issue={issue}
+                        mediaType={data.mediaInfo?.mediaType}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -344,7 +392,11 @@ const ManageSlideOver = ({
             </h3>
             <div className="overflow-hidden rounded-md border border-gray-700 shadow">
               <BlocklistBlock
-                tmdbId={data.mediaInfo.tmdbId}
+                id={
+                  data.mediaInfo.mediaType === MediaType.MUSIC
+                    ? (data.mediaInfo.mbId ?? '')
+                    : data.mediaInfo.tmdbId
+                }
                 mediaType={data.mediaInfo.mediaType}
                 onUpdate={() => revalidate()}
                 onDelete={() => onClose()}
@@ -469,7 +521,7 @@ const ManageSlideOver = ({
                       <ServerIcon />
                       <span>
                         {intl.formatMessage(messages.openarr, {
-                          arr: mediaType === 'movie' ? 'Radarr' : 'Sonarr',
+                          arr: arrName,
                         })}
                       </span>
                     </Button>
@@ -490,7 +542,7 @@ const ManageSlideOver = ({
                         <TrashIcon />
                         <span>
                           {intl.formatMessage(messages.removearr, {
-                            arr: mediaType === 'movie' ? 'Radarr' : 'Sonarr',
+                            arr: arrName,
                           })}
                         </span>
                       </ConfirmButton>
@@ -498,12 +550,8 @@ const ManageSlideOver = ({
                         {intl.formatMessage(
                           messages.manageModalRemoveMediaWarning,
                           {
-                            mediaType: intl.formatMessage(
-                              mediaType === 'movie'
-                                ? messages.movie
-                                : messages.tvshow
-                            ),
-                            arr: mediaType === 'movie' ? 'Radarr' : 'Sonarr',
+                            mediaType: intl.formatMessage(mediaTypeMessage),
+                            arr: arrName,
                           }
                         )}
                       </div>
@@ -632,7 +680,7 @@ const ManageSlideOver = ({
                         <ServerIcon />
                         <span>
                           {intl.formatMessage(messages.openarr4k, {
-                            arr: mediaType === 'movie' ? 'Radarr' : 'Sonarr',
+                            arr: arrName,
                           })}
                         </span>
                       </Button>
@@ -649,7 +697,7 @@ const ManageSlideOver = ({
                           <TrashIcon />
                           <span>
                             {intl.formatMessage(messages.removearr4k, {
-                              arr: mediaType === 'movie' ? 'Radarr' : 'Sonarr',
+                              arr: arrName,
                             })}
                           </span>
                         </ConfirmButton>
@@ -657,12 +705,8 @@ const ManageSlideOver = ({
                           {intl.formatMessage(
                             messages.manageModalRemoveMediaWarning,
                             {
-                              mediaType: intl.formatMessage(
-                                mediaType === 'movie'
-                                  ? messages.movie
-                                  : messages.tvshow
-                              ),
-                              arr: mediaType === 'movie' ? 'Radarr' : 'Sonarr',
+                              mediaType: intl.formatMessage(mediaTypeMessage),
+                              arr: arrName,
                             }
                           )}
                         </div>
@@ -672,6 +716,24 @@ const ManageSlideOver = ({
                 )}
               </div>
             </div>
+          )}
+        {hasPermission(Permission.MANAGE_REQUESTS) &&
+          data?.mediaInfo &&
+          data.mediaInfo.status !== MediaStatus.BLOCKLISTED && (
+            <ArrActions
+              mediaId={data.mediaInfo.id}
+              mediaType={mediaType}
+              active={show}
+              allow4k={
+                mediaType !== 'music' &&
+                (mediaType === 'movie'
+                  ? settings.currentSettings.movie4kEnabled
+                  : settings.currentSettings.series4kEnabled) &&
+                (data.mediaInfo.status4k !== MediaStatus.UNKNOWN ||
+                  !!data.mediaInfo.externalServiceId4k)
+              }
+              onChange={revalidate}
+            />
           )}
         {hasPermission(Permission.ADMIN) &&
           data?.mediaInfo &&
@@ -690,14 +752,15 @@ const ManageSlideOver = ({
                     <CheckCircleIcon />
                     <span>
                       {intl.formatMessage(
-                        mediaType === 'movie'
-                          ? messages.markavailable
-                          : messages.markallseasonsavailable
+                        mediaType === 'tv'
+                          ? messages.markallseasonsavailable
+                          : messages.markavailable
                       )}
                     </span>
                   </Button>
                 )}
                 {data?.mediaInfo.status4k !== MediaStatus.AVAILABLE &&
+                  mediaType !== 'music' &&
                   settings.currentSettings.series4kEnabled && (
                     <Button
                       onClick={() => markAvailable(true)}
@@ -727,9 +790,7 @@ const ManageSlideOver = ({
                   </ConfirmButton>
                   <div className="mt-2 text-xs text-gray-400">
                     {intl.formatMessage(messages.manageModalClearMediaWarning, {
-                      mediaType: intl.formatMessage(
-                        mediaType === 'movie' ? messages.movie : messages.tvshow
-                      ),
+                      mediaType: intl.formatMessage(mediaTypeMessage),
                       mediaServerName:
                         settings.currentSettings.mediaServerType ===
                         MediaServerType.EMBY

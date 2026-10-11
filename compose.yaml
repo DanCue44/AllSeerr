@@ -1,11 +1,20 @@
 services:
-  seerr:
-    build:
-      context: .
-      dockerfile: Dockerfile.local
+  allseerr:
+    image: ghcr.io/dancue44/allseerr:latest
+    container_name: allseerr
+    init: true
+    environment:
+      - LOG_LEVEL=info
+      - TZ=Etc/UTC
     ports:
       - 5055:5055
     volumes:
-      - .:/app:rw,cached
-      - /app/node_modules
-      - /app/.next
+      # The image runs as UID 1000, so this directory must be writable by it
+      - ./config:/app/config
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/status || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+      retries: 3
+    restart: unless-stopped

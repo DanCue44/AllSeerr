@@ -3,6 +3,7 @@
 import { Command, Option } from 'commander';
 import { createWriteStream } from 'node:fs';
 import { glob } from 'node:fs/promises';
+import { availableParallelism } from 'node:os';
 import { join, resolve } from 'node:path';
 import { run } from 'node:test';
 import * as reporters from 'node:test/reporters';
@@ -71,6 +72,13 @@ process.env.NODE_ENV = 'test';
 process.env.TS_NODE_PROJECT = resolveImport('../tsconfig.json');
 process.env.TS_NODE_FILES = 'true';
 
+// Each test file runs in its own process with its own in-memory database and
+// config directory, so files can run side by side. TEST_CONCURRENCY=1 runs
+// them one at a time.
+const concurrency = process.env.TEST_CONCURRENCY
+  ? Number(process.env.TEST_CONCURRENCY)
+  : Math.max(1, Math.min(8, availableParallelism() - 1));
+
 const stream = run({
   files,
   execArgv: [
@@ -80,14 +88,22 @@ const stream = run({
     '-r',
     'tsconfig-paths/register',
     '-r',
+    resolveImport('./configDirectory.ts'),
+    '-r',
     resolveImport('./setup.ts'),
   ],
+  concurrency,
   coverage: opts.experimentalTestCoverage,
   coverageExcludeGlobs: [
     join(BASE_DIR, 'server/test/**'),
     join(BASE_DIR, 'server/migration/**'),
   ],
   testNamePatterns: opts.testNamePattern,
+});
+
+// run() does not set the exit code, so a failing suite would still exit 0
+stream.on('test:fail', () => {
+  process.exitCode = 1;
 });
 
 // In CI, write a JUnit report to a file for use by GitHub

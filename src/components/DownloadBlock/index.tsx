@@ -13,12 +13,15 @@ interface DownloadBlockProps {
   downloadItem: DownloadingItem;
   is4k?: boolean;
   title?: string;
+  // Names what is downloading, such as the format of a book
+  label?: string;
 }
 
 const DownloadBlock = ({
   downloadItem,
   is4k = false,
   title,
+  label,
 }: DownloadBlockProps) => {
   const intl = useIntl();
   const { hasPermission } = useUser();
@@ -71,6 +74,7 @@ const DownloadBlock = ({
               4K
             </Badge>
           )}
+          {label && <Badge className="mr-2">{label}</Badge>}
           <Badge className="capitalize">{downloadItem.status}</Badge>
         </span>
         <span>

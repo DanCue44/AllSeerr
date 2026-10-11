@@ -1,3 +1,4 @@
+import LidarrLogo from '@app/assets/services/lidarr.svg';
 import RadarrLogo from '@app/assets/services/radarr.svg';
 import SonarrLogo from '@app/assets/services/sonarr.svg';
 import Alert from '@app/components/Common/Alert';
@@ -6,17 +7,39 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
+import AudiobookshelfModal from '@app/components/Settings/AudiobookshelfModal';
+import BazarrModal from '@app/components/Settings/BazarrModal';
+import ChaptarrModal from '@app/components/Settings/ChaptarrModal';
+import LazyLibrarianModal from '@app/components/Settings/LazyLibrarianModal';
+import LidarrModal from '@app/components/Settings/LidarrModal';
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
 import OverrideRuleTiles from '@app/components/Settings/OverrideRule/OverrideRuleTiles';
 import RadarrModal from '@app/components/Settings/RadarrModal';
 import SonarrModal from '@app/components/Settings/SonarrModal';
+import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
-import { PencilIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/solid';
+import {
+  BookOpenIcon,
+  LanguageIcon,
+  PencilIcon,
+  PlusIcon,
+  TrashIcon,
+} from '@heroicons/react/24/solid';
 import type OverrideRule from '@server/entity/OverrideRule';
 import type { OverrideRuleResultsResponse } from '@server/interfaces/api/overrideRuleInterfaces';
-import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
+import type {
+  AudiobookshelfSettings,
+  BazarrSettings,
+  BookService,
+  ChaptarrSettings,
+  LazyLibrarianSettings,
+  LidarrSettings,
+  MainSettings,
+  RadarrSettings,
+  SonarrSettings,
+} from '@server/lib/settings';
 import axios from 'axios';
 import { Fragment, useState } from 'react';
 import { useIntl } from 'react-intl';
@@ -26,8 +49,47 @@ const messages = defineMessages('components.Settings', {
   services: 'Services',
   radarrsettings: 'Radarr Settings',
   sonarrsettings: 'Sonarr Settings',
-  serviceSettingsDescription:
+  lidarrsettings: 'Lidarr Settings',
+  audiobookshelfsettings: 'Audiobookshelf Settings',
+  audiobookshelfSettingsDescription:
+    'Link available books to your Audiobookshelf server, so users can open them from book pages.',
+  configureaudiobookshelf: 'Configure Audiobookshelf',
+  deleteaudiobookshelf: 'Remove Audiobookshelf',
+  deleteaudiobookshelfconfirm:
+    'Are you sure you want to remove Audiobookshelf? Book pages will no longer link to it.',
+  library: 'Library',
+  homepage: 'Home page',
+  bazarrsettings: 'Bazarr Settings',
+  bazarrSettingsDescription:
+    'Configure your Bazarr server below to show downloaded, wanted and missing subtitles on title pages and let users search for or request a subtitle language.',
+  configurebazarr: 'Configure Bazarr',
+  deletebazarr: 'Remove Bazarr',
+  deletebazarrconfirm:
+    'Are you sure you want to remove Bazarr? Subtitle details and requests will no longer be available.',
+  lazylibrariansettings: 'LazyLibrarian Settings',
+  lazylibrarianSettingsDescription:
+    'Configure your LazyLibrarian server below to enable ebook and audiobook requests. Approved book requests are added to LazyLibrarian, which searches for the requested format.',
+  configurelazylibrarian: 'Configure LazyLibrarian',
+  lazylibrarianLimits: 'LazyLibrarian has fewer features than Chaptarr',
+  lazylibrarianLimitsDetail:
+    'Approved book removals cannot delete files, because LazyLibrarian has no way to do that through its API. The book only stops being searched for, and its file stays on disk until it is deleted in LazyLibrarian, which may then find it again. Chaptarr deletes the files and tracks ebooks and audiobooks separately, so it is recommended for book requests.',
+  deletelazylibrarian: 'Remove LazyLibrarian',
+  deletelazylibrarianconfirm:
+    'Are you sure you want to remove LazyLibrarian? Books can no longer be requested.',
+  videoServiceSettingsDescription:
     'Configure your {serverType} server(s) below. You can connect multiple {serverType} servers, but only two of them can be marked as defaults (one non-4K and one 4K). Administrators are able to override the server used to process new requests prior to approval.',
+  chaptarrsettings: 'Chaptarr Settings',
+  chaptarrSettingsDescription:
+    'Configure your Chaptarr server(s) below to enable ebook and audiobook requests. Approved book requests are added to Chaptarr in the requested format and searched for. You can connect multiple Chaptarr servers, but only one of them can be marked as default. Other Readarr compatible servers work too.',
+  addchaptarr: 'Add Chaptarr Server',
+  mediaTypeBook: 'book',
+  bookService: 'Book Requests',
+  bookServiceTip:
+    'Chaptarr and LazyLibrarian are both configured. Choose which one book requests are sent to.',
+  bookServiceSaved: 'Book requests are now sent to {service}.',
+  bookServiceFailed: 'Something went wrong while saving the book service.',
+  musicServiceSettingsDescription:
+    'Configure your {serverType} server(s) below. You can connect multiple {serverType} servers, but only one of them can be marked as default. Administrators are able to override the server used to process new requests prior to approval.',
   deleteserverconfirm: 'Are you sure you want to delete this server?',
   ssl: 'SSL',
   default: 'Default',
@@ -37,6 +99,7 @@ const messages = defineMessages('components.Settings', {
   activeProfile: 'Active Profile',
   addradarr: 'Add Radarr Server',
   addsonarr: 'Add Sonarr Server',
+  addlidarr: 'Add Lidarr Server',
   noDefaultServer:
     'At least one {serverType} server must be marked as default in order for {mediaType} requests to be processed.',
   noDefaultNon4kServer:
@@ -45,6 +108,7 @@ const messages = defineMessages('components.Settings', {
     'A 4K {serverType} server must be marked as default in order to enable users to submit 4K {mediaType} requests.',
   mediaTypeMovie: 'movie',
   mediaTypeSeries: 'series',
+  mediaTypeMusic: 'music',
   deleteServer: 'Delete {serverType} Server',
   overrideRules: 'Override Rules',
   overrideRulesDescription:
@@ -62,6 +126,15 @@ interface ServerInstanceProps {
   externalUrl?: string;
   profileName: string;
   isSonarr?: boolean;
+  isLidarr?: boolean;
+  isLazyLibrarian?: boolean;
+  isChaptarr?: boolean;
+  isBazarr?: boolean;
+  isAudiobookshelf?: boolean;
+  /** The address to show and link, for services set up by URL */
+  url?: string;
+  /** Shown in place of the active profile */
+  detail?: { label: string; value: string };
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -93,6 +166,13 @@ export type SonarrTestResponse = DVRTestResponse & {
     | null;
 };
 
+export type LidarrTestResponse = DVRTestResponse & {
+  metadataProfiles: {
+    id: number;
+    name: string;
+  }[];
+};
+
 const ServerInstance = ({
   name,
   hostname,
@@ -102,6 +182,13 @@ const ServerInstance = ({
   isDefault = false,
   isSSL = false,
   isSonarr = false,
+  isLidarr = false,
+  isLazyLibrarian = false,
+  isChaptarr = false,
+  isBazarr = false,
+  isAudiobookshelf = false,
+  url,
+  detail,
   externalUrl,
   onEdit,
   onDelete,
@@ -109,11 +196,11 @@ const ServerInstance = ({
   const intl = useIntl();
 
   const internalUrl =
-    (isSSL ? 'https://' : 'http://') + hostname + ':' + String(port);
+    url ?? (isSSL ? 'https://' : 'http://') + hostname + ':' + String(port);
   const serviceUrl = externalUrl ?? internalUrl;
 
   return (
-    <li className="col-span-1 rounded-lg bg-gray-800 shadow ring-1 ring-gray-500">
+    <li className="service-card col-span-1 rounded-lg bg-gray-800 shadow ring-1 ring-gray-500">
       <div className="flex w-full items-center justify-between space-x-6 p-6">
         <div className="flex-1 truncate">
           <div className="mb-2 flex items-center space-x-2">
@@ -157,12 +244,23 @@ const ServerInstance = ({
               {internalUrl}
             </a>
           </p>
-          <p className="mt-1 truncate text-sm leading-5 text-gray-300">
-            <span className="mr-2 font-bold">
-              {intl.formatMessage(messages.activeProfile)}
-            </span>
-            {profileName}
-          </p>
+          {detail ? (
+            <p className="mt-1 truncate text-sm leading-5 text-gray-300">
+              <span className="mr-2 font-bold">{detail.label}</span>
+              {detail.value}
+            </p>
+          ) : (
+            !isLazyLibrarian &&
+            !isBazarr &&
+            !isAudiobookshelf && (
+              <p className="mt-1 truncate text-sm leading-5 text-gray-300">
+                <span className="mr-2 font-bold">
+                  {intl.formatMessage(messages.activeProfile)}
+                </span>
+                {profileName}
+              </p>
+            )
+          )}
         </div>
         <a
           href={serviceUrl}
@@ -170,14 +268,20 @@ const ServerInstance = ({
           rel="noopener noreferrer"
           className="opacity-50 hover:opacity-100"
         >
-          {isSonarr ? (
+          {isBazarr ? (
+            <LanguageIcon className="h-10 w-10 flex-shrink-0" />
+          ) : isLazyLibrarian || isChaptarr || isAudiobookshelf ? (
+            <BookOpenIcon className="h-10 w-10 flex-shrink-0" />
+          ) : isSonarr ? (
             <SonarrLogo className="h-10 w-10 flex-shrink-0" />
+          ) : isLidarr ? (
+            <LidarrLogo className="h-10 w-10 flex-shrink-0" />
           ) : (
             <RadarrLogo className="h-10 w-10 flex-shrink-0" />
           )}
         </a>
       </div>
-      <div className="border-t border-gray-500">
+      <div className="service-card-actions border-t border-gray-500">
         <div className="-mt-px flex">
           <div className="flex w-0 flex-1 border-r border-gray-500">
             <button
@@ -215,6 +319,46 @@ const SettingsServices = () => {
     error: sonarrError,
     mutate: revalidateSonarr,
   } = useSWR<SonarrSettings[]>('/api/v1/settings/sonarr');
+  const {
+    data: lidarrData,
+    error: lidarrError,
+    mutate: revalidateLidarr,
+  } = useSWR<LidarrSettings[]>('/api/v1/settings/lidarr');
+  const {
+    data: lazyLibrarianData,
+    error: lazyLibrarianError,
+    mutate: revalidateLazyLibrarian,
+  } = useSWR<LazyLibrarianSettings>('/api/v1/settings/lazylibrarian');
+  const {
+    data: chaptarrData,
+    error: chaptarrError,
+    mutate: revalidateChaptarr,
+  } = useSWR<ChaptarrSettings[]>('/api/v1/settings/chaptarr');
+  const { data: mainData, mutate: revalidateMain } = useSWR<MainSettings>(
+    '/api/v1/settings/main'
+  );
+  const { data: publicData } = useSWR<{ bookService?: BookService }>(
+    '/api/v1/settings/public'
+  );
+  const {
+    data: bazarrData,
+    error: bazarrError,
+    mutate: revalidateBazarr,
+  } = useSWR<BazarrSettings>('/api/v1/settings/bazarr');
+  const { addToast } = useToasts();
+  const {
+    data: audiobookshelfData,
+    error: audiobookshelfError,
+    mutate: revalidateAudiobookshelf,
+  } = useSWR<AudiobookshelfSettings>('/api/v1/settings/audiobookshelf');
+  const [editAudiobookshelfModal, setEditAudiobookshelfModal] = useState(false);
+  const [deleteAudiobookshelfModal, setDeleteAudiobookshelfModal] =
+    useState(false);
+  const [editBazarrModal, setEditBazarrModal] = useState(false);
+  const [deleteBazarrModal, setDeleteBazarrModal] = useState(false);
+  const [editLazyLibrarianModal, setEditLazyLibrarianModal] = useState(false);
+  const [deleteLazyLibrarianModal, setDeleteLazyLibrarianModal] =
+    useState(false);
   const { data: rules, mutate: revalidate } =
     useSWR<OverrideRuleResultsResponse>('/api/v1/overrideRule');
   const [editRadarrModal, setEditRadarrModal] = useState<{
@@ -231,9 +375,23 @@ const SettingsServices = () => {
     open: false,
     sonarr: null,
   });
+  const [editLidarrModal, setEditLidarrModal] = useState<{
+    open: boolean;
+    lidarr: LidarrSettings | null;
+  }>({
+    open: false,
+    lidarr: null,
+  });
+  const [editChaptarrModal, setEditChaptarrModal] = useState<{
+    open: boolean;
+    chaptarr: ChaptarrSettings | null;
+  }>({
+    open: false,
+    chaptarr: null,
+  });
   const [deleteServerModal, setDeleteServerModal] = useState<{
     open: boolean;
-    type: 'radarr' | 'sonarr';
+    type: 'radarr' | 'sonarr' | 'lidarr' | 'chaptarr';
     serverId: number | null;
   }>({
     open: false,
@@ -255,8 +413,72 @@ const SettingsServices = () => {
     setDeleteServerModal({ open: false, serverId: null, type: 'radarr' });
     revalidateRadarr();
     revalidateSonarr();
+    revalidateLidarr();
+    revalidateChaptarr();
     mutate('/api/v1/settings/public');
   };
+
+  const saveBookService = async (bookService: BookService) => {
+    try {
+      await axios.post('/api/v1/settings/main', { bookService });
+      revalidateMain();
+      mutate('/api/v1/settings/public');
+      addToast(
+        intl.formatMessage(messages.bookServiceSaved, {
+          service: bookService === 'chaptarr' ? 'Chaptarr' : 'LazyLibrarian',
+        }),
+        { appearance: 'success', autoDismiss: true }
+      );
+    } catch {
+      addToast(intl.formatMessage(messages.bookServiceFailed), {
+        appearance: 'error',
+        autoDismiss: true,
+      });
+    }
+  };
+
+  // LazyLibrarian is a single server, removing it clears its connection
+  const deleteLazyLibrarian = async () => {
+    await axios.post('/api/v1/settings/lazylibrarian', {
+      hostname: '',
+      apiKey: '',
+    });
+    setDeleteLazyLibrarianModal(false);
+    revalidateLazyLibrarian();
+    mutate('/api/v1/settings/public');
+  };
+
+  // Audiobookshelf is a single link, removing it clears the address
+  const deleteAudiobookshelf = async () => {
+    await axios.post('/api/v1/settings/audiobookshelf', {
+      url: '',
+      libraryId: '',
+      apiKey: '',
+    });
+    setDeleteAudiobookshelfModal(false);
+    revalidateAudiobookshelf();
+  };
+
+  // Bazarr is a single server, removing it clears its connection
+  const deleteBazarr = async () => {
+    await axios.post('/api/v1/settings/bazarr', {
+      hostname: '',
+      apiKey: '',
+    });
+    setDeleteBazarrModal(false);
+    revalidateBazarr();
+  };
+
+  const isBazarrConfigured = !!bazarrData?.hostname && !!bazarrData.apiKey;
+
+  const isLazyLibrarianConfigured =
+    !!lazyLibrarianData?.hostname && !!lazyLibrarianData.apiKey;
+
+  const showBookService =
+    isLazyLibrarianConfigured &&
+    !!chaptarrData?.some(
+      (chaptarr) => chaptarr.isDefault || chaptarrData.length === 1
+    );
 
   return (
     <>
@@ -271,7 +493,7 @@ const SettingsServices = () => {
           {intl.formatMessage(messages.radarrsettings)}
         </h3>
         <p className="description">
-          {intl.formatMessage(messages.serviceSettingsDescription, {
+          {intl.formatMessage(messages.videoServiceSettingsDescription, {
             serverType: 'Radarr',
           })}
         </p>
@@ -304,6 +526,17 @@ const SettingsServices = () => {
           }}
         />
       )}
+      {editLidarrModal.open && (
+        <LidarrModal
+          lidarr={editLidarrModal.lidarr}
+          onClose={() => setEditLidarrModal({ open: false, lidarr: null })}
+          onSave={() => {
+            revalidateLidarr();
+            mutate('/api/v1/settings/public');
+            setEditLidarrModal({ open: false, lidarr: null });
+          }}
+        />
+      )}
       <Transition
         as={Fragment}
         show={deleteServerModal.open}
@@ -327,7 +560,13 @@ const SettingsServices = () => {
           }
           title={intl.formatMessage(messages.deleteServer, {
             serverType:
-              deleteServerModal.type === 'radarr' ? 'Radarr' : 'Sonarr',
+              deleteServerModal.type === 'radarr'
+                ? 'Radarr'
+                : deleteServerModal.type === 'sonarr'
+                  ? 'Sonarr'
+                  : deleteServerModal.type === 'chaptarr'
+                    ? 'Chaptarr'
+                    : 'Lidarr',
           })}
         >
           {intl.formatMessage(messages.deleteserverconfirm)}
@@ -416,7 +655,7 @@ const SettingsServices = () => {
           {intl.formatMessage(messages.sonarrsettings)}
         </h3>
         <p className="description">
-          {intl.formatMessage(messages.serviceSettingsDescription, {
+          {intl.formatMessage(messages.videoServiceSettingsDescription, {
             serverType: 'Sonarr',
           })}
         </p>
@@ -501,6 +740,400 @@ const SettingsServices = () => {
       </div>
       <div className="mb-6 mt-10">
         <h3 className="heading">
+          {intl.formatMessage(messages.lidarrsettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.musicServiceSettingsDescription, {
+            serverType: 'Lidarr',
+          })}
+        </p>
+      </div>
+      <div className="section">
+        {!lidarrData && !lidarrError && <LoadingSpinner />}
+        {lidarrData && !lidarrError && (
+          <>
+            {lidarrData.length > 0 &&
+              (!lidarrData.some((lidarr) => lidarr.isDefault) ? (
+                <Alert
+                  title={intl.formatMessage(messages.noDefaultServer, {
+                    serverType: 'Lidarr',
+                    mediaType: intl.formatMessage(messages.mediaTypeMusic),
+                  })}
+                />
+              ) : null)}
+            <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+              {lidarrData.map((lidarr) => (
+                <ServerInstance
+                  key={`lidarr-config-${lidarr.id}`}
+                  name={lidarr.name}
+                  hostname={lidarr.hostname}
+                  port={lidarr.port}
+                  profileName={lidarr.activeProfileName}
+                  isSSL={lidarr.useSsl}
+                  isLidarr={true}
+                  isDefault={lidarr.isDefault}
+                  externalUrl={lidarr.externalUrl}
+                  onEdit={() => setEditLidarrModal({ open: true, lidarr })}
+                  onDelete={() =>
+                    setDeleteServerModal({
+                      open: true,
+                      serverId: lidarr.id,
+                      type: 'lidarr',
+                    })
+                  }
+                />
+              ))}
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    onClick={() =>
+                      setEditLidarrModal({ open: true, lidarr: null })
+                    }
+                  >
+                    <PlusIcon />
+                    <span>{intl.formatMessage(messages.addlidarr)}</span>
+                  </Button>
+                </div>
+              </li>
+            </ul>
+          </>
+        )}
+      </div>
+      <div className="mb-6 mt-10">
+        <h3 className="heading">
+          {intl.formatMessage(messages.chaptarrsettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.chaptarrSettingsDescription)}
+        </p>
+      </div>
+      {editChaptarrModal.open && (
+        <ChaptarrModal
+          chaptarr={editChaptarrModal.chaptarr}
+          onClose={() => setEditChaptarrModal({ open: false, chaptarr: null })}
+          onSave={() => {
+            revalidateChaptarr();
+            mutate('/api/v1/settings/public');
+            setEditChaptarrModal({ open: false, chaptarr: null });
+          }}
+        />
+      )}
+      <div className="section">
+        {!chaptarrData && !chaptarrError && <LoadingSpinner />}
+        {chaptarrData && !chaptarrError && (
+          <>
+            {chaptarrData.length > 1 &&
+              !chaptarrData.some((chaptarr) => chaptarr.isDefault) && (
+                <Alert
+                  title={intl.formatMessage(messages.noDefaultServer, {
+                    serverType: 'Chaptarr',
+                    mediaType: intl.formatMessage(messages.mediaTypeBook),
+                  })}
+                />
+              )}
+            <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+              {chaptarrData.map((chaptarr) => (
+                <ServerInstance
+                  key={`chaptarr-config-${chaptarr.id}`}
+                  name={chaptarr.name}
+                  hostname={chaptarr.hostname}
+                  port={chaptarr.port}
+                  profileName={[
+                    chaptarr.activeProfileName,
+                    chaptarr.activeAudiobookProfileName,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')}
+                  isSSL={chaptarr.useSsl}
+                  isChaptarr
+                  isDefault={chaptarr.isDefault}
+                  externalUrl={chaptarr.externalUrl}
+                  onEdit={() => setEditChaptarrModal({ open: true, chaptarr })}
+                  onDelete={() =>
+                    setDeleteServerModal({
+                      open: true,
+                      serverId: chaptarr.id,
+                      type: 'chaptarr',
+                    })
+                  }
+                />
+              ))}
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    onClick={() =>
+                      setEditChaptarrModal({ open: true, chaptarr: null })
+                    }
+                  >
+                    <PlusIcon />
+                    <span>{intl.formatMessage(messages.addchaptarr)}</span>
+                  </Button>
+                </div>
+              </li>
+            </ul>
+          </>
+        )}
+        {showBookService && (
+          <div className="form-row mt-6 max-w-6xl">
+            <label htmlFor="bookService" className="text-label">
+              {intl.formatMessage(messages.bookService)}
+              <span className="label-tip">
+                {intl.formatMessage(messages.bookServiceTip)}
+              </span>
+            </label>
+            <div className="form-input-area">
+              <div className="form-input-field">
+                <select
+                  id="bookService"
+                  name="bookService"
+                  value={
+                    publicData?.bookService ??
+                    mainData?.bookService ??
+                    'chaptarr'
+                  }
+                  onChange={(e) =>
+                    saveBookService(e.target.value as BookService)
+                  }
+                >
+                  <option value="chaptarr">Chaptarr</option>
+                  <option value="lazylibrarian">LazyLibrarian</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="mb-6 mt-10">
+        <h3 className="heading">
+          {intl.formatMessage(messages.audiobookshelfsettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.audiobookshelfSettingsDescription)}
+        </p>
+      </div>
+      {editAudiobookshelfModal && audiobookshelfData && (
+        <AudiobookshelfModal
+          audiobookshelf={audiobookshelfData}
+          onClose={() => setEditAudiobookshelfModal(false)}
+          onSave={() => {
+            revalidateAudiobookshelf();
+            setEditAudiobookshelfModal(false);
+          }}
+        />
+      )}
+      <Transition
+        as={Fragment}
+        show={deleteAudiobookshelfModal}
+        enter="transition-opacity ease-in-out duration-300"
+        enterFrom="opacity-0"
+        enterTo="opacity-100"
+        leave="transition-opacity ease-in-out duration-300"
+        leaveFrom="opacity-100"
+        leaveTo="opacity-0"
+      >
+        <Modal
+          okText={intl.formatMessage(globalMessages.delete)}
+          okButtonType="danger"
+          onOk={() => deleteAudiobookshelf()}
+          onCancel={() => setDeleteAudiobookshelfModal(false)}
+          title={intl.formatMessage(messages.deleteaudiobookshelf)}
+        >
+          {intl.formatMessage(messages.deleteaudiobookshelfconfirm)}
+        </Modal>
+      </Transition>
+      <div className="section">
+        {!audiobookshelfData && !audiobookshelfError && <LoadingSpinner />}
+        {audiobookshelfData && !audiobookshelfError && (
+          <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+            {audiobookshelfData.url ? (
+              <ServerInstance
+                name="Audiobookshelf"
+                hostname=""
+                port={0}
+                url={audiobookshelfData.url}
+                profileName="-"
+                isSSL={audiobookshelfData.url.startsWith('https://')}
+                isAudiobookshelf
+                detail={{
+                  label: intl.formatMessage(messages.library),
+                  value:
+                    audiobookshelfData.libraryId ||
+                    intl.formatMessage(messages.homepage),
+                }}
+                onEdit={() => setEditAudiobookshelfModal(true)}
+                onDelete={() => setDeleteAudiobookshelfModal(true)}
+              />
+            ) : (
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    onClick={() => setEditAudiobookshelfModal(true)}
+                  >
+                    <PlusIcon />
+                    <span>
+                      {intl.formatMessage(messages.configureaudiobookshelf)}
+                    </span>
+                  </Button>
+                </div>
+              </li>
+            )}
+          </ul>
+        )}
+      </div>
+      <div className="mb-6 mt-10">
+        <h3 className="heading">
+          {intl.formatMessage(messages.lazylibrariansettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.lazylibrarianSettingsDescription)}
+        </p>
+      </div>
+      <Alert
+        type="warning"
+        title={intl.formatMessage(messages.lazylibrarianLimits)}
+      >
+        {intl.formatMessage(messages.lazylibrarianLimitsDetail)}
+      </Alert>
+      {editLazyLibrarianModal && lazyLibrarianData && (
+        <LazyLibrarianModal
+          lazyLibrarian={lazyLibrarianData}
+          onClose={() => setEditLazyLibrarianModal(false)}
+          onSave={() => {
+            revalidateLazyLibrarian();
+            mutate('/api/v1/settings/public');
+            setEditLazyLibrarianModal(false);
+          }}
+        />
+      )}
+      <Transition
+        as={Fragment}
+        show={deleteLazyLibrarianModal}
+        enter="transition-opacity ease-in-out duration-300"
+        enterFrom="opacity-0"
+        enterTo="opacity-100"
+        leave="transition-opacity ease-in-out duration-300"
+        leaveFrom="opacity-100"
+        leaveTo="opacity-0"
+      >
+        <Modal
+          okText={intl.formatMessage(globalMessages.delete)}
+          okButtonType="danger"
+          onOk={() => deleteLazyLibrarian()}
+          onCancel={() => setDeleteLazyLibrarianModal(false)}
+          title={intl.formatMessage(messages.deletelazylibrarian)}
+        >
+          {intl.formatMessage(messages.deletelazylibrarianconfirm)}
+        </Modal>
+      </Transition>
+      <div className="section">
+        {!lazyLibrarianData && !lazyLibrarianError && <LoadingSpinner />}
+        {lazyLibrarianData && !lazyLibrarianError && (
+          <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+            {isLazyLibrarianConfigured ? (
+              <ServerInstance
+                name="LazyLibrarian"
+                hostname={lazyLibrarianData.hostname ?? ''}
+                port={lazyLibrarianData.port ?? 5299}
+                profileName="-"
+                isSSL={lazyLibrarianData.useSsl}
+                isLazyLibrarian
+                externalUrl={lazyLibrarianData.externalUrl || undefined}
+                onEdit={() => setEditLazyLibrarianModal(true)}
+                onDelete={() => setDeleteLazyLibrarianModal(true)}
+              />
+            ) : (
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    onClick={() => setEditLazyLibrarianModal(true)}
+                  >
+                    <PlusIcon />
+                    <span>
+                      {intl.formatMessage(messages.configurelazylibrarian)}
+                    </span>
+                  </Button>
+                </div>
+              </li>
+            )}
+          </ul>
+        )}
+      </div>
+      <div className="mb-6 mt-10">
+        <h3 className="heading">
+          {intl.formatMessage(messages.bazarrsettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.bazarrSettingsDescription)}
+        </p>
+      </div>
+      {editBazarrModal && bazarrData && (
+        <BazarrModal
+          bazarr={bazarrData}
+          onClose={() => setEditBazarrModal(false)}
+          onSave={() => {
+            revalidateBazarr();
+            setEditBazarrModal(false);
+          }}
+        />
+      )}
+      <Transition
+        as={Fragment}
+        show={deleteBazarrModal}
+        enter="transition-opacity ease-in-out duration-300"
+        enterFrom="opacity-0"
+        enterTo="opacity-100"
+        leave="transition-opacity ease-in-out duration-300"
+        leaveFrom="opacity-100"
+        leaveTo="opacity-0"
+      >
+        <Modal
+          okText={intl.formatMessage(globalMessages.delete)}
+          okButtonType="danger"
+          onOk={() => deleteBazarr()}
+          onCancel={() => setDeleteBazarrModal(false)}
+          title={intl.formatMessage(messages.deletebazarr)}
+        >
+          {intl.formatMessage(messages.deletebazarrconfirm)}
+        </Modal>
+      </Transition>
+      <div className="section">
+        {!bazarrData && !bazarrError && <LoadingSpinner />}
+        {bazarrData && !bazarrError && (
+          <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+            {isBazarrConfigured ? (
+              <ServerInstance
+                name="Bazarr"
+                hostname={bazarrData.hostname ?? ''}
+                port={bazarrData.port ?? 6767}
+                profileName="-"
+                isSSL={bazarrData.useSsl}
+                isBazarr
+                externalUrl={bazarrData.externalUrl || undefined}
+                onEdit={() => setEditBazarrModal(true)}
+                onDelete={() => setDeleteBazarrModal(true)}
+              />
+            ) : (
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    onClick={() => setEditBazarrModal(true)}
+                  >
+                    <PlusIcon />
+                    <span>{intl.formatMessage(messages.configurebazarr)}</span>
+                  </Button>
+                </div>
+              </li>
+            )}
+          </ul>
+        )}
+      </div>
+      <div className="mb-6 mt-10">
+        <h3 className="heading">
           {intl.formatMessage(messages.overrideRules)}
         </h3>
         <p className="description">
@@ -516,6 +1149,7 @@ const SettingsServices = () => {
               rules={rules}
               radarrServices={radarrData}
               sonarrServices={sonarrData}
+              lidarrServices={lidarrData ?? []}
               setOverrideRuleModal={setOverrideRuleModal}
               revalidate={revalidate}
             />
@@ -524,7 +1158,11 @@ const SettingsServices = () => {
             <div className="flex h-full w-full items-center justify-center">
               <Button
                 buttonType="ghost"
-                disabled={!radarrData?.length && !sonarrData?.length}
+                disabled={
+                  !radarrData?.length &&
+                  !sonarrData?.length &&
+                  !lidarrData?.length
+                }
                 onClick={() =>
                   setOverrideRuleModal({
                     open: true,
@@ -551,6 +1189,7 @@ const SettingsServices = () => {
           }}
           radarrServices={radarrData}
           sonarrServices={sonarrData}
+          lidarrServices={lidarrData ?? []}
         />
       )}
     </>

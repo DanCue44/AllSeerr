@@ -10,12 +10,14 @@ import DiscoverSlider from '@server/entity/DiscoverSlider';
 import type { StatusResponse } from '@server/interfaces/api/settingsInterfaces';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { checkForUpdate } from '@server/lib/updateCheck';
 import logger from '@server/logger';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
 import deprecatedRoute from '@server/middleware/deprecation';
 import { mapProductionCompany } from '@server/models/Movie';
 import { mapNetwork } from '@server/models/Tv';
 import { mapWatchProviderDetails } from '@server/models/common';
+import brandingRoutes from '@server/routes/branding';
 import overrideRuleRoutes from '@server/routes/overrideRule';
 import settingsRoutes from '@server/routes/settings';
 import watchlistRoutes from '@server/routes/watchlist';
@@ -24,20 +26,35 @@ import {
   appDataPermissions,
   appDataStatus,
 } from '@server/utils/appDataVolume';
-import { getAppVersion, getCommitTag } from '@server/utils/appVersion';
+import {
+  getAppVersion,
+  getCommitTag,
+  isReleaseBuild,
+} from '@server/utils/appVersion';
 import restartFlag from '@server/utils/restartFlag';
 import { isPerson } from '@server/utils/typeHelpers';
 import { Router } from 'express';
+import arrActionRoutes from './arrActions';
+import artistRoutes from './artist';
 import authRoutes from './auth';
+import authorRoutes from './author';
 import blocklistRoutes from './blocklist';
+import bookRoutes from './book';
+import calendarRoutes from './calendar';
 import collectionRoutes from './collection';
+import coverArtRoutes from './coverart';
 import discoverRoutes, { createTmdbWithRegionLanguage } from './discover';
+import favoriteRoutes from './favorite';
 import issueRoutes from './issue';
 import issueCommentRoutes from './issueComment';
+import libraryRoutes from './library';
 import mediaRoutes from './media';
 import movieRoutes from './movie';
+import musicRoutes from './music';
 import personRoutes from './person';
+import removalRoutes from './removal';
 import requestRoutes from './request';
+import rolloverRoutes from './rollover';
 import searchRoutes from './search';
 import serviceRoutes from './service';
 import tvRoutes from './tv';
@@ -59,43 +76,17 @@ router.get<unknown, StatusResponse>('/status', async (req, res) => {
   let commitsBehind = 0;
 
   if (checkUpdate) {
-    const githubApi = new GithubAPI();
-
-    if (currentVersion.startsWith('develop-') && commitTag !== 'local') {
-      const commits = await githubApi.getSeerrCommits();
-
-      if (commits.length) {
-        const filteredCommits = commits.filter(
-          (commit) => !commit.commit.message.includes('[skip ci]')
-        );
-        if (filteredCommits[0].sha !== commitTag) {
-          updateAvailable = true;
-        }
-
-        const commitIndex = filteredCommits.findIndex(
-          (commit) => commit.sha === commitTag
-        );
-
-        if (updateAvailable) {
-          commitsBehind = commitIndex;
-        }
-      }
-    } else if (commitTag !== 'local') {
-      const releases = await githubApi.getSeerrReleases();
-
-      if (releases.length) {
-        const latestVersion = releases[0];
-
-        if (!latestVersion.name.includes(currentVersion)) {
-          updateAvailable = true;
-        }
-      }
-    }
+    ({ updateAvailable, commitsBehind } = await checkForUpdate(
+      currentVersion,
+      commitTag,
+      new GithubAPI()
+    ));
   }
 
   return res.status(200).json({
     version: getAppVersion(),
     commitTag: getCommitTag(),
+    releaseBuild: isReleaseBuild(),
     ...(checkUpdate && { updateAvailable, commitsBehind }),
     restartRequired: restartFlag.isSet(),
   });
@@ -110,6 +101,7 @@ router.get('/status/appdata', (_req, res) => {
 });
 
 router.use('/user', isAuthenticated(), user);
+router.use('/branding', brandingRoutes);
 router.get('/settings/public', async (req, res) => {
   const settings = getSettings();
 
@@ -157,8 +149,16 @@ router.use('/settings', isAuthenticated(Permission.ADMIN), settingsRoutes);
 router.use('/search', isAuthenticated(), searchRoutes);
 router.use('/discover', isAuthenticated(), discoverRoutes);
 router.use('/request', isAuthenticated(), requestRoutes);
+router.use('/removal', isAuthenticated(), removalRoutes);
+router.use(
+  '/rollover',
+  isAuthenticated(Permission.MANAGE_REQUESTS),
+  rolloverRoutes
+);
 router.use('/watchlist', isAuthenticated(), watchlistRoutes);
+router.use('/favorite', isAuthenticated(), favoriteRoutes);
 router.use('/blocklist', isAuthenticated(), blocklistRoutes);
+router.use('/calendar', isAuthenticated(), calendarRoutes);
 router.use(
   '/blacklist',
   isAuthenticated(),
@@ -171,7 +171,14 @@ router.use(
 );
 router.use('/movie', isAuthenticated(), movieRoutes);
 router.use('/tv', isAuthenticated(), tvRoutes);
+router.use('/music', isAuthenticated(), musicRoutes);
+router.use('/artist', isAuthenticated(), artistRoutes);
+router.use('/coverart', isAuthenticated(), coverArtRoutes);
+router.use('/book', isAuthenticated(), bookRoutes);
+router.use('/author', isAuthenticated(), authorRoutes);
+router.use('/media/:mediaId/arr', isAuthenticated(), arrActionRoutes);
 router.use('/media', isAuthenticated(), mediaRoutes);
+router.use('/library', isAuthenticated(), libraryRoutes);
 router.use('/person', isAuthenticated(), personRoutes);
 router.use('/collection', isAuthenticated(), collectionRoutes);
 router.use('/service', isAuthenticated(), serviceRoutes);

@@ -6,6 +6,8 @@ import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
 import { DocumentTextIcon } from '@heroicons/react/24/outline';
+import { ALLSEERR_REPO } from '@server/constants/repository';
+import { isSameAllSeerrVersion } from '@server/utils/allseerrVersion';
 import dynamic from 'next/dynamic';
 import { Fragment, useState } from 'react';
 import { FormattedRelativeTime, useIntl } from 'react-intl';
@@ -21,6 +23,7 @@ const ReactMarkdown = dynamic<any>(() => import('react-markdown'), {
 const messages = defineMessages('components.Settings.SettingsAbout.Releases', {
   releases: 'Releases',
   releasedataMissing: 'Release data is currently unavailable.',
+  noreleases: 'No AllSeerr releases have been published yet.',
   versionChangelog: '{version} Changelog',
   viewongithub: 'View on GitHub',
   latestversion: 'Latest',
@@ -28,8 +31,7 @@ const messages = defineMessages('components.Settings.SettingsAbout.Releases', {
   viewchangelog: 'View Changelog',
 });
 
-const REPO_RELEASE_API =
-  'https://api.github.com/repos/seerr-team/seerr/releases?per_page=20';
+const REPO_RELEASE_API = `https://api.github.com/repos/${ALLSEERR_REPO}/releases?per_page=20`;
 
 interface GitHubRelease {
   url: string;
@@ -106,7 +108,7 @@ const Release = ({ currentVersion, release, isLatest }: ReleaseProps) => {
             {intl.formatMessage(messages.latestversion)}
           </Badge>
         )}
-        {release.name.includes(currentVersion) && (
+        {isSameAllSeerrVersion(release.tag_name, currentVersion) && (
           <Badge badgeType="primary">
             {intl.formatMessage(messages.currentversion)}
           </Badge>
@@ -140,17 +142,25 @@ const Releases = ({ currentVersion }: ReleasesProps) => {
     );
   }
 
+  // Matches the update check, which ignores drafts and prereleases
+  const latest = data.find((release) => !release.draft && !release.prerelease);
+
   return (
     <div>
       <h3 className="heading">{intl.formatMessage(messages.releases)}</h3>
       <div className="section space-y-3">
-        {data.map((release, index) => {
+        {data.length === 0 && (
+          <div className="text-gray-300">
+            {intl.formatMessage(messages.noreleases)}
+          </div>
+        )}
+        {data.map((release) => {
           return (
             <div key={`release-${release.id}`}>
               <Release
                 release={release}
                 currentVersion={currentVersion}
-                isLatest={index === 0}
+                isLatest={release.id === latest?.id}
               />
             </div>
           );

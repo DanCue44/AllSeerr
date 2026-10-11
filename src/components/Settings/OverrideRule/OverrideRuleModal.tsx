@@ -12,7 +12,11 @@ import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
 import type OverrideRule from '@server/entity/OverrideRule';
-import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
+import type {
+  LidarrSettings,
+  RadarrSettings,
+  SonarrSettings,
+} from '@server/lib/settings';
 import axios from 'axios';
 import { Field, Formik } from 'formik';
 import { useCallback, useEffect, useState } from 'react';
@@ -43,6 +47,11 @@ const messages = defineMessages('components.Settings.OverrideRuleModal', {
   tags: 'Tags',
   notagoptions: 'No tags.',
   selecttags: 'Select tags',
+  autoApprove: 'Auto-Approve',
+  autoApproveTip:
+    'Approve matching requests even if the user lacks the auto-approve permission',
+  maxSeasons: 'Maximum Seasons',
+  maxSeasonsTip: 'Only auto-approve requests for up to this many seasons',
   ruleCreated: 'Override rule created successfully!',
   ruleUpdated: 'Override rule updated successfully!',
 });
@@ -57,6 +66,7 @@ interface OverrideRuleModalProps {
   onClose: () => void;
   radarrServices: RadarrSettings[];
   sonarrServices: SonarrSettings[];
+  lidarrServices?: LidarrSettings[];
 }
 
 const OverrideRuleModal = ({
@@ -64,6 +74,7 @@ const OverrideRuleModal = ({
   rule,
   radarrServices,
   sonarrServices,
+  lidarrServices = [],
 }: OverrideRuleModalProps) => {
   const intl = useIntl();
   const { addToast } = useToasts();
@@ -91,7 +102,7 @@ const OverrideRuleModal = ({
         baseUrl?: string;
         useSsl?: boolean;
       },
-      type: 'radarr' | 'sonarr'
+      type: 'radarr' | 'sonarr' | 'lidarr'
     ) => {
       setIsTesting(true);
       try {
@@ -127,12 +138,19 @@ const OverrideRuleModal = ({
       (s) => s.id === rule?.sonarrServiceId
     );
     if (sonarrMatch) getServiceInfos(sonarrMatch, 'sonarr');
+
+    const lidarrMatch = lidarrServices.find(
+      (s) => s.id === rule?.lidarrServiceId
+    );
+    if (lidarrMatch) getServiceInfos(lidarrMatch, 'lidarr');
   }, [
     getServiceInfos,
     radarrServices,
     rule?.radarrServiceId,
     rule?.sonarrServiceId,
+    rule?.lidarrServiceId,
     sonarrServices,
+    lidarrServices,
   ]);
 
   return (
@@ -151,6 +169,7 @@ const OverrideRuleModal = ({
         initialValues={{
           radarrServiceId: rule?.radarrServiceId,
           sonarrServiceId: rule?.sonarrServiceId,
+          lidarrServiceId: rule?.lidarrServiceId,
           users: rule?.users,
           genre: rule?.genre,
           language: rule?.language,
@@ -158,6 +177,8 @@ const OverrideRuleModal = ({
           profileId: rule?.profileId,
           rootFolder: rule?.rootFolder,
           tags: rule?.tags,
+          autoApprove: rule?.autoApprove ?? false,
+          maxSeasons: rule?.maxSeasons ?? '',
         }}
         onSubmit={async (values) => {
           try {
@@ -171,6 +192,13 @@ const OverrideRuleModal = ({
               tags: values.tags || null,
               radarrServiceId: values.radarrServiceId,
               sonarrServiceId: values.sonarrServiceId,
+              lidarrServiceId: values.lidarrServiceId,
+              autoApprove: values.autoApprove,
+              // The season limit only applies to series requests
+              maxSeasons:
+                values.autoApprove && values.sonarrServiceId != null
+                  ? Number(values.maxSeasons) || null
+                  : null,
             };
             if (!rule) {
               await axios.post('/api/v1/overrideRule', submission);
@@ -218,7 +246,10 @@ const OverrideRuleModal = ({
                   !values.genre &&
                   !values.language &&
                   !values.keywords) ||
-                (!values.rootFolder && !values.profileId && !values.tags)
+                (!values.rootFolder &&
+                  !values.profileId &&
+                  !values.tags &&
+                  !values.autoApprove)
               }
               onOk={() => handleSubmit()}
               title={
@@ -244,12 +275,15 @@ const OverrideRuleModal = ({
                         id="service"
                         name="service"
                         defaultValue={
-                          values.radarrServiceId !== null
+                          values.radarrServiceId != null
                             ? `radarr-${values.radarrServiceId}`
-                            : `sonarr-${values.sonarrServiceId}`
+                            : values.lidarrServiceId != null
+                              ? `lidarr-${values.lidarrServiceId}`
+                              : `sonarr-${values.sonarrServiceId}`
                         }
                         onChange={(e) => {
                           const id = Number(e.target.value.split('-')[1]);
+                          setFieldValue('lidarrServiceId', null);
                           if (e.target.value.startsWith('radarr-')) {
                             setFieldValue('radarrServiceId', id);
                             setFieldValue('sonarrServiceId', null);
@@ -267,6 +301,20 @@ const OverrideRuleModal = ({
                             );
                             if (match) {
                               getServiceInfos(match, 'sonarr');
+                            }
+                          } else if (e.target.value.startsWith('lidarr-')) {
+                            setFieldValue('radarrServiceId', null);
+                            setFieldValue('sonarrServiceId', null);
+                            setFieldValue('lidarrServiceId', id);
+                            // Music has no TMDB genres, languages or keywords
+                            setFieldValue('genre', null);
+                            setFieldValue('language', null);
+                            setFieldValue('keywords', null);
+                            const match = lidarrServices.find(
+                              (s) => s.id === id
+                            );
+                            if (match) {
+                              getServiceInfos(match, 'lidarr');
                             }
                           } else {
                             setFieldValue('radarrServiceId', null);
@@ -292,6 +340,14 @@ const OverrideRuleModal = ({
                             value={`sonarr-${sonarr.id}`}
                           >
                             {sonarr.name}
+                          </option>
+                        ))}
+                        {lidarrServices.map((lidarr) => (
+                          <option
+                            key={`lidarr-${lidarr.id}`}
+                            value={`lidarr-${lidarr.id}`}
+                          >
+                            {lidarr.name}
                           </option>
                         ))}
                       </select>
@@ -334,85 +390,89 @@ const OverrideRuleModal = ({
                       )}
                   </div>
                 </div>
-                <div className="form-row">
-                  <label htmlFor="genre" className="text-label">
-                    {intl.formatMessage(messages.genres)}
-                  </label>
-                  <div className="form-input-area">
-                    <div className="form-input-field">
-                      <GenreSelector
-                        type={
-                          values.radarrServiceId != null
-                            ? 'movie'
-                            : values.sonarrServiceId != null
-                              ? 'tv'
-                              : 'tv'
-                        }
-                        defaultValue={values.genre}
-                        isMulti
-                        isDisabled={!isValidated || isTesting}
-                        onChange={(genres) => {
-                          setFieldValue(
-                            'genre',
-                            genres?.map((v) => v.value).join(',')
-                          );
-                        }}
-                      />
+                {values.lidarrServiceId == null && (
+                  <>
+                    <div className="form-row">
+                      <label htmlFor="genre" className="text-label">
+                        {intl.formatMessage(messages.genres)}
+                      </label>
+                      <div className="form-input-area">
+                        <div className="form-input-field">
+                          <GenreSelector
+                            type={
+                              values.radarrServiceId != null
+                                ? 'movie'
+                                : values.sonarrServiceId != null
+                                  ? 'tv'
+                                  : 'tv'
+                            }
+                            defaultValue={values.genre}
+                            isMulti
+                            isDisabled={!isValidated || isTesting}
+                            onChange={(genres) => {
+                              setFieldValue(
+                                'genre',
+                                genres?.map((v) => v.value).join(',')
+                              );
+                            }}
+                          />
+                        </div>
+                        {errors.genre &&
+                          touched.genre &&
+                          typeof errors.genre === 'string' && (
+                            <div className="error">{errors.genre}</div>
+                          )}
+                      </div>
                     </div>
-                    {errors.genre &&
-                      touched.genre &&
-                      typeof errors.genre === 'string' && (
-                        <div className="error">{errors.genre}</div>
-                      )}
-                  </div>
-                </div>
-                <div className="form-row">
-                  <label htmlFor="language" className="text-label">
-                    {intl.formatMessage(messages.languages)}
-                  </label>
-                  <div className="form-input-area">
-                    <div className="form-input-field">
-                      <LanguageSelector
-                        value={values.language}
-                        serverValue={currentSettings.originalLanguage}
-                        setFieldValue={(_key, value) => {
-                          setFieldValue('language', value);
-                        }}
-                        isDisabled={!isValidated || isTesting}
-                      />
+                    <div className="form-row">
+                      <label htmlFor="language" className="text-label">
+                        {intl.formatMessage(messages.languages)}
+                      </label>
+                      <div className="form-input-area">
+                        <div className="form-input-field">
+                          <LanguageSelector
+                            value={values.language}
+                            serverValue={currentSettings.originalLanguage}
+                            setFieldValue={(_key, value) => {
+                              setFieldValue('language', value);
+                            }}
+                            isDisabled={!isValidated || isTesting}
+                          />
+                        </div>
+                        {errors.language &&
+                          touched.language &&
+                          typeof errors.language === 'string' && (
+                            <div className="error">{errors.language}</div>
+                          )}
+                      </div>
                     </div>
-                    {errors.language &&
-                      touched.language &&
-                      typeof errors.language === 'string' && (
-                        <div className="error">{errors.language}</div>
-                      )}
-                  </div>
-                </div>
-                <div className="form-row">
-                  <label htmlFor="keywords" className="text-label">
-                    {intl.formatMessage(messages.keywords)}
-                  </label>
-                  <div className="form-input-area">
-                    <div className="form-input-field">
-                      <KeywordSelector
-                        defaultValue={values.keywords}
-                        isMulti
-                        isDisabled={!isValidated || isTesting}
-                        onChange={(value) => {
-                          setFieldValue(
-                            'keywords',
-                            value?.map((v) => v.value).join(',')
-                          );
-                        }}
-                      />
+                    <div className="form-row">
+                      <label htmlFor="keywords" className="text-label">
+                        {intl.formatMessage(messages.keywords)}
+                      </label>
+                      <div className="form-input-area">
+                        <div className="form-input-field">
+                          <KeywordSelector
+                            defaultValue={values.keywords}
+                            isMulti
+                            isDisabled={!isValidated || isTesting}
+                            onChange={(value) => {
+                              setFieldValue(
+                                'keywords',
+                                value?.map((v) => v.value).join(',')
+                              );
+                            }}
+                          />
+                        </div>
+                        {errors.keywords &&
+                          touched.keywords &&
+                          typeof errors.keywords === 'string' && (
+                            <div className="error">{errors.keywords}</div>
+                          )}
+                      </div>
                     </div>
-                    {errors.keywords &&
-                      touched.keywords &&
-                      typeof errors.keywords === 'string' && (
-                        <div className="error">{errors.keywords}</div>
-                      )}
-                  </div>
-                </div>
+                  </>
+                )}
                 <h3 className="mt-4 text-lg font-bold leading-8 text-gray-100">
                   {intl.formatMessage(messages.settings)}
                 </h3>
@@ -533,6 +593,42 @@ const OverrideRuleModal = ({
                     />
                   </div>
                 </div>
+                <div className="form-row">
+                  <label htmlFor="autoApprove" className="checkbox-label">
+                    {intl.formatMessage(messages.autoApprove)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.autoApproveTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <Field
+                      type="checkbox"
+                      id="autoApprove"
+                      name="autoApprove"
+                      disabled={!isValidated || isTesting}
+                    />
+                  </div>
+                </div>
+                {values.autoApprove && values.sonarrServiceId != null && (
+                  <div className="form-row">
+                    <label htmlFor="maxSeasons" className="text-label">
+                      {intl.formatMessage(messages.maxSeasons)}
+                      <span className="label-tip">
+                        {intl.formatMessage(messages.maxSeasonsTip)}
+                      </span>
+                    </label>
+                    <div className="form-input-area">
+                      <Field
+                        type="text"
+                        inputMode="numeric"
+                        id="maxSeasons"
+                        name="maxSeasons"
+                        className="short"
+                        disabled={!isValidated || isTesting}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </Modal>
           );

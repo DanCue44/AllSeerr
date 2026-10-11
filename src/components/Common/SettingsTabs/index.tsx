@@ -1,3 +1,4 @@
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { useUser } from '@app/hooks/useUser';
 import type { Permission } from '@server/lib/permissions';
 import { hasPermission } from '@server/lib/permissions';
@@ -67,6 +68,57 @@ const SettingsLink = ({
   );
 };
 
+/**
+ * Ambient tabs: one row of pills that scrolls sideways on phones instead of
+ * turning into a select. Main tabs light up in ink, nested (button) tabs in
+ * the accent.
+ */
+const AmbientSettingsTabs = ({
+  tabType,
+  routes,
+  currentPath,
+}: {
+  tabType: 'default' | 'button';
+  routes: SettingsRoute[];
+  currentPath: string;
+}) => {
+  const activeClass =
+    tabType === 'button'
+      ? 'border-transparent bg-as-accent text-as-ground'
+      : 'border-transparent bg-as-ink text-as-ground';
+
+  return (
+    <div className="hide-scrollbar -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+      <nav
+        className="flex w-max gap-2 py-0.5"
+        aria-label="Tabs"
+        data-testid={tabType === 'default' ? 'settings-nav-desktop' : undefined}
+      >
+        {routes.map((route, index) => {
+          const isActive = !!currentPath.match(route.regex);
+
+          return (
+            <Link
+              key={`ambient-settings-link-${index}`}
+              href={route.route}
+              className={`inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold transition [&_svg]:h-4 [&_svg]:w-4 ${
+                isActive
+                  ? activeClass
+                  : 'border-as-line bg-as-raised text-as-ink-soft hover:border-as-line-strong hover:text-as-ink'
+              }`}
+              aria-current={isActive ? 'page' : undefined}
+            >
+              {tabType === 'button'
+                ? (route.content ?? route.text)
+                : route.text}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
+  );
+};
+
 const SettingsTabs = ({
   tabType = 'default',
   settingsRoutes,
@@ -76,6 +128,31 @@ const SettingsTabs = ({
 }) => {
   const router = useRouter();
   const { user: currentUser } = useUser();
+  const [interfaceStyle] = useInterfaceStyle();
+
+  if (interfaceStyle === 'ambient') {
+    // Same routes each classic variant shows: button tabs only drop hidden
+    // routes, default tabs also check permissions
+    const routes = settingsRoutes.filter(
+      (route) =>
+        !route.hidden &&
+        (tabType === 'button' ||
+          !route.requiredPermission ||
+          hasPermission(
+            route.requiredPermission,
+            currentUser?.permissions ?? 0,
+            route.permissionType
+          ))
+    );
+
+    return (
+      <AmbientSettingsTabs
+        tabType={tabType}
+        routes={routes}
+        currentPath={router.pathname}
+      />
+    );
+  }
 
   return (
     <>

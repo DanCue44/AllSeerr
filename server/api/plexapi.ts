@@ -1,9 +1,14 @@
 import ExternalAPI from '@server/api/externalapi';
 import { ApiErrorCode } from '@server/constants/error';
+import type { PlexProbe } from '@server/lib/plexConnection';
+import { plexAddressUrl } from '@server/lib/plexConnection';
+import type { LibraryReconcileResult } from '@server/lib/plexLibraries';
+import { reconcileLibraries } from '@server/lib/plexLibraries';
 import type { Library, PlexSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { ApiError } from '@server/types/error';
+import { requestErrorLogFields } from '@server/utils/requestError';
 
 interface PlexStatusResponse {
   MediaContainer: {
@@ -25,7 +30,7 @@ export interface PlexLibraryItem {
   Guid?: {
     id: string;
   }[];
-  type: 'movie' | 'show' | 'season' | 'episode';
+  type: 'movie' | 'show' | 'season' | 'episode' | 'artist' | 'album';
   Media: Media[];
 }
 
@@ -37,7 +42,7 @@ interface PlexLibraryResponse {
 }
 
 export interface PlexLibrary {
-  type: 'show' | 'movie';
+  type: 'show' | 'movie' | 'artist';
   key: string;
   title: string;
   agent: string;
@@ -106,8 +111,11 @@ class PlexAPI extends ExternalAPI {
     const settings = getSettings();
     const settingsPlex = plexSettings ?? settings.plex;
 
-    const protocol = settingsPlex.useSsl ? 'https' : 'http';
-    const baseUrl = `${protocol}://${settingsPlex.ip}:${settingsPlex.port}`;
+    const baseUrl = plexAddressUrl({
+      ip: settingsPlex.ip,
+      port: settingsPlex.port,
+      useSsl: !!settingsPlex.useSsl,
+    });
 
     super(
       baseUrl,
@@ -135,38 +143,46 @@ class PlexAPI extends ExternalAPI {
     return response.MediaContainer.Directory;
   }
 
-  public async syncLibraries(): Promise<void> {
+  /**
+   * Reloads the library list from Plex. Enabled libraries follow their name
+   * when Plex has renumbered its sections (see reconcileLibraries).
+   */
+  public async syncLibraries({
+    keepBroken = false,
+  }: { keepBroken?: boolean } = {}): Promise<LibraryReconcileResult> {
     const settings = getSettings();
+    let result: LibraryReconcileResult;
 
     try {
       const libraries = await this.getLibraries();
 
-      const newLibraries: Library[] = libraries
-        // Remove libraries that are not movie or show
+      const plexLibraries = libraries
+        // Remove libraries that are not movie, show or music
         .filter(
-          (library) => library.type === 'movie' || library.type === 'show'
+          (library) =>
+            library.type === 'movie' ||
+            library.type === 'show' ||
+            library.type === 'artist'
         )
         // Remove libraries that do not have a metadata agent set (usually personal video libraries)
         .filter((library) => library.agent !== 'com.plexapp.agents.none')
-        .map((library) => {
-          const existing = settings.plex.libraries.find(
-            (l) => l.id === library.key
-          );
-
-          return {
+        .map(
+          (library): Pick<Library, 'id' | 'name' | 'type'> => ({
             id: library.key,
             name: library.title,
-            enabled: existing?.enabled ?? false,
-            type: library.type,
-            lastScan: existing?.lastScan,
-          };
-        });
+            type: library.type === 'artist' ? 'music' : library.type,
+          })
+        );
 
-      settings.plex.libraries = newLibraries;
+      result = reconcileLibraries(settings.plex.libraries, plexLibraries, {
+        keepBroken,
+      });
+
+      settings.plex.libraries = result.libraries;
     } catch (e) {
       logger.error('Failed to fetch Plex libraries', {
         label: 'Plex API',
-        message: e.message,
+        ...requestErrorLogFields(e, { service: 'Plex' }),
       });
 
       if (!e.response) {
@@ -176,15 +192,36 @@ class PlexAPI extends ExternalAPI {
       throw new ApiError(e.response.status, ApiErrorCode.Unknown);
     }
 
+    result.remapped.forEach(({ from, to, match }) => {
+      logger.info(
+        `Plex library "${from.name}" moved from id ${from.id} to "${to.name}" (id ${to.id})`,
+        { label: 'Plex API', match }
+      );
+    });
+
+    result.broken.forEach((library) => {
+      logger.warn(
+        `Enabled Plex library "${library.name}" (id ${library.id}) was not found in Plex and has no clear match. Choose it again in the Plex settings.`,
+        { label: 'Plex API' }
+      );
+    });
+
     await settings.save();
+
+    return result;
   }
 
   public async getLibraryContents(
     id: string,
-    { offset = 0, size = 50 }: { offset?: number; size?: number } = {}
+    {
+      offset = 0,
+      size = 50,
+      type,
+    }: { offset?: number; size?: number; type?: 'album' } = {}
   ): Promise<{ totalSize: number; items: PlexLibraryItem[] }> {
+    // Music libraries list artists by default, albums are asked for by type
     const response = await this.get<PlexLibraryResponse>(
-      `/library/sections/${id}/all?includeGuids=1`,
+      `/library/sections/${id}/all?includeGuids=1${type === 'album' ? '&type=9' : ''}`,
       {
         headers: {
           'X-Plex-Container-Start': `${offset}`,
@@ -225,12 +262,15 @@ class PlexAPI extends ExternalAPI {
     options: { addedAt: number } = {
       addedAt: Date.now() - 1000 * 60 * 60,
     },
-    mediaType: 'movie' | 'show'
+    mediaType: 'movie' | 'show' | 'music'
   ): Promise<PlexLibraryItem[]> {
+    // Music is queried as albums, whose guids hold the MusicBrainz id
+    const typeCode =
+      mediaType === 'show' ? '4' : mediaType === 'music' ? '9' : '1';
     const response = await this.get<PlexLibraryResponse>(
-      `/library/sections/${id}/all?type=${mediaType === 'show' ? '4' : '1'}${
+      `/library/sections/${id}/all?type=${typeCode}${
         // Shows are queried as episodes, whose guids the scanner never reads.
-        mediaType === 'movie' ? '&includeGuids=1' : ''
+        mediaType !== 'show' ? '&includeGuids=1' : ''
       }&sort=addedAt%3Adesc&addedAt>>=${Math.floor(options.addedAt / 1000)}`,
       {
         headers: {
@@ -243,5 +283,32 @@ class PlexAPI extends ExternalAPI {
     return response.MediaContainer.Metadata;
   }
 }
+
+/**
+ * Asks a Plex address who it is, for testing a connection before it is
+ * saved
+ */
+export const plexStatusProbe =
+  (plexToken?: string | null): PlexProbe =>
+  async (address, { timeout }) => {
+    const settings = getSettings();
+    const client = new PlexAPI({
+      plexToken,
+      plexSettings: { ...settings.plex, ...address },
+      timeout,
+    });
+    const status = await client.getStatus();
+
+    if (!status?.MediaContainer?.machineIdentifier) {
+      throw new Error(
+        `${plexAddressUrl(address)} answered, but it is not a Plex server`
+      );
+    }
+
+    return {
+      machineId: status.MediaContainer.machineIdentifier,
+      name: status.MediaContainer.friendlyName,
+    };
+  };
 
 export default PlexAPI;

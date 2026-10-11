@@ -1,3 +1,4 @@
+import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
 import {
@@ -42,6 +43,8 @@ const RegionSelector = ({
 }: RegionSelectorProps) => {
   const { currentSettings } = useSettings();
   const intl = useIntl();
+  const [interfaceStyle] = useInterfaceStyle();
+  const ambient = interfaceStyle === 'ambient';
   const { data: regions } = useSWR<Region[]>(
     watchProviders ? '/api/v1/watchproviders/regions' : '/api/v1/regions'
   );
@@ -100,7 +103,13 @@ const RegionSelector = ({
         {({ open }) => (
           <div className="relative">
             <span className="inline-block w-full rounded-md shadow-sm">
-              <ListboxButton className="focus:shadow-outline-blue relative flex w-full cursor-default items-center rounded-md border border-gray-500 bg-gray-700 py-2 pl-3 pr-10 text-left text-white transition duration-150 ease-in-out focus:border-blue-300 focus:outline-none sm:text-sm sm:leading-5">
+              <ListboxButton
+                className={
+                  ambient
+                    ? 'relative flex w-full cursor-default items-center rounded-full border border-as-line bg-as-tile py-2 pl-4 pr-10 text-left text-as-ink transition duration-150 ease-in-out focus:border-as-accent focus:outline-none sm:text-sm sm:leading-5'
+                    : 'focus:shadow-outline-blue relative flex w-full cursor-default items-center rounded-md border border-gray-500 bg-gray-700 py-2 pl-3 pr-10 text-left text-white transition duration-150 ease-in-out focus:border-blue-300 focus:outline-none sm:text-sm sm:leading-5'
+                }
+              >
                 {((selectedRegion &&
                   countries.includes(selectedRegion?.iso_3166_1)) ||
                   (isUserSetting &&
@@ -138,7 +147,11 @@ const RegionSelector = ({
               leave="transition-opacity ease-in duration-100"
               leaveFrom="opacity-100"
               leaveTo="opacity-0"
-              className="absolute z-50 mt-1 w-full rounded-md bg-gray-800 shadow-lg"
+              className={
+                ambient
+                  ? 'absolute z-50 mt-1 w-full overflow-hidden rounded-2xl bg-as-raised shadow-lg ring-1 ring-as-line-strong'
+                  : 'absolute z-50 mt-1 w-full rounded-md bg-gray-800 shadow-lg'
+              }
             >
               <ListboxOptions
                 static

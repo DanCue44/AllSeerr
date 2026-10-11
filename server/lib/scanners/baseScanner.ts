@@ -1,3 +1,4 @@
+import MusicBrainz from '@server/api/musicbrainz';
 import TheMovieDb from '@server/api/themoviedb';
 import {
   MediaRequestStatus,
@@ -8,9 +9,19 @@ import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import MediaRequest from '@server/entity/MediaRequest';
 import Season from '@server/entity/Season';
+import type { NewSeasonEpisodes } from '@server/lib/episodeNotifications';
+import {
+  getEpisodesToNotify,
+  mergeEpisodeNumbers,
+  notifyNewEpisodes,
+} from '@server/lib/episodeNotifications';
+import type { ScanService } from '@server/lib/scanners/scanHealth';
+import scanHealth, { scanServiceName } from '@server/lib/scanners/scanHealth';
+import type { JobId } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import AsyncLock from '@server/utils/asyncLock';
+import { describeRequestError } from '@server/utils/requestError';
 import { randomUUID } from 'crypto';
 
 // Default scan rates (can be overidden)
@@ -56,7 +67,15 @@ export interface ProcessableSeason {
   episodes4k: number;
   is4kOverride?: boolean;
   processing?: boolean;
+  // Episode numbers present on the media server. Only media server
+  // scanners know these, and they are used to detect new episodes.
+  episodeNumbers?: number[];
+  episodeNumbers4k?: number[];
 }
+
+// Thrown when a scan is cancelled or replaced by a newer run. It ends the
+// scan without counting as a failure.
+export class ScanAbortedError extends Error {}
 
 class BaseScanner<T> {
   private bundleSize;
@@ -69,6 +88,9 @@ class BaseScanner<T> {
   protected enable4kShow = false;
   protected sessionId: string;
   protected running = false;
+  // The scheduled job and service this scanner reports its health under
+  private healthJobId?: JobId;
+  private healthService?: ScanService;
   // Only the *arr scanners know whether a title is still being pursued.
   protected declineRequestsOnStatusReset = false;
   private statusResetCandidates = new Map<
@@ -77,18 +99,25 @@ class BaseScanner<T> {
   >();
   readonly asyncLock = new AsyncLock();
   readonly tmdb = new TheMovieDb();
+  readonly musicbrainz = new MusicBrainz();
 
   protected constructor(
     scannerName: string,
     {
       updateRate,
       bundleSize,
+      jobId,
+      service,
     }: {
       updateRate?: number;
       bundleSize?: number;
+      jobId?: JobId;
+      service?: ScanService;
     } = {}
   ) {
     this.scannerName = scannerName;
+    this.healthJobId = jobId;
+    this.healthService = service;
     this.bundleSize = bundleSize ?? BUNDLE_SIZE;
     this.updateRate = updateRate ?? UPDATE_RATE;
   }
@@ -309,6 +338,8 @@ class BaseScanner<T> {
       const media = await this.getExisting(tmdbId, MediaType.TV);
 
       const newSeasons: Season[] = [];
+      const newEpisodes: NewSeasonEpisodes[] = [];
+      const newEpisodes4k: NewSeasonEpisodes[] = [];
 
       const currentStandardSeasonsAvailable = (
         media?.seasons.filter(
@@ -328,7 +359,13 @@ class BaseScanner<T> {
         const season =
           rawSeason.totalEpisodes > 0
             ? rawSeason
-            : { ...rawSeason, episodes: 0, episodes4k: 0 };
+            : {
+                ...rawSeason,
+                episodes: 0,
+                episodes4k: 0,
+                episodeNumbers: undefined,
+                episodeNumbers4k: undefined,
+              };
 
         const existingSeason = media?.seasons.find(
           (es) => es.seasonNumber === season.seasonNumber
@@ -366,6 +403,9 @@ class BaseScanner<T> {
         }
 
         if (existingSeason) {
+          const previousStatus = existingSeason.status;
+          const previousStatus4k = existingSeason.status4k;
+
           // Here we update seasons if they already exist.
           // If the season is already marked as available, we
           // force it to stay available (to avoid competing scanners)
@@ -405,30 +445,107 @@ class BaseScanner<T> {
                       existingSeason.status4k === MediaStatus.PROCESSING
                     ? MediaStatus.UNKNOWN
                     : existingSeason.status4k;
+
+          // Compare with the episodes seen on earlier scans so requesters
+          // can be told about new episodes of seasons that are still airing.
+          // Known episodes are kept, as a show can be split across libraries.
+          if (season.episodeNumbers) {
+            const episodes = getEpisodesToNotify(
+              existingSeason.availableEpisodes,
+              season.episodeNumbers,
+              previousStatus,
+              existingSeason.status
+            );
+
+            if (episodes.length) {
+              newEpisodes.push({ seasonNumber: season.seasonNumber, episodes });
+            }
+
+            existingSeason.availableEpisodes = mergeEpisodeNumbers(
+              existingSeason.availableEpisodes,
+              season.episodeNumbers
+            );
+          }
+
+          if (this.enable4kShow && season.episodeNumbers4k) {
+            const episodes = getEpisodesToNotify(
+              existingSeason.availableEpisodes4k,
+              season.episodeNumbers4k,
+              previousStatus4k,
+              existingSeason.status4k
+            );
+
+            if (episodes.length) {
+              newEpisodes4k.push({
+                seasonNumber: season.seasonNumber,
+                episodes,
+              });
+            }
+
+            existingSeason.availableEpisodes4k = mergeEpisodeNumbers(
+              existingSeason.availableEpisodes4k,
+              season.episodeNumbers4k
+            );
+          }
         } else {
-          newSeasons.push(
-            new Season({
-              seasonNumber: season.seasonNumber,
-              status:
-                season.totalEpisodes === season.episodes && season.episodes > 0
-                  ? MediaStatus.AVAILABLE
-                  : season.episodes > 0
-                    ? MediaStatus.PARTIALLY_AVAILABLE
-                    : !season.is4kOverride && season.processing
-                      ? MediaStatus.PROCESSING
-                      : MediaStatus.UNKNOWN,
-              status4k:
-                this.enable4kShow &&
-                season.totalEpisodes === season.episodes4k &&
-                season.episodes4k > 0
-                  ? MediaStatus.AVAILABLE
-                  : this.enable4kShow && season.episodes4k > 0
-                    ? MediaStatus.PARTIALLY_AVAILABLE
-                    : season.is4kOverride && season.processing
-                      ? MediaStatus.PROCESSING
-                      : MediaStatus.UNKNOWN,
-            })
-          );
+          const newSeason = new Season({
+            seasonNumber: season.seasonNumber,
+            status:
+              season.totalEpisodes === season.episodes && season.episodes > 0
+                ? MediaStatus.AVAILABLE
+                : season.episodes > 0
+                  ? MediaStatus.PARTIALLY_AVAILABLE
+                  : !season.is4kOverride && season.processing
+                    ? MediaStatus.PROCESSING
+                    : MediaStatus.UNKNOWN,
+            status4k:
+              this.enable4kShow &&
+              season.totalEpisodes === season.episodes4k &&
+              season.episodes4k > 0
+                ? MediaStatus.AVAILABLE
+                : this.enable4kShow && season.episodes4k > 0
+                  ? MediaStatus.PARTIALLY_AVAILABLE
+                  : season.is4kOverride && season.processing
+                    ? MediaStatus.PROCESSING
+                    : MediaStatus.UNKNOWN,
+            availableEpisodes: season.episodeNumbers,
+            availableEpisodes4k: this.enable4kShow
+              ? season.episodeNumbers4k
+              : undefined,
+          });
+
+          newSeasons.push(newSeason);
+
+          // A season without a row can still be requested, so its first
+          // episodes are new to anyone who asked for it
+          if (media && season.episodeNumbers) {
+            const episodes = getEpisodesToNotify(
+              null,
+              season.episodeNumbers,
+              undefined,
+              newSeason.status
+            );
+
+            if (episodes.length) {
+              newEpisodes.push({ seasonNumber: season.seasonNumber, episodes });
+            }
+          }
+
+          if (media && this.enable4kShow && season.episodeNumbers4k) {
+            const episodes = getEpisodesToNotify(
+              null,
+              season.episodeNumbers4k,
+              undefined,
+              newSeason.status4k
+            );
+
+            if (episodes.length) {
+              newEpisodes4k.push({
+                seasonNumber: season.seasonNumber,
+                episodes,
+              });
+            }
+          }
         }
       }
 
@@ -568,6 +685,16 @@ class BaseScanner<T> {
         await mediaRepository.save(media);
         this.log(`Updating existing title: ${title}`);
 
+        if (newEpisodes.length) {
+          this.log(`Detected new standard episode(s) for ${title}`, 'debug');
+          await notifyNewEpisodes(media, newEpisodes, false);
+        }
+
+        if (newEpisodes4k.length) {
+          this.log(`Detected new 4K episode(s) for ${title}`, 'debug');
+          await notifyNewEpisodes(media, newEpisodes4k, true);
+        }
+
         if (
           previousStatus === MediaStatus.PROCESSING &&
           media.status === MediaStatus.UNKNOWN
@@ -678,6 +805,125 @@ class BaseScanner<T> {
         });
         await mediaRepository.save(newMedia);
         this.log(`Saved ${title}`);
+      }
+    });
+  }
+
+  /**
+   * Media servers tag albums with the MusicBrainz id of a release, while
+   * Seerr keys albums on their release group. Ids that are not a release
+   * are taken to be a release group already.
+   */
+  protected async resolveReleaseGroupId(mbId: string): Promise<string> {
+    try {
+      const releaseGroupId = await this.musicbrainz.getReleaseGroup({
+        releaseId: mbId,
+      });
+
+      return releaseGroupId ?? mbId;
+    } catch {
+      return mbId;
+    }
+  }
+
+  protected async processMusic(
+    mbId: string,
+    {
+      mediaAddedAt,
+      ratingKey,
+      jellyfinMediaId,
+      serviceId,
+      externalServiceId,
+      externalServiceSlug,
+      processing = false,
+      title = 'Unknown Title',
+    }: ProcessOptions = {}
+  ): Promise<void> {
+    const mediaRepository = getRepository(Media);
+
+    await this.asyncLock.dispatch(mbId, async () => {
+      const existing = await mediaRepository.findOne({
+        where: { mbId, mediaType: MediaType.MUSIC },
+      });
+
+      if (existing) {
+        let changedExisting = false;
+
+        if (existing.status !== MediaStatus.AVAILABLE) {
+          const newStatus = processing
+            ? MediaStatus.PROCESSING
+            : MediaStatus.AVAILABLE;
+
+          // Lidarr only moves unknown or pending albums to processing, a
+          // declined or deleted album waits for a new request
+          if (
+            newStatus === MediaStatus.AVAILABLE ||
+            existing.status === MediaStatus.PENDING ||
+            existing.status === MediaStatus.UNKNOWN
+          ) {
+            if (existing.status !== newStatus) {
+              existing.status = newStatus;
+              changedExisting = true;
+            }
+          }
+
+          if (newStatus === MediaStatus.AVAILABLE) {
+            existing.mediaAddedAt = mediaAddedAt ?? new Date();
+            changedExisting = true;
+          }
+        }
+
+        if (ratingKey && existing.ratingKey !== ratingKey) {
+          existing.ratingKey = ratingKey;
+          changedExisting = true;
+        }
+
+        if (jellyfinMediaId && existing.jellyfinMediaId !== jellyfinMediaId) {
+          existing.jellyfinMediaId = jellyfinMediaId;
+          changedExisting = true;
+        }
+
+        if (serviceId !== undefined && existing.serviceId !== serviceId) {
+          existing.serviceId = serviceId;
+          changedExisting = true;
+        }
+
+        if (
+          externalServiceId !== undefined &&
+          existing.externalServiceId !== externalServiceId
+        ) {
+          existing.externalServiceId = externalServiceId;
+          changedExisting = true;
+        }
+
+        if (
+          externalServiceSlug !== undefined &&
+          existing.externalServiceSlug !== externalServiceSlug
+        ) {
+          existing.externalServiceSlug = externalServiceSlug;
+          changedExisting = true;
+        }
+
+        if (changedExisting) {
+          await mediaRepository.save(existing);
+          this.log(`Media for ${title} exists. Changes were detected.`, 'info');
+        } else {
+          this.log(`Album already exists: ${title}`);
+        }
+      } else {
+        const newMedia = new Media({
+          mbId,
+          mediaType: MediaType.MUSIC,
+          status: processing ? MediaStatus.PROCESSING : MediaStatus.AVAILABLE,
+          mediaAddedAt: processing ? undefined : (mediaAddedAt ?? new Date()),
+          ratingKey,
+          jellyfinMediaId,
+          serviceId,
+          externalServiceId,
+          externalServiceSlug,
+        });
+        await mediaRepository.save(newMedia);
+        this.log(`Saved new album: ${title}`);
       }
     });
   }
@@ -824,13 +1070,7 @@ class BaseScanner<T> {
   ): Promise<void> {
     const slicedItems = this.items.slice(start, end);
 
-    if (!this.running) {
-      throw new Error('Sync was aborted.');
-    }
-
-    if (this.sessionId !== sessionId) {
-      throw new Error('New session was started. Old session aborted.');
-    }
+    this.checkSession(sessionId);
 
     if (start < this.items.length) {
       this.progress = start;
@@ -844,7 +1084,8 @@ class BaseScanner<T> {
             sessionId,
           })
             .then(() => resolve())
-            .catch((e) => reject(new Error(e.message)));
+            // Passed on as it is, so the cause and request details survive
+            .catch(reject);
         }, this.updateRate)
       );
     }
@@ -859,6 +1100,67 @@ class BaseScanner<T> {
         await processFn(item);
       })
     );
+  }
+
+  /**
+   * Throws ScanAbortedError when the scan was cancelled or a newer run
+   * took over
+   */
+  protected checkSession(sessionId?: string): void {
+    if (!this.running) {
+      throw new ScanAbortedError('Sync was aborted.');
+    }
+
+    if (this.sessionId !== sessionId) {
+      throw new ScanAbortedError(
+        'New session was started. Old session aborted.'
+      );
+    }
+  }
+
+  /**
+   * Call when a run completes, so a failing streak ends
+   */
+  protected scanSucceeded(): void {
+    if (this.healthJobId && this.healthService) {
+      scanHealth.recordSuccess(this.healthJobId, this.healthService);
+    }
+  }
+
+  /**
+   * Call when a run fails. Logs the real cause, which axios often leaves
+   * out of the message, and counts the failure unless the run was only
+   * cancelled.
+   */
+  protected scanFailed(
+    error: unknown,
+    {
+      reason,
+      logMessage = 'Scan interrupted',
+    }: { reason?: string; logMessage?: string } = {}
+  ): void {
+    if (error instanceof ScanAbortedError) {
+      this.log(logMessage, 'info', { errorMessage: error.message });
+      return;
+    }
+
+    const details = describeRequestError(error, {
+      service: this.healthService
+        ? scanServiceName(this.healthService)
+        : undefined,
+    });
+    const message = reason ?? details.message;
+
+    this.log(logMessage, 'error', {
+      errorMessage: message,
+      ...(details.code ? { code: details.code } : {}),
+      ...(details.status !== undefined ? { status: details.status } : {}),
+      ...(details.url ? { url: details.url } : {}),
+    });
+
+    if (this.healthJobId && this.healthService) {
+      scanHealth.recordFailure(this.healthJobId, this.healthService, message);
+    }
   }
 
   protected log(
