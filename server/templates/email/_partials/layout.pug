@@ -1,7 +1,7 @@
 include mixins.pug
 
 doctype html
-html(lang=locale || 'en' style=`background-color:${C.ground};`)
+html(lang=locale || 'en' style=`height:100%;min-height:100%;background-color:${C.ground};`)
   head
     meta(charset='utf-8')
     meta(name='viewport' content='width=device-width, initial-scale=1')
@@ -13,6 +13,7 @@ html(lang=locale || 'en' style=`background-color:${C.ground};`)
     title #{applicationTitle}
     style.
       :root { color-scheme: dark; supported-color-schemes: dark; }
+      html, body { height: 100% !important; min-height: 100vh !important; }
       body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
       a.as-title:hover { text-decoration: underline !important; }
       @media only screen and (max-width: 480px) {
@@ -27,10 +28,11 @@ html(lang=locale || 'en' style=`background-color:${C.ground};`)
         .as-btn a { display: block !important; }
       }
     <!--[if mso]><style>table, td, div, a, span { font-family: 'Segoe UI', Arial, sans-serif !important; }</style><![endif]-->
-  body(bgcolor=C.ground style=`margin:0;padding:0;width:100%;background-color:${C.ground};-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;`)
-    table(width='100%' bgcolor=C.ground style=`width:100%;background-color:${C.ground};`)&attributes(TABLE)
+  body(bgcolor=C.ground style=`margin:0;padding:0;width:100%;height:100%;min-height:100vh;background-color:${C.ground};-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;`)
+    //- At least a screen tall, so the mail app's own background does not show below
+    table(width='100%' height='100%' bgcolor=C.ground style=`width:100%;height:100%;min-height:100vh;background-color:${C.ground};`)&attributes(TABLE)
       tr
-        td.as-outer(align='center' bgcolor=C.ground style=`padding:32px 16px 40px;background-color:${C.ground};`)
+        td.as-outer(align='center' valign='top' bgcolor=C.ground style=`padding:32px 16px 40px;background-color:${C.ground};`)
           <!--[if mso]><table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td><![endif]-->
           table(width='100%' style='width:100%;max-width:560px;margin:0 auto;')&attributes(TABLE)
             //- Header: the wordmark, an uploaded icon with the title, or the title
