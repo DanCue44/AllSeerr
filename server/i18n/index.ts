@@ -39,6 +39,11 @@ export function initI18n(): void {
 }
 
 export function getIntl(locale?: AvailableLocale): IntlInstance {
+  // Load the locales on first use when startup has not done so yet
+  if (!intls.size) {
+    initI18n();
+  }
+
   // "Default" stores a falsy locale, so fall back to the server language, then English
   const serverLocale = getSettings().main.locale as AvailableLocale;
   const resolved = locale || serverLocale || 'en';

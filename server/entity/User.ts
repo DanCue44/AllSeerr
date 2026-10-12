@@ -2,16 +2,19 @@ import { MediaRequestStatus, MediaType } from '@server/constants/media';
 import { UserType } from '@server/constants/user';
 import { getRepository } from '@server/datasource';
 import { Watchlist } from '@server/entity/Watchlist';
+import { getIntl } from '@server/i18n';
 import type {
   QuotaResponse,
   QuotaStatus,
 } from '@server/interfaces/api/userInterfaces';
 import { getEmailLogo } from '@server/lib/branding';
 import PreparedEmail from '@server/lib/email';
+import { getEmailLayoutLocals } from '@server/lib/email/format';
 import type { PermissionCheckOptions } from '@server/lib/permissions';
 import { Permission, hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import type { AvailableLocale } from '@server/types/languages';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
 import { AfterDate } from '@server/utils/dateHelpers';
 import bcrypt from 'bcrypt';
@@ -259,7 +262,16 @@ export class User {
           applicationUrl,
           applicationTitle,
           ...getEmailLogo(),
-          recipientName: this.username,
+          recipientName: this.displayName,
+          recipientEmail: this.email,
+          ...getEmailLayoutLocals({
+            intl: getIntl(this.settings?.locale as AvailableLocale),
+            applicationTitle,
+            applicationUrl,
+            recipientName: this.displayName,
+            recipientEmail: this.email,
+            manageNotifications: false,
+          }),
         },
       });
     } catch (e) {
@@ -299,6 +311,14 @@ export class User {
           ...getEmailLogo(),
           recipientName: this.displayName,
           recipientEmail: this.email,
+          ...getEmailLayoutLocals({
+            intl: getIntl(this.settings?.locale as AvailableLocale),
+            applicationTitle,
+            applicationUrl,
+            recipientName: this.displayName,
+            recipientEmail: this.email,
+            manageNotifications: false,
+          }),
         },
       });
     } catch (e) {

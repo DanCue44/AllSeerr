@@ -7,6 +7,7 @@ import { defineMessages, getIntl } from '@server/i18n';
 import globalMessages from '@server/i18n/globalMessages';
 import { getEmailLogo } from '@server/lib/branding';
 import PreparedEmail from '@server/lib/email';
+import { getEmailLayoutLocals } from '@server/lib/email/format';
 import type { NewsletterContent } from '@server/lib/newsletter';
 import {
   getNewsletterSince,
@@ -252,6 +253,13 @@ class RecentlyAddedNewsletter {
           logoIconUrl,
           recipientName: user.displayName,
           recipientEmail: user.email,
+          ...getEmailLayoutLocals({
+            intl,
+            applicationTitle,
+            applicationUrl,
+            recipientName: user.displayName,
+            recipientEmail: user.email,
+          }),
         },
       });
 

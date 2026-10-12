@@ -88,6 +88,14 @@ class PreparedEmail extends Email {
         },
       },
       send: true,
+      // The plain text part leaves out images, and the links that only wrap
+      // an image (logo, cover art), which would otherwise show as bare URLs
+      htmlToText: {
+        selectors: [
+          { selector: 'img', format: 'skip' },
+          { selector: 'a.as-img-link', format: 'skip' },
+        ],
+      },
       transport: transport,
       preview: false,
     });

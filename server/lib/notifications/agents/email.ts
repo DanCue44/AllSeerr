@@ -5,6 +5,10 @@ import { User } from '@server/entity/User';
 import { defineMessages, getIntl } from '@server/i18n';
 import { getEmailLogo } from '@server/lib/branding';
 import PreparedEmail from '@server/lib/email';
+import {
+  formatEmailTimestamp,
+  getEmailLayoutLocals,
+} from '@server/lib/email/format';
 import { getPayloadMediaTypeName } from '@server/lib/notifications/mediaTypeName';
 import type { NotificationAgentEmail } from '@server/lib/settings';
 import { NotificationAgentKey, getSettings } from '@server/lib/settings';
@@ -108,6 +112,14 @@ class EmailAgent
     const { applicationUrl, applicationTitle } = settings.main;
     const { embedPoster } = settings.notifications.agents.email;
     const { logoUrl, logoIconUrl } = getEmailLogo();
+    const layout = getEmailLayoutLocals({
+      intl,
+      applicationTitle,
+      applicationUrl,
+      recipientName,
+      recipientEmail,
+    });
+    const timestamp = formatEmailTimestamp(new Date(), intl);
 
     if (type === Notification.TEST_NOTIFICATION) {
       return {
@@ -123,6 +135,7 @@ class EmailAgent
           logoIconUrl,
           recipientName,
           recipientEmail,
+          ...layout,
         },
       };
     }
@@ -141,7 +154,7 @@ class EmailAgent
           body: payload.message,
           mediaName: payload.subject,
           mediaExtra: payload.extra ?? [],
-          timestamp: new Date().toTimeString(),
+          timestamp,
           actionUrl: applicationUrl
             ? `${applicationUrl}${getPayloadPath(payload)}`
             : undefined,
@@ -152,6 +165,7 @@ class EmailAgent
           logoIconUrl,
           recipientName,
           recipientEmail,
+          ...layout,
         },
       };
     }
@@ -241,7 +255,7 @@ class EmailAgent
           mediaName: payload.subject,
           mediaExtra: payload.extra ?? [],
           imageUrl: embedPoster ? payload.image : undefined,
-          timestamp: new Date().toTimeString(),
+          timestamp,
           requestedBy: payload.request.requestedBy.displayName,
           actionUrl: applicationUrl
             ? `${applicationUrl}${getPayloadPath(payload)}`
@@ -252,6 +266,7 @@ class EmailAgent
           logoIconUrl,
           recipientName,
           recipientEmail,
+          ...layout,
         },
       };
     } else if (payload.removal) {
@@ -286,7 +301,7 @@ class EmailAgent
           mediaName: payload.subject,
           mediaExtra: payload.extra ?? [],
           imageUrl: embedPoster ? payload.image : undefined,
-          timestamp: new Date().toTimeString(),
+          timestamp,
           requestedBy: payload.removal.requestedBy.displayName,
           actionUrl: applicationUrl
             ? `${applicationUrl}${getPayloadPath(payload)}`
@@ -297,6 +312,7 @@ class EmailAgent
           logoIconUrl,
           recipientName,
           recipientEmail,
+          ...layout,
         },
       };
     } else if (payload.rollover) {
@@ -314,7 +330,7 @@ class EmailAgent
           mediaName: payload.subject,
           mediaExtra: payload.extra ?? [],
           imageUrl: embedPoster ? payload.image : undefined,
-          timestamp: new Date().toTimeString(),
+          timestamp,
           actionUrl: applicationUrl
             ? `${applicationUrl}${getPayloadPath(payload)}`
             : undefined,
@@ -324,6 +340,7 @@ class EmailAgent
           logoIconUrl,
           recipientName,
           recipientEmail,
+          ...layout,
         },
       };
     } else if (payload.issue) {
@@ -387,7 +404,7 @@ class EmailAgent
           mediaName: payload.subject,
           extra: payload.extra ?? [],
           imageUrl: embedPoster ? payload.image : undefined,
-          timestamp: new Date().toTimeString(),
+          timestamp,
           actionUrl: applicationUrl
             ? `${applicationUrl}/issues/${payload.issue.id}`
             : undefined,
@@ -397,6 +414,7 @@ class EmailAgent
           logoIconUrl,
           recipientName,
           recipientEmail,
+          ...layout,
         },
       };
     }

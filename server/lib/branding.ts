@@ -593,7 +593,7 @@ export const buildWebManifest = (): Record<string, unknown> => {
 
 /**
  * Logo locals for the email templates. A renamed or rebranded instance
- * shows its title as text, with the uploaded logo above it, instead of the
+ * shows its title as text, next to the uploaded logo, instead of the
  * bundled wordmark.
  */
 export const getEmailLogo = (): { logoUrl?: string; logoIconUrl?: string } => {
@@ -623,5 +623,6 @@ export const getEmailLogo = (): { logoUrl?: string; logoIconUrl?: string } => {
     return {};
   }
 
-  return { logoUrl: `${applicationUrl}/logo_full.svg` };
+  // PNG rather than SVG, since Gmail and Outlook do not show SVG images
+  return { logoUrl: `${applicationUrl}/logo_full.png` };
 };

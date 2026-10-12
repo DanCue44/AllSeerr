@@ -1,0 +1,89 @@
+//- AllSeerr "Ambient" look for email: the charcoal palette from
+//- src/styles/allseerr-theme.css with the orange accent. Everything is
+//- styled inline and colors are repeated as bgcolor attributes, since many
+//- mail apps drop <style> blocks or CSS backgrounds.
+-
+  var C = {
+    ground: '#202124',
+    surface: '#2b2c30',
+    tile: '#25262a',
+    line: '#3d3e43',
+    ink: '#f1f1f2',
+    inkSoft: '#dddde0',
+    inkMuted: '#c0c0c5',
+    inkFaint: '#a6a6ac',
+    accent: '#ec703e',
+    accentSoft: '#f7b091',
+  };
+  var F = {
+    heading: "'Unbounded', 'Segoe UI', Helvetica, Arial, sans-serif",
+    body: "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace",
+  };
+  var TABLE = { role: 'presentation', cellpadding: '0', cellspacing: '0', border: '0' };
+
+//- One paragraph of body copy.
+mixin text(muted)
+  tr
+    td(style=`padding:0 4px 16px;font-family:${F.body};font-size:${muted ? '14px' : '16px'};line-height:${muted ? '21px' : '24px'};color:${muted ? C.inkFaint : C.inkSoft};`)
+      div
+        block
+
+//- Orange pill button, a table so Outlook keeps the background.
+mixin button(href, label)
+  tr
+    td.as-btn-wrap(align='center' style='padding:8px 4px 8px;')
+      table.as-btn&attributes(TABLE)
+        tr
+          td(align='center' bgcolor=C.accent style=`border-radius:999px;background-color:${C.accent};`)
+            a.as-btn-link(href=href target='_blank' style=`display:inline-block;padding:14px 32px;font-family:${F.body};font-size:15px;line-height:20px;font-weight:700;color:${C.ground};text-decoration:none;border-radius:999px;`)
+              | #{label}
+
+//- Stacked label and value; the label is small caps above the value so long
+//- values (decline reasons, season lists) wrap cleanly on phones.
+mixin detailRows(rows)
+  if rows && rows.length
+    table(width='100%' style='width:100%;')&attributes(TABLE)
+      each row in rows
+        tr
+          td(style='padding:14px 0 0;')
+            div(style=`font-family:${F.body};font-size:11px;line-height:16px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${C.inkFaint};`)
+              | #{row.name}
+            div(style=`padding-top:2px;font-family:${F.body};font-size:15px;line-height:22px;color:${C.inkSoft};word-break:break-word;`)
+              | #{row.value}
+
+//- The title card: name, details, timestamp and cover art on the right.
+mixin mediaCard(card)
+  tr
+    td(style='padding:4px 0 20px;')
+      table(width='100%' bgcolor=C.surface style=`width:100%;background-color:${C.surface};border:1px solid ${C.line};border-radius:16px;border-collapse:separate;`)&attributes(TABLE)
+        tr
+          td.as-card-pad(valign='top' style='padding:20px;')
+            if card.url
+              div.as-h2(style=`font-family:${F.heading};font-size:18px;line-height:24px;font-weight:700;color:${C.ink};word-break:break-word;`)
+                a.as-title(href=card.url target='_blank' style=`color:${C.ink};text-decoration:none;`)
+                  | #{card.title}
+            else
+              div.as-h2(style=`font-family:${F.heading};font-size:18px;line-height:24px;font-weight:700;color:${C.ink};word-break:break-word;`)
+                | #{card.title}
+            +detailRows(card.rows)
+          if card.imageUrl
+            td.as-cover-cell(valign='top' width='116' style='width:96px;padding:20px 20px 20px 0;')
+              if card.url
+                a.as-img-link(href=card.url target='_blank' style='display:block;text-decoration:none;')
+                  img.as-cover(src=card.imageUrl alt='' width='96' style='display:block;width:96px;max-width:96px;height:auto;border:0;border-radius:10px;')
+              else
+                img.as-cover(src=card.imageUrl alt='' width='96' style='display:block;width:96px;max-width:96px;height:auto;border:0;border-radius:10px;')
+        if card.timestamp
+          tr
+            td.as-card-foot(colspan=card.imageUrl ? 2 : 1 style=`padding:12px 20px 14px;border-top:1px solid ${C.line};font-family:${F.body};font-size:13px;line-height:18px;color:${C.inkFaint};`)
+              div #{card.timestamp}
+
+//- Quoted user text such as an issue description or comment.
+mixin quote(content)
+  tr
+    td(style='padding:0 0 20px;')
+      table(width='100%' bgcolor=C.tile style=`width:100%;background-color:${C.tile};border-left:3px solid ${C.accent};border-radius:12px;border-collapse:separate;`)&attributes(TABLE)
+        tr
+          td(style=`padding:14px 18px;font-family:${F.body};font-size:15px;line-height:23px;color:${C.inkSoft};white-space:pre-line;word-break:break-word;`)
+            div #{content}
