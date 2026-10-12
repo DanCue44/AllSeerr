@@ -211,6 +211,38 @@ const ADD_TIMEOUT_MS = 120_000;
 // whole author in Chaptarr, which can take longer than the usual timeout
 const UPDATE_TIMEOUT_MS = 60_000;
 const REMOVE_AUTHOR_TIMEOUT_MS = 300_000;
+// Lookups ask Chaptarr's metadata server, which slows down a lot while
+// Chaptarr is busy refreshing an author
+const LOOKUP_TIMEOUT_MS = 30_000;
+
+/**
+ * Waits used when Chaptarr is briefly unable to answer. Exported so tests
+ * can shorten them.
+ */
+export const chaptarrRetryDelays = {
+  // Before a lookup that timed out is tried again
+  lookupMs: 2_000,
+  // Before adding again a book Chaptarr refused while it was still setting
+  // up the author from an earlier request
+  authorBusyMs: 30_000,
+};
+
+const isTimeout = (e: { code?: string }): boolean =>
+  e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT';
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Chaptarr finishes setting up a new author in the background after it
+ * accepts a book. A second request for that author arriving meanwhile is
+ * refused with a root folder validation error, which goes away once the
+ * author is ready.
+ */
+export const isAuthorBusyError = (e: {
+  response?: { status?: number; data?: unknown };
+}): boolean =>
+  e?.response?.status === 400 &&
+  /root folder/i.test(JSON.stringify(e.response.data ?? ''));
 const LIBRARY_PAGE_SIZE = 500;
 // Downloads read from the queue at once, more than a queue holds
 const QUEUE_PAGE_SIZE = 200;
@@ -324,9 +356,27 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
   ): Promise<ChaptarrBook[]> {
     try {
       const { isChaptarr } = await this.getCapabilities();
-      const response = await this.axios.get<ChaptarrBook[]>('/book/lookup', {
-        params: { term, ...(isChaptarr && mediaType ? { mediaType } : {}) },
-      });
+      const params = {
+        term,
+        ...(isChaptarr && mediaType ? { mediaType } : {}),
+      };
+      const get = () =>
+        this.axios.get<ChaptarrBook[]>('/book/lookup', {
+          params,
+          timeout: LOOKUP_TIMEOUT_MS,
+        });
+      let response;
+
+      try {
+        response = await get();
+      } catch (e) {
+        if (!isTimeout(e)) {
+          throw e;
+        }
+        // Usually a busy moment in Chaptarr; one more try
+        await wait(chaptarrRetryDelays.lookupMs);
+        response = await get();
+      }
 
       return Array.isArray(response.data) ? response.data : [];
     } catch (e) {
@@ -491,12 +541,28 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
     };
 
     try {
-      const response = await this.axios.post<
-        ChaptarrBook | { pendingId?: number; message?: string }
-      >('/book', payload, {
-        params: isChaptarr ? { mediaType } : undefined,
-        timeout: ADD_TIMEOUT_MS,
-      });
+      const post = () =>
+        this.axios.post<
+          ChaptarrBook | { pendingId?: number; message?: string }
+        >('/book', payload, {
+          params: isChaptarr ? { mediaType } : undefined,
+          timeout: ADD_TIMEOUT_MS,
+        });
+      let response;
+
+      try {
+        response = await post();
+      } catch (e) {
+        if (!isAuthorBusyError(e)) {
+          throw e;
+        }
+        logger.info(
+          'Chaptarr is still setting up the author, adding the book again shortly',
+          { label: 'Chaptarr', title: book.title, mediaType }
+        );
+        await wait(chaptarrRetryDelays.authorBusyMs);
+        response = await post();
+      }
       const data = response.data as ChaptarrBook & {
         pendingId?: number;
         message?: string;
@@ -530,7 +596,7 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
 
       return { status: 'added', book: data };
     } catch (e) {
-      if (e.code === 'ECONNABORTED' || e.code === 'ETIMEDOUT') {
+      if (isTimeout(e)) {
         logger.info('Chaptarr is taking a while to add the book', {
           label: 'Chaptarr',
           title: book.title,

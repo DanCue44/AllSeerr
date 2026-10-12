@@ -4,7 +4,11 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 
 import type { ChaptarrBook } from '@server/api/servarr/chaptarr';
-import ChaptarrAPI, { isMonitoredFor } from '@server/api/servarr/chaptarr';
+import ChaptarrAPI, {
+  chaptarrRetryDelays,
+  isAuthorBusyError,
+  isMonitoredFor,
+} from '@server/api/servarr/chaptarr';
 
 type Call = {
   method: string;
@@ -384,6 +388,117 @@ describe('ChaptarrAPI language calls', () => {
         ['post', '/releaseprofile'],
         ['put', '/releaseprofile/2'],
       ]
+    );
+  });
+});
+
+describe('ChaptarrAPI when Chaptarr is busy', () => {
+  const timeout = Object.assign(new Error('timeout of 30000ms exceeded'), {
+    code: 'ECONNABORTED',
+  });
+  const authorBusy = Object.assign(
+    new Error('Request failed with status code 400'),
+    {
+      response: {
+        status: 400,
+        data: [
+          {
+            propertyName: 'EbookRootFolderPath',
+            errorMessage: 'Selected root folder is not configured for ebooks.',
+          },
+        ],
+      },
+    }
+  );
+
+  const withoutWaits = async (fn: () => Promise<void>) => {
+    const saved = { ...chaptarrRetryDelays };
+    chaptarrRetryDelays.lookupMs = 0;
+    chaptarrRetryDelays.authorBusyMs = 0;
+    try {
+      await fn();
+    } finally {
+      Object.assign(chaptarrRetryDelays, saved);
+    }
+  };
+
+  it('tries a lookup again once after a timeout', () =>
+    withoutWaits(async () => {
+      let attempts = 0;
+      const { chaptarr } = createApi('Chaptarr', () => {
+        attempts++;
+        if (attempts === 1) {
+          throw timeout;
+        }
+        return { data: [lookupResult] };
+      });
+
+      const books = await chaptarr.lookupBooks('Nineteen Eighty-Four');
+
+      assert.strictEqual(attempts, 2);
+      assert.deepStrictEqual(books, [lookupResult]);
+    }));
+
+  it('gives up on a lookup that times out twice', () =>
+    withoutWaits(async () => {
+      let attempts = 0;
+      const { chaptarr } = createApi('Chaptarr', () => {
+        attempts++;
+        throw timeout;
+      });
+
+      await assert.rejects(
+        chaptarr.lookupBooks('Nineteen Eighty-Four'),
+        /Failed to look up books/
+      );
+      assert.strictEqual(attempts, 2);
+    }));
+
+  it('does not retry a lookup that failed for another reason', () =>
+    withoutWaits(async () => {
+      let attempts = 0;
+      const { chaptarr } = createApi('Chaptarr', () => {
+        attempts++;
+        throw Object.assign(new Error('Request failed with status code 500'), {
+          response: { status: 500 },
+        });
+      });
+
+      await assert.rejects(chaptarr.lookupBooks('x'), /Failed to look up/);
+      assert.strictEqual(attempts, 1);
+    }));
+
+  it('adds the book again once the author is ready', () =>
+    withoutWaits(async () => {
+      let posts = 0;
+      const { chaptarr } = createApi('Chaptarr', (call) => {
+        if (call.method === 'post' && call.url === '/book') {
+          posts++;
+          if (posts === 1) {
+            throw authorBusy;
+          }
+          return { data: { ...lookupResult, id: 42 } };
+        }
+        return { data: [] };
+      });
+
+      const result = await chaptarr.addBook(lookupResult, addOptions);
+
+      assert.strictEqual(posts, 2);
+      assert.strictEqual(result.status, 'added');
+    }));
+
+  it('only treats root folder refusals as the author being busy', () => {
+    assert.strictEqual(isAuthorBusyError(authorBusy), true);
+    assert.strictEqual(
+      isAuthorBusyError({
+        response: { status: 400, data: [{ errorMessage: 'Invalid profile' }] },
+      }),
+      false
+    );
+    assert.strictEqual(
+      isAuthorBusyError({ response: { status: 500, data: 'root folder' } }),
+      false
     );
   });
 });
