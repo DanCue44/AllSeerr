@@ -62,8 +62,8 @@ describe('getGreetingName', () => {
   it('uses the display name', () => {
     assert.equal(getGreetingName('Dan', 'dan@example.com'), 'Dan');
     assert.equal(
-      getGreetingName('  Angelica C  ', 'a@example.com'),
-      'Angelica C'
+      getGreetingName('  Alex Rivera  ', 'a@example.com'),
+      'Alex Rivera'
     );
   });
 
