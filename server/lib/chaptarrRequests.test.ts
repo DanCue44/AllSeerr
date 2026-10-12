@@ -356,6 +356,64 @@ describe('sendBookToChaptarr', () => {
     assert.deepStrictEqual(chaptarr.searched, [[100]]);
   });
 
+  it('uses an existing entry when Chaptarr has the book twice', async () => {
+    const author = {
+      id: 7,
+      authorName: 'Jane Austen',
+      foreignAuthorId: 'gr:1265',
+    };
+    chaptarr.lookupResults['Pride and Prejudice'] = [book({ author })];
+    chaptarr.library = [
+      book({ id: 50, authorId: 7, mediaType: 'audiobook', author }),
+      book({ id: 51, authorId: 7, mediaType: 'audiobook', author }),
+      book({ id: 52, authorId: 7, mediaType: 'ebook', author }),
+    ];
+    chaptarr.addResult = () => {
+      throw Object.assign(
+        new Error('[Chaptarr] Failed to add book: status code 500'),
+        {
+          cause: {
+            response: {
+              status: 500,
+              data: {
+                message:
+                  'Requested work gr:3060926 resolves to multiple local Audiobook books.',
+              },
+            },
+          },
+        }
+      );
+    };
+
+    const result = await sendBookToChaptarr(asApi(chaptarr), {
+      olId: WORK_ID,
+      mediaType: 'audiobook',
+      add,
+    });
+
+    assert.strictEqual(result.bookId, 50);
+    assert.deepStrictEqual(chaptarr.monitored.at(-1), [[50], true]);
+  });
+
+  it('still fails on other add errors', async () => {
+    chaptarr.lookupResults['Pride and Prejudice'] = [book({})];
+    chaptarr.addResult = () => {
+      throw Object.assign(
+        new Error('[Chaptarr] Failed to add book: status code 500'),
+        { cause: { response: { status: 500, data: { message: 'Boom' } } } }
+      );
+    };
+
+    await assert.rejects(
+      sendBookToChaptarr(asApi(chaptarr), {
+        olId: WORK_ID,
+        mediaType: 'audiobook',
+        add,
+      }),
+      /Failed to add book/
+    );
+  });
+
   it('adds a new book with the language tag', async () => {
     chaptarr.lookupResults['Pride and Prejudice'] = [book({})];
 

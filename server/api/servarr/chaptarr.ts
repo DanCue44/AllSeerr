@@ -238,6 +238,14 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * refused with a root folder validation error, which goes away once the
  * author is ready.
  */
+export const isDuplicateBooksError = (e: {
+  cause?: { response?: { status?: number; data?: unknown } };
+}): boolean =>
+  e?.cause?.response?.status === 500 &&
+  /resolves to multiple local/i.test(
+    JSON.stringify(e.cause.response.data ?? '')
+  );
+
 export const isAuthorBusyError = (e: {
   response?: { status?: number; data?: unknown };
 }): boolean =>
@@ -418,6 +426,19 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
         cause: e,
       });
     }
+  }
+
+  /** The library author with this metadata id, if Chaptarr has them. */
+  public async getAuthorByForeignId(
+    foreignAuthorId: string
+  ): Promise<ChaptarrAuthor | undefined> {
+    const response = await this.axios.get<ChaptarrAuthor[]>('/author', {
+      timeout: UPDATE_TIMEOUT_MS,
+    });
+
+    return (response.data ?? []).find(
+      (author) => author.foreignAuthorId === foreignAuthorId
+    );
   }
 
   public async getBooksByAuthor(authorId: number): Promise<ChaptarrBook[]> {

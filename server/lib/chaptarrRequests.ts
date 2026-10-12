@@ -5,7 +5,11 @@ import type {
   ChaptarrBook,
   ChaptarrMediaType,
 } from '@server/api/servarr/chaptarr';
-import { getBookFileCount, isMonitoredFor } from '@server/api/servarr/chaptarr';
+import {
+  getBookFileCount,
+  isDuplicateBooksError,
+  isMonitoredFor,
+} from '@server/api/servarr/chaptarr';
 import type { BookLanguage } from '@server/constants/bookLanguages';
 import { BOOK_LANGUAGE_ANY } from '@server/constants/bookLanguages';
 import { getRepository } from '@server/datasource';
@@ -383,6 +387,41 @@ const waitForLibraryBook = async (
   }
 };
 
+/**
+ * Chaptarr sometimes imports an author's catalog twice when both formats of
+ * a book are requested at once, and then refuses to add the book because
+ * the work matches more than one of its own entries. Picks one of those
+ * entries: one with files first, then the oldest.
+ */
+export const findDuplicateLibraryBook = async (
+  chaptarr: ChaptarrAPI,
+  match: ChaptarrBook,
+  mediaType: ChaptarrMediaType
+): Promise<ChaptarrBook | undefined> => {
+  const authorId =
+    (match.author?.id as number | undefined) ??
+    (match.author?.foreignAuthorId
+      ? (await chaptarr.getAuthorByForeignId(match.author.foreignAuthorId))?.id
+      : undefined);
+
+  if (!authorId) {
+    return undefined;
+  }
+
+  const wantedKeys = titleKeys(match.title);
+  const candidates = (await chaptarr.getBooksByAuthor(authorId)).filter(
+    (book) =>
+      book.id &&
+      (!book.mediaType || book.mediaType === mediaType) &&
+      titleKeys(book.title).some((key) => wantedKeys.includes(key))
+  );
+  const files = (book: ChaptarrBook) => (getBookFileCount(book) ? 1 : 0);
+
+  return candidates.sort(
+    (a, b) => files(b) - files(a) || (a.id ?? 0) - (b.id ?? 0)
+  )[0];
+};
+
 const getWantedBook = async (olId: string): Promise<ChaptarrWantedBook> => {
   const openLibrary = new OpenLibrary();
   const summary = await openLibrary.getWorkSummary(olId);
@@ -468,18 +507,36 @@ export const sendBookToChaptarr = async (
 
   // The language tag goes along with a new author, which Chaptarr may
   // still be importing once the request returns
-  const result = await chaptarr.addBook(
-    preferEditionInLanguage(match, request.language?.code),
-    {
-      ...add,
-      tags:
-        languageTags?.tagId !== undefined &&
-        !add.tags.includes(languageTags.tagId)
-          ? [...add.tags, languageTags.tagId]
-          : add.tags,
-      mediaType,
+  let result: Awaited<ReturnType<ChaptarrAPI['addBook']>>;
+
+  try {
+    result = await chaptarr.addBook(
+      preferEditionInLanguage(match, request.language?.code),
+      {
+        ...add,
+        tags:
+          languageTags?.tagId !== undefined &&
+          !add.tags.includes(languageTags.tagId)
+            ? [...add.tags, languageTags.tagId]
+            : add.tags,
+        mediaType,
+      }
+    );
+  } catch (e) {
+    const duplicate = isDuplicateBooksError(e)
+      ? await findDuplicateLibraryBook(chaptarr, match, mediaType)
+      : undefined;
+
+    if (!duplicate) {
+      throw e;
     }
-  );
+
+    logger.info(
+      'Chaptarr has this book more than once, using the existing entry',
+      { label: 'Chaptarr', title: match.title, mediaType, bookId: duplicate.id }
+    );
+    return monitor(duplicate);
+  }
 
   if (result.status === 'added') {
     // Chaptarr does not search for a book added with its author's catalog
