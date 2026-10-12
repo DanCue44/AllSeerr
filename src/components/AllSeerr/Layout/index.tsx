@@ -242,7 +242,10 @@ const AmbientShell = ({ children }: LayoutProps) => {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-gradient-to-b from-as-surface/70 to-transparent" />
 
       {/* Desktop: separate floating pills, as in the design */}
-      <header className="fixed inset-x-0 top-6 z-30 hidden px-6 lg:block xl:px-10">
+      <header
+        className="fixed inset-x-0 z-30 hidden px-6 lg:block xl:px-10"
+        style={{ top: 'calc(1.5rem + env(safe-area-inset-top))' }}
+      >
         <div className="max-w-8xl mx-auto flex items-center gap-3 xl:gap-4">
           <Link
             href="/"
@@ -405,7 +408,12 @@ const AmbientShell = ({ children }: LayoutProps) => {
       </header>
 
       {/* Phone and tablet: circle buttons up top, icon tab bar below */}
-      <header className="fixed inset-x-0 top-0 z-30 px-3.5 pt-3.5 lg:hidden">
+      <header
+        className="fixed inset-x-0 top-0 z-30 px-3.5 lg:hidden"
+        // Clears the status bar when added to the home screen, where the
+        // page runs underneath it
+        style={{ paddingTop: 'calc(0.875rem + env(safe-area-inset-top))' }}
+      >
         {showPhoneSearch ? (
           <div className="flex items-center gap-2">
             <div className={`${glass} flex-1 rounded-full`} data-tour="search">
