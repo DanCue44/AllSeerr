@@ -151,7 +151,7 @@ describe('NoBookEnds connect link', () => {
     getSettings().main.applicationUrl = '';
     const { agent, userId } = await loginAs('demo@seerr.dev');
 
-    for (const host of ['allseerr.lan:5055', '192.168.1.10:5055', 'unraid']) {
+    for (const host of ['allseerr.lan:5055', '192.168.1.20:5055', 'unraid']) {
       const status = await agent
         .get(`/user/${userId}/settings/nobookends`)
         .set('Host', host);
@@ -257,7 +257,7 @@ describe('isPrivateHost', () => {
       '127.0.0.1',
       '10.0.0.5',
       '172.20.1.1',
-      '192.168.1.10',
+      '192.168.1.20',
       '100.101.102.103',
       '169.254.1.1',
       '::1',
