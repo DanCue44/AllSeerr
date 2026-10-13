@@ -3,6 +3,7 @@ import type {
   RootFolder,
   ServarrHistoryRecord,
   ServarrRelease,
+  ServarrStatusMessage,
   Tag,
 } from './base';
 import ServarrBase from './base';
@@ -158,7 +159,7 @@ export interface ChaptarrQueueItem {
   id: number;
   bookId?: number;
   authorId?: number;
-  book?: Pick<ChaptarrBook, 'id' | 'title' | 'mediaType'>;
+  book?: Pick<ChaptarrBook, 'id' | 'title' | 'mediaType' | 'author'>;
   size: number;
   sizeleft: number;
   timeleft?: string;
@@ -168,6 +169,9 @@ export interface ChaptarrQueueItem {
   downloadId?: string;
   trackedDownloadStatus?: string;
   trackedDownloadState?: string;
+  // Why a download is stuck, such as an import that found no book files
+  statusMessages?: ServarrStatusMessage[];
+  errorMessage?: string;
 }
 
 interface QueuePage {

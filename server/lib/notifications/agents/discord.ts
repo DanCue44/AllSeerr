@@ -204,8 +204,8 @@ class DiscordAgent
         ? `${applicationUrl}/issues/${payload.issue.id}`
         : payload.media
           ? `${applicationUrl}${getPayloadPath(payload)}`
-          : undefined
-      : undefined;
+          : payload.externalLink?.url
+      : payload.externalLink?.url;
 
     return {
       title: payload.event

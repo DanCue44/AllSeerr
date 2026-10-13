@@ -94,6 +94,11 @@ const messages = defineMessages('components.NotificationTypeSelector', {
     'Send notifications when a library scan fails 3 times in a row, and when it works again.',
   userscanfailureDescription:
     'Get notified when a library scan fails 3 times in a row, and when it works again.',
+  downloadneedsattention: 'Download Needs Attention',
+  downloadneedsattentionDescription:
+    'Send notifications when a book download is stuck in Chaptarr for more than 10 minutes, such as when it cannot be imported.',
+  userdownloadneedsattentionDescription:
+    'Get notified when a book download is stuck in Chaptarr for more than 10 minutes, such as when it cannot be imported.',
   newsletter: 'Recently Added Newsletter',
   usernewsletterDescription:
     'Receive a periodic email listing the media which recently became available.',
@@ -146,6 +151,7 @@ export enum Notification {
   NEWSLETTER = 131072,
   SEASON_ROLLOVER_PENDING = 262144,
   SCAN_FAILURE = 524288,
+  DOWNLOAD_NEEDS_ATTENTION = 1048576,
 }
 
 export const ALL_NOTIFICATIONS = Object.values(Notification)
@@ -463,6 +469,18 @@ const NotificationTypeSelector = ({
             : messages.scanfailureDescription
         ),
         value: Notification.SCAN_FAILURE,
+        hasNotifyUser: false,
+        hidden: user && !hasPermission(Permission.ADMIN),
+      },
+      {
+        id: 'download-needs-attention',
+        name: intl.formatMessage(messages.downloadneedsattention),
+        description: intl.formatMessage(
+          user
+            ? messages.userdownloadneedsattentionDescription
+            : messages.downloadneedsattentionDescription
+        ),
+        value: Notification.DOWNLOAD_NEEDS_ATTENTION,
         hasNotifyUser: false,
         hidden: user && !hasPermission(Permission.ADMIN),
       },

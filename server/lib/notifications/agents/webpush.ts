@@ -205,6 +205,7 @@ class WebPushAgent
         break;
       case Notification.SEASON_ROLLOVER_PENDING:
       case Notification.SCAN_FAILURE:
+      case Notification.DOWNLOAD_NEEDS_ATTENTION:
         message = payload.message;
         break;
       default:
@@ -214,13 +215,14 @@ class WebPushAgent
         };
     }
 
-    const actionUrl = payload.issue
+    const appActionUrl = payload.issue
       ? `/issues/${payload.issue.id}`
       : payload.media || type === Notification.SCAN_FAILURE
         ? getPayloadPath(payload) || undefined
         : undefined;
+    const actionUrl = appActionUrl ?? payload.externalLink?.url;
 
-    const actionUrlTitle = actionUrl
+    const actionUrlTitle = appActionUrl
       ? intl.formatMessage(
           payload.issue
             ? messages.viewIssue
@@ -228,7 +230,7 @@ class WebPushAgent
               ? messages.viewSettings
               : messages.viewMedia
         )
-      : undefined;
+      : payload.externalLink?.title;
 
     return {
       notificationType: Notification[type],

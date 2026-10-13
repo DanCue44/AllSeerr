@@ -28,6 +28,9 @@ export interface NotificationPayload {
   // Page the notification links to instead of the media page, such as the
   // artist page of a discography request
   actionPath?: string;
+  // Page outside the app the notification links to when it has no media
+  // page, such as the queue of the service a download is stuck in
+  externalLink?: { url: string; title: string };
   // Book format of a summary notification that stands for several book
   // requests, which can cover both formats
   bookFormat?: 'ebook' | 'audiobook' | 'both';

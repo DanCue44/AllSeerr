@@ -24,6 +24,7 @@ export enum Notification {
   NEWSLETTER = 131072,
   SEASON_ROLLOVER_PENDING = 262144,
   SCAN_FAILURE = 524288,
+  DOWNLOAD_NEEDS_ATTENTION = 1048576,
 }
 
 export const hasNotificationType = (

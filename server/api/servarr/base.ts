@@ -106,6 +106,15 @@ export interface ServarrRelease {
 }
 
 /**
+ * A reason an arr gives for a download in its queue needing attention. The
+ * title is usually the release or file and the messages say what is wrong.
+ */
+export interface ServarrStatusMessage {
+  title?: string;
+  messages?: string[];
+}
+
+/**
  * An event in an arr's history, such as a grab or an import
  */
 export interface ServarrHistoryRecord {

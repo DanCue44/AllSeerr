@@ -8,6 +8,7 @@ import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import { MediaType } from '@server/constants/media';
 import { getSettings } from '@server/lib/settings';
+import { checkStuckBookDownloads } from '@server/lib/stuckBookDownloads';
 import logger from '@server/logger';
 import { uniqWith } from 'lodash';
 
@@ -411,6 +412,21 @@ class DownloadTracker {
                 { label: 'Download Tracker' }
               );
             }
+
+            // Tell admins about downloads Chaptarr cannot finish on its own
+            await checkStuckBookDownloads(
+              server,
+              settings.chaptarr
+                .filter(
+                  (cs) =>
+                    cs.hostname === server.hostname &&
+                    cs.port === server.port &&
+                    cs.baseUrl === server.baseUrl
+                )
+                .map((cs) => cs.id),
+              chaptarr,
+              queueItems
+            );
           } catch {
             logger.error(
               `Unable to get queue from Chaptarr server: ${server.name}`,

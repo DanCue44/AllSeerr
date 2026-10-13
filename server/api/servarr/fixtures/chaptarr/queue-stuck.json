@@ -1,0 +1,122 @@
+{
+  "page": 1,
+  "pageSize": 200,
+  "sortKey": "timeleft",
+  "sortDirection": "ascending",
+  "totalRecords": 3,
+  "records": [
+    {
+      "authorId": 7,
+      "bookId": 501,
+      "book": {
+        "id": 501,
+        "title": "The Lantern Keeper",
+        "foreignBookId": "hc:900001",
+        "mediaType": "audiobook",
+        "monitored": true,
+        "ebookMonitored": false,
+        "audiobookMonitored": true
+      },
+      "quality": {
+        "quality": { "id": 0, "name": "Unknown", "isConversionTarget": false },
+        "revision": { "version": 1, "real": 0, "isRepack": false }
+      },
+      "size": 734003200,
+      "title": "Jane.Example.The.Lantern.Keeper.Unabridged.M4B",
+      "sizeleft": 0,
+      "timeleft": "00:00:00",
+      "estimatedCompletionTime": "2026-10-11T08:15:00Z",
+      "added": "2026-10-11T08:01:00Z",
+      "status": "completed",
+      "trackedDownloadStatus": "warning",
+      "trackedDownloadState": "importBlocked",
+      "statusMessages": [
+        {
+          "title": "Jane.Example.The.Lantern.Keeper.Unabridged.M4B",
+          "messages": [
+            "No supported audio or ebook files were found in /downloads/complete/books/Jane.Example.The.Lantern.Keeper.Unabridged.M4B"
+          ]
+        }
+      ],
+      "downloadId": "SABnzbd_nzo_a1b2c3d4",
+      "protocol": "usenet",
+      "downloadClient": "Download Client",
+      "indexer": "Indexer A (Prowlarr)",
+      "outputPath": "/downloads/complete/books/Jane.Example.The.Lantern.Keeper.Unabridged.M4B",
+      "id": 1900000001
+    },
+    {
+      "authorId": 8,
+      "bookId": 602,
+      "book": {
+        "id": 602,
+        "title": "A Field of Paper Birds",
+        "foreignBookId": "hc:900002",
+        "mediaType": "ebook",
+        "monitored": true,
+        "ebookMonitored": true,
+        "audiobookMonitored": false
+      },
+      "quality": {
+        "quality": { "id": 3, "name": "EPUB", "isConversionTarget": false },
+        "revision": { "version": 1, "real": 0, "isRepack": false }
+      },
+      "size": 2097152,
+      "title": "Sam.Sample.A.Field.of.Paper.Birds.ePub",
+      "sizeleft": 0,
+      "timeleft": "00:00:00",
+      "estimatedCompletionTime": "2026-10-11T09:02:00Z",
+      "added": "2026-10-11T09:00:00Z",
+      "status": "completed",
+      "trackedDownloadStatus": "warning",
+      "trackedDownloadState": "importPending",
+      "statusMessages": [
+        {
+          "title": "Sam.Sample.A.Field.of.Paper.Birds.epub",
+          "messages": [
+            "Rejected: Completed download was grabbed for 'A Field of Paper Birds' but import matched 'A Field of Paper Kites'"
+          ]
+        }
+      ],
+      "downloadId": "SABnzbd_nzo_e5f6a7b8",
+      "protocol": "usenet",
+      "downloadClient": "Download Client",
+      "indexer": "Indexer B (Prowlarr)",
+      "outputPath": "/downloads/complete/books/Sam.Sample.A.Field.of.Paper.Birds.ePub",
+      "id": 1900000002
+    },
+    {
+      "authorId": 9,
+      "bookId": 703,
+      "book": {
+        "id": 703,
+        "title": "Quiet Harbor",
+        "foreignBookId": "hc:900003",
+        "mediaType": "ebook",
+        "monitored": true,
+        "ebookMonitored": true,
+        "audiobookMonitored": false
+      },
+      "quality": {
+        "quality": { "id": 3, "name": "EPUB", "isConversionTarget": false },
+        "revision": { "version": 1, "real": 0, "isRepack": false }
+      },
+      "size": 1048576,
+      "title": "Alex.Placeholder.Quiet.Harbor.ePub",
+      "sizeleft": 524288,
+      "timeleft": "00:00:30",
+      "estimatedCompletionTime": "2026-10-11T09:10:30Z",
+      "added": "2026-10-11T09:10:00Z",
+      "status": "downloading",
+      "trackedDownloadStatus": "ok",
+      "trackedDownloadState": "downloading",
+      "statusMessages": [],
+      "downloadId": "SABnzbd_nzo_c9d0e1f2",
+      "protocol": "usenet",
+      "downloadClient": "Download Client",
+      "indexer": "Indexer A (Prowlarr)",
+      "outputPath": "/downloads/incomplete/books/Alex.Placeholder.Quiet.Harbor.ePub",
+      "id": 1900000003
+    }
+  ]
+}

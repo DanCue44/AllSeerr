@@ -160,19 +160,20 @@ class PushoverAgent
       message += `<small>\n<b>${extra.name}:</b> ${extra.value}</small>`;
     }
 
-    const url = applicationUrl
+    const appUrl = applicationUrl
       ? payload.issue
         ? `${applicationUrl}/issues/${payload.issue.id}`
         : payload.media
           ? `${applicationUrl}${getPayloadPath(payload)}`
           : undefined
       : undefined;
-    const url_title = url
+    const url = appUrl ?? payload.externalLink?.url;
+    const url_title = appUrl
       ? intl.formatMessage(
           payload.issue ? globalMessages.viewIssue : globalMessages.viewMedia,
           { applicationTitle }
         )
-      : undefined;
+      : payload.externalLink?.title;
 
     let attachment_base64;
     let attachment_type;

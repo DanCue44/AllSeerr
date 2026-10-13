@@ -141,7 +141,22 @@ class EmailAgent
       };
     }
 
-    if (type === Notification.SCAN_FAILURE) {
+    if (
+      type === Notification.SCAN_FAILURE ||
+      type === Notification.DOWNLOAD_NEEDS_ATTENTION
+    ) {
+      const appPath = getPayloadPath(payload);
+      const adminActionUrl =
+        applicationUrl && (appPath || type === Notification.SCAN_FAILURE)
+          ? `${applicationUrl}${appPath}`
+          : payload.externalLink?.url;
+      const adminActionLabel =
+        type === Notification.SCAN_FAILURE
+          ? `Open ${applicationTitle} Settings`
+          : appPath
+            ? undefined
+            : payload.externalLink?.title;
+
       return {
         template: path.join(
           __dirname,
@@ -156,10 +171,9 @@ class EmailAgent
           mediaName: payload.subject,
           mediaExtra: payload.extra ?? [],
           timestamp,
-          actionUrl: applicationUrl
-            ? `${applicationUrl}${getPayloadPath(payload)}`
-            : undefined,
-          actionLabel: `Open ${applicationTitle} Settings`,
+          imageUrl: payload.image,
+          actionUrl: adminActionUrl,
+          actionLabel: adminActionLabel,
           applicationUrl,
           applicationTitle,
           logoUrl,
