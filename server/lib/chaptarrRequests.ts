@@ -76,8 +76,12 @@ const titleKeys = (title = ''): string[] => {
   const full = normalizeBookTitle(title);
   // Subtitles are often left out by one of the sources
   const main = normalizeBookTitle(title.split(':')[0]);
+  // So is the series, as in "Skyshade (The Lightlark, #3)"
+  const withoutSeries = normalizeBookTitle(
+    title.replace(/\s*[([][^)\]]*[)\]]/g, ' ').split(':')[0]
+  );
 
-  return [...new Set([full, main])].filter(Boolean);
+  return [...new Set([full, main, withoutSeries])].filter(Boolean);
 };
 
 const authorMatches = (book: ChaptarrBook, authorName?: string): boolean => {
@@ -398,8 +402,13 @@ export const findDuplicateLibraryBook = async (
   match: ChaptarrBook,
   mediaType: ChaptarrMediaType
 ): Promise<ChaptarrBook | undefined> => {
+  // The match was looked up before Chaptarr added the author, so it may
+  // not carry the author's library id yet; a fresh lookup does
   const authorId =
     (match.author?.id as number | undefined) ??
+    ((await chaptarr.lookupBooks(match.foreignBookId))[0]?.author?.id as
+      | number
+      | undefined) ??
     (match.author?.foreignAuthorId
       ? (await chaptarr.getAuthorByForeignId(match.author.foreignAuthorId))?.id
       : undefined);

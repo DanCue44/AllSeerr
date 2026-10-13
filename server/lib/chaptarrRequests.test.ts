@@ -395,6 +395,48 @@ describe('sendBookToChaptarr', () => {
     assert.deepStrictEqual(chaptarr.monitored.at(-1), [[50], true]);
   });
 
+  it('finds the duplicates of a new author whose lookup had no id yet', async () => {
+    const seriesTitle = 'Pride and Prejudice (Austen, #2)';
+    // First lookup, before Chaptarr knew the author
+    chaptarr.lookupResults['Pride and Prejudice'] = [
+      book({ title: seriesTitle }),
+    ];
+    // The lookup after the failed add carries the new author's id
+    chaptarr.lookupResults['gr:3060926'] = [
+      book({
+        author: { id: 9, authorName: 'Jane Austen', foreignAuthorId: 'hc:1' },
+      }),
+    ];
+    chaptarr.library = [
+      book({ id: 60, authorId: 9, mediaType: 'audiobook' }),
+      book({ id: 61, authorId: 9, mediaType: 'audiobook' }),
+    ];
+    let failed = false;
+    chaptarr.addResult = () => {
+      failed = true;
+      throw Object.assign(new Error('[Chaptarr] Failed to add book'), {
+        cause: {
+          response: {
+            status: 500,
+            data: {
+              message:
+                'Requested work gr:3060926 resolves to multiple local Audiobook books.',
+            },
+          },
+        },
+      });
+    };
+
+    const result = await sendBookToChaptarr(asApi(chaptarr), {
+      olId: WORK_ID,
+      mediaType: 'audiobook',
+      add,
+    });
+
+    assert.ok(failed);
+    assert.strictEqual(result.bookId, 60);
+  });
+
   it('still fails on other add errors', async () => {
     chaptarr.lookupResults['Pride and Prejudice'] = [book({})];
     chaptarr.addResult = () => {
