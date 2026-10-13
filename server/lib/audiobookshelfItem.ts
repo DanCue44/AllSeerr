@@ -3,15 +3,19 @@ import type { AudiobookshelfBookItem } from '@server/api/audiobookshelf';
 import AudiobookshelfAPI from '@server/api/audiobookshelf';
 import OpenLibrary from '@server/api/openlibrary';
 import { MediaStatus } from '@server/constants/media';
-import type Media from '@server/entity/Media';
+import { getRepository } from '@server/datasource';
+import Media from '@server/entity/Media';
 import cacheManager from '@server/lib/cache';
+import type { NoBookEndsFormat } from '@server/lib/nobookends';
 import {
   getNoBookEndsItemUrl,
   isNoBookEndsLinkEnabled,
 } from '@server/lib/nobookends';
 import type { AudiobookshelfSettings } from '@server/lib/settings';
+import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { getAudiobookshelfUrl } from '@server/models/Book';
+import { runInBackground } from '@server/utils/backgroundTasks';
 
 // Matches change rarely, misses are asked again sooner as Audiobookshelf may
 // still be scanning a new import, and failures are not retried right away
@@ -289,6 +293,131 @@ export const getAudiobookshelfItemId = async (
   }
 };
 
+/**
+ * The library a format of a book is kept in
+ */
+export const getLibraryId = (
+  settings: AudiobookshelfSettings,
+  format: NoBookEndsFormat
+): string | undefined =>
+  (format === 'ebook'
+    ? settings.ebookLibraryId || settings.libraryId
+    : settings.libraryId) || undefined;
+
+export const ITEM_ID_KEYS = {
+  ebook: 'absEbookItemId',
+  audiobook: 'absAudiobookItemId',
+} as const;
+
+/**
+ * Remembers the library items a lookup found for a book, so an item can be
+ * traced back to the book later. A format the library has no item for is
+ * forgotten, and one that was not looked up is left as it is.
+ */
+export const rememberAudiobookshelfItemIds = async (
+  media: Media,
+  found: Partial<Record<NoBookEndsFormat, string | null | undefined>>
+): Promise<void> => {
+  if (!media.id) {
+    return;
+  }
+
+  const changes: Partial<Pick<Media, (typeof ITEM_ID_KEYS)[NoBookEndsFormat]>> =
+    {};
+
+  for (const format of ['ebook', 'audiobook'] as const) {
+    const itemId = found[format];
+    const key = ITEM_ID_KEYS[format];
+
+    if (itemId !== undefined && itemId !== (media[key] ?? null)) {
+      changes[key] = itemId;
+    }
+  }
+
+  if (!Object.keys(changes).length) {
+    return;
+  }
+
+  try {
+    // Leaves updatedAt alone, nothing a user sees has changed
+    await getRepository(Media)
+      .createQueryBuilder()
+      .update(Media)
+      .set({ ...changes, updatedAt: () => '"updatedAt"' })
+      .where('id = :id', { id: media.id })
+      .execute();
+    Object.assign(media, changes);
+  } catch (e) {
+    logger.debug('Failed to remember the Audiobookshelf items of a book', {
+      label: 'Audiobookshelf',
+      mediaId: media.id,
+      errorMessage: e.message,
+    });
+  }
+};
+
+// Books looked up per scan, and how long one that was not found waits
+const BACKFILL_BATCH = 25;
+const BACKFILL_RETRY_MS = 12 * 60 * 60 * 1000;
+const backfillAttempts = new Map<string, number>();
+
+export interface AudiobookshelfBackfillBook {
+  media: Media;
+  format: NoBookEndsFormat;
+  title: string;
+  authors: string[];
+}
+
+/**
+ * Finds the library items of a few available books whose items are not
+ * known yet, so they can be traced back from Audiobookshelf without
+ * opening each book first. A book that is not found is tried again later.
+ * Returns how many items were found.
+ */
+export const backfillAudiobookshelfItemIds = async (
+  books: AudiobookshelfBackfillBook[],
+  shouldContinue: () => boolean = () => true
+): Promise<number> => {
+  const settings = getSettings().audiobookshelf;
+
+  if (!settings.url?.trim() || !settings.apiKey) {
+    return 0;
+  }
+
+  const now = Date.now();
+  const due = books
+    .filter(
+      ({ media, format }) =>
+        !!media.olId &&
+        !media[ITEM_ID_KEYS[format]] &&
+        !!getLibraryId(settings, format) &&
+        now - (backfillAttempts.get(`${media.id}:${format}`) ?? 0) >
+          BACKFILL_RETRY_MS
+    )
+    .slice(0, BACKFILL_BATCH);
+  let found = 0;
+
+  for (const { media, format, title, authors } of due) {
+    if (!shouldContinue()) {
+      break;
+    }
+
+    backfillAttempts.set(`${media.id}:${format}`, now);
+    const itemId = await lookupAudiobookshelfItem(
+      settings,
+      getLibraryId(settings, format) as string,
+      { olId: media.olId as string, title, authors }
+    );
+
+    if (itemId) {
+      await rememberAudiobookshelfItemIds(media, { [format]: itemId });
+      found++;
+    }
+  }
+
+  return found;
+};
+
 export interface AudiobookshelfLinks {
   audiobookshelfUrl: string | null;
   audiobookshelfEbookUrl: string | null;
@@ -336,29 +465,43 @@ export const getAudiobookshelfLinks = async (
     return searchLinks;
   }
 
+  // Undefined when the format was not looked up or the lookup ran over
   const findItem = async (
     searchLink: string | null,
     libraryId: string | undefined,
     lookupBook: AudiobookshelfBook
-  ): Promise<string | null> => {
+  ): Promise<string | null | undefined> => {
     if (!searchLink || !libraryId) {
-      return null;
+      return undefined;
     }
 
-    return (
-      (await getAudiobookshelfItemId(settings, libraryId, lookupBook)) ?? null
-    );
+    return getAudiobookshelfItemId(settings, libraryId, lookupBook);
   };
 
   // The Audible ASIN only belongs to the audiobook
-  const [ebookItemId, audiobookItemId] = await Promise.all([
+  const [foundEbookItemId, foundAudiobookItemId] = await Promise.all([
     findItem(
       searchLinks.audiobookshelfEbookUrl,
-      settings.ebookLibraryId || settings.libraryId,
+      getLibraryId(settings, 'ebook'),
       { ...book, asin: undefined }
     ),
-    findItem(searchLinks.audiobookshelfAudiobookUrl, settings.libraryId, book),
+    findItem(
+      searchLinks.audiobookshelfAudiobookUrl,
+      getLibraryId(settings, 'audiobook'),
+      book
+    ),
   ]);
+  const ebookItemId = foundEbookItemId ?? null;
+  const audiobookItemId = foundAudiobookItemId ?? null;
+
+  if (media) {
+    runInBackground(
+      rememberAudiobookshelfItemIds(media, {
+        ebook: foundEbookItemId,
+        audiobook: foundAudiobookItemId,
+      })
+    );
+  }
 
   const itemUrl = (itemId: string | null, searchLink: string | null) =>
     itemId ? `${baseUrl}/item/${encodeURIComponent(itemId)}` : searchLink;

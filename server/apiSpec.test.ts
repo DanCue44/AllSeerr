@@ -112,6 +112,9 @@ describe('seerr-api.yml', () => {
     app.get('/api/v1/nobookends/status', (_req, res) => {
       res.status(200).json({});
     });
+    app.get('/api/v1/nobookends/item/:absItemId', (_req, res) => {
+      res.status(200).json({});
+    });
     app.get('/api/v1/user/:userId/settings/nobookends', (_req, res) => {
       res.status(200).json({ available: true, connected: false });
     });
@@ -418,6 +421,11 @@ describe('seerr-api.yml', () => {
       200,
       nobookendsStatus.body.message
     );
+
+    const nobookendsItem = await request(app)
+      .get('/api/v1/nobookends/item/li_8a3k2m9x4q7w1p5z')
+      .query({ title: 'Fantastic Mr Fox', author: 'Roald Dahl' });
+    assert.strictEqual(nobookendsItem.status, 200, nobookendsItem.body.message);
 
     const nobookendsConnection = await request(app).get(
       '/api/v1/user/1/settings/nobookends'

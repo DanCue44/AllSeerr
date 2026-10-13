@@ -36,6 +36,7 @@ tags:
       The NoBookEnds companion app reads and listens to books through Audiobookshelf, and can request and report books here with the personal key from its connect link (`X-Api-Key: asu_...`). Besides `/nobookends/status`, it uses these endpoints, which all accept personal keys:
 
       - `GET /search?type=book` to search books
+      - `GET /nobookends/item/{absItemId}` for the book of an Audiobookshelf library item
       - `GET /book/{bookId}` for a book, its status per format (`mediaInfo.status` for the ebook, `mediaInfo.statusAudio` for the audiobook) and its Audiobookshelf item per format
       - `POST /request` with `mediaType: book` and `isAudiobook` to request a format
       - `GET /request?mediaType=book&requestedBy={userId}` for the user's requests, with download progress in `media.downloadStatus` (ebook) and `media.downloadStatusAudio` (audiobook)
@@ -2812,6 +2813,16 @@ components:
           readOnly: true
           nullable: true
           description: Chaptarr work ID of a book, such as `gr:3060926`, shared by its ebook and audiobook
+        absEbookItemId:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Audiobookshelf library item of a book's ebook, once the book was found in the library
+        absAudiobookItemId:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Audiobookshelf library item of a book's audiobook, once the book was found in the library
         downloadStatusAudio:
           type: array
           readOnly: true
@@ -10469,6 +10480,76 @@ paths:
                     description: Whether book pages offer to open books in NoBookEnds
         '403':
           description: Not signed in
+  /nobookends/item/{absItemId}:
+    get:
+      summary: Get the book of an Audiobookshelf item
+      description: |
+        Returns the book an Audiobookshelf library item is of, among the books AllSeerr knows, with its request status per format. Items are remembered once a book page or the Chaptarr scan finds the book in the library, so known items answer from the database.
+
+        With `title` (and optionally `author`), an unknown item is looked for: books with that title AllSeerr knows are looked up in Audiobookshelf the way book pages do, which may take a couple of seconds. Works with the personal key from the connect link.
+      tags:
+        - nobookends
+      parameters:
+        - in: path
+          name: absItemId
+          required: true
+          description: Audiobookshelf library item ID
+          schema:
+            type: string
+            example: li_8a3k2m9x4q7w1p5z
+        - in: query
+          name: title
+          required: false
+          description: Title of the item, used to find an item AllSeerr has not seen yet
+          schema:
+            type: string
+            example: Fantastic Mr Fox
+        - in: query
+          name: author
+          required: false
+          description: Author of the item, narrows the title search
+          schema:
+            type: string
+            example: Roald Dahl
+      responses:
+        '200':
+          description: Book found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  olId:
+                    type: string
+                    description: OpenLibrary work ID, for `GET /book/{bookId}`
+                    example: OL45804W
+                  format:
+                    type: string
+                    enum: [ebook, audiobook]
+                    description: Format the item is of the book
+                  mediaId:
+                    type: number
+                    description: AllSeerr media ID, for `POST /issue`
+                    example: 42
+                  title:
+                    type: string
+                    nullable: true
+                    description: Title of the work in OpenLibrary, null when it could not be fetched
+                    example: Fantastic Mr Fox
+                  status:
+                    type: number
+                    description: Availability of the ebook. 1 = `UNKNOWN`, 2 = `PENDING`, 3 = `PROCESSING`, 4 = `PARTIALLY_AVAILABLE`, 5 = `AVAILABLE`, 6 = `BLOCKLISTED`, 7 = `DELETED`
+                    example: 5
+                  statusAudio:
+                    type: number
+                    description: Availability of the audiobook, with the same values as `status`
+                    example: 1
+        '400':
+          description: Invalid item ID
+        '403':
+          description: Not signed in
+        '404':
+          description: No book AllSeerr knows has this item
   /book/{bookId}:
     get:
       summary: Get book details

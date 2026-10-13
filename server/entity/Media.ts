@@ -281,6 +281,16 @@ class Media {
   @Index()
   public foreignBookId?: string | null;
 
+  // Audiobookshelf library items of a book's formats, remembered when the
+  // book is found in the library so an item can be traced back to its book
+  @Column({ nullable: true, type: 'varchar' })
+  @Index()
+  public absEbookItemId?: string | null;
+
+  @Column({ nullable: true, type: 'varchar' })
+  @Index()
+  public absAudiobookItemId?: string | null;
+
   @Column({ nullable: true, type: 'varchar' })
   public externalServiceSlug4k?: string | null;
 

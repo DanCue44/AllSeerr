@@ -1,3 +1,4 @@
+import AudiobookshelfAPI from '@server/api/audiobookshelf';
 import OpenLibrary from '@server/api/openlibrary';
 import type { OlWork } from '@server/api/openlibrary/interfaces';
 import type { ChaptarrBook } from '@server/api/servarr/chaptarr';
@@ -49,6 +50,19 @@ mock.method(
   })
 );
 mock.method(OpenLibrary.prototype, 'getWorkSummary', async () => undefined);
+mock.method(OpenLibrary.prototype, 'getWorkIsbns', async () => []);
+mock.method(
+  AudiobookshelfAPI.prototype,
+  'searchBooks',
+  async (libraryId: string) => [
+    {
+      id: libraryId === 'ebooks' ? 'li_ebook0001' : 'li_audio0001',
+      title: 'Pride and Prejudice',
+      authors: ['Jane Austen'],
+      series: [],
+    },
+  ]
+);
 
 setupTestDb();
 
@@ -316,6 +330,50 @@ describe('Chaptarr Scanner', () => {
       where: { id: ebookRequest.id },
     });
     assert.strictEqual(ebook.status, MediaRequestStatus.APPROVED);
+  });
+
+  it('remembers the Audiobookshelf items of available books', async () => {
+    const mediaRepository = getRepository(Media);
+    await mediaRepository.save(
+      new Media({
+        olId: PRIDE_ID,
+        mediaType: MediaType.BOOK,
+        status: MediaStatus.AVAILABLE,
+        statusAudio: MediaStatus.PROCESSING,
+        serviceId: 0,
+        externalServiceId: 10,
+        externalServiceIdAudio: 11,
+        foreignBookId: 'gr:3060926',
+      })
+    );
+    books = [
+      fakeBook({
+        id: 10,
+        monitored: true,
+        statistics: { bookFileCount: 1 },
+        author: { authorName: 'Jane Austen', foreignAuthorId: 'gr:1265' },
+      }),
+      fakeBook({ id: 11, mediaType: 'audiobook', monitored: true }),
+    ];
+    getSettings().audiobookshelf = {
+      url: 'https://books.example.com',
+      libraryId: 'audiobooks',
+      ebookLibraryId: 'ebooks',
+      apiKey: 'abs-key',
+    };
+
+    try {
+      await runWithMockTimers(() => chaptarrScanner.run());
+    } finally {
+      getSettings().audiobookshelf = { url: '', apiKey: '' };
+    }
+
+    const pride = await mediaRepository.findOneOrFail({
+      where: { olId: PRIDE_ID },
+    });
+    assert.strictEqual(pride.absEbookItemId, 'li_ebook0001');
+    // The audiobook is not available yet
+    assert.strictEqual(pride.absAudiobookItemId, null);
   });
 
   it('skips servers without scanning enabled', async () => {

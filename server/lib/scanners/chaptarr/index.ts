@@ -10,6 +10,8 @@ import ChaptarrAPI, {
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
+import type { AudiobookshelfBackfillBook } from '@server/lib/audiobookshelfItem';
+import { backfillAudiobookshelfItemIds } from '@server/lib/audiobookshelfItem';
 import {
   linkChaptarrBook,
   matchChaptarrLibraryBook,
@@ -173,19 +175,22 @@ class ChaptarrScanner
         // Resets formats whose files are gone, for books linked to any
         // entry of this server
         this.checkSession(sessionId);
+        const serverIds = settings.chaptarr
+          .filter(
+            (other) =>
+              other.hostname === server.hostname &&
+              other.port === server.port &&
+              other.baseUrl === server.baseUrl
+          )
+          .map((other) => other.id);
+        const isCurrent = () => this.running && this.sessionId === sessionId;
         await syncChaptarrAvailability(
           chaptarr,
-          settings.chaptarr
-            .filter(
-              (other) =>
-                other.hostname === server.hostname &&
-                other.port === server.port &&
-                other.baseUrl === server.baseUrl
-            )
-            .map((other) => other.id),
+          serverIds,
           this.items,
-          () => this.running && this.sessionId === sessionId
+          isCurrent
         );
+        await this.backfillAudiobookshelfItems(serverIds, isCurrent);
 
         if (server.isDefault) {
           await this.linkUnlinkedBooks(chaptarr, server);
@@ -198,6 +203,82 @@ class ChaptarrScanner
       this.scanFailed(e);
     } finally {
       this.endRun(sessionId);
+    }
+  }
+
+  /**
+   * Remembers the Audiobookshelf items of a few available books each scan,
+   * so NoBookEnds can trace an item back to its book. The titles and
+   * authors come from Chaptarr, which has the files Audiobookshelf reads.
+   */
+  private async backfillAudiobookshelfItems(
+    serverIds: number[],
+    shouldContinue: () => boolean
+  ): Promise<void> {
+    const audiobookshelf = getSettings().audiobookshelf;
+
+    if (!serverIds.length || !audiobookshelf.url || !audiobookshelf.apiKey) {
+      return;
+    }
+
+    try {
+      const available = MediaStatus.AVAILABLE;
+      const missing = await getRepository(Media)
+        .createQueryBuilder('media')
+        .where('media.mediaType = :type', { type: MediaType.BOOK })
+        .andWhere('media.serviceId IN (:...serverIds)', { serverIds })
+        .andWhere('media.olId IS NOT NULL')
+        .andWhere(
+          '((media.status = :available AND media.absEbookItemId IS NULL ' +
+            'AND media.externalServiceId IS NOT NULL) OR ' +
+            '(media.statusAudio = :available AND ' +
+            'media.absAudiobookItemId IS NULL AND ' +
+            'media.externalServiceIdAudio IS NOT NULL))',
+          { available }
+        )
+        .take(200)
+        .getMany();
+
+      if (!missing.length) {
+        return;
+      }
+
+      const booksById = new Map(
+        this.items
+          .filter((book) => book.id)
+          .map((book) => [book.id as number, book])
+      );
+      const books: AudiobookshelfBackfillBook[] = [];
+
+      for (const media of missing) {
+        for (const format of ['ebook', 'audiobook'] as const) {
+          const book = booksById.get(
+            (format === 'ebook'
+              ? media.externalServiceId
+              : media.externalServiceIdAudio) ?? -1
+          );
+          const status = format === 'ebook' ? media.status : media.statusAudio;
+
+          if (book && status === available) {
+            books.push({
+              media,
+              format,
+              title: book.title,
+              authors: book.author?.authorName ? [book.author.authorName] : [],
+            });
+          }
+        }
+      }
+
+      const found = await backfillAudiobookshelfItemIds(books, shouldContinue);
+
+      if (found) {
+        this.log(`Found ${found} books in Audiobookshelf`, 'info');
+      }
+    } catch (e) {
+      this.log('Failed to look books up in Audiobookshelf', 'debug', {
+        ...requestErrorLogFields(e),
+      });
     }
   }
 
