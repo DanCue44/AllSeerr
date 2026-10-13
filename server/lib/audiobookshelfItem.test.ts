@@ -415,8 +415,24 @@ describe('getAudiobookshelfLinks', () => {
         audiobookshelfUrl: `https://books.example.com/item/${AUDIOBOOK_ITEM}`,
         audiobookshelfEbookUrl: `https://books.example.com/item/${EBOOK_ITEM}`,
         audiobookshelfAudiobookUrl: `https://books.example.com/item/${AUDIOBOOK_ITEM}`,
+        audiobookshelfEbookItemId: EBOOK_ITEM,
+        audiobookshelfAudiobookItemId: AUDIOBOOK_ITEM,
+        nobookendsEbookUrl: `https://nobookends.com/open/item/${EBOOK_ITEM}?server=https%3A%2F%2Fbooks.example.com&format=ebook`,
+        nobookendsAudiobookUrl: `https://nobookends.com/open/item/${AUDIOBOOK_ITEM}?server=https%3A%2F%2Fbooks.example.com&format=audiobook`,
       }
     );
+  });
+
+  it('leaves NoBookEnds out when an admin hides it', async () => {
+    const links = await getAudiobookshelfLinks(
+      { ...settings, showNoBookEnds: false },
+      steveJobs,
+      bothAvailable
+    );
+
+    assert.strictEqual(links.nobookendsEbookUrl, null);
+    assert.strictEqual(links.nobookendsAudiobookUrl, null);
+    assert.strictEqual(links.audiobookshelfAudiobookItemId, AUDIOBOOK_ITEM);
   });
 
   it('keeps the title search without an API key', async () => {
@@ -431,6 +447,8 @@ describe('getAudiobookshelfLinks', () => {
       `https://books.example.com/library/${EBOOK_LIBRARY}/search?q=Steve%20Jobs`
     );
     assert.deepStrictEqual(searchCalls, []);
+    assert.strictEqual(links.audiobookshelfEbookItemId, null);
+    assert.strictEqual(links.nobookendsEbookUrl, null);
   });
 
   it('falls back to the title search when the book is not found', async () => {
@@ -446,6 +464,7 @@ describe('getAudiobookshelfLinks', () => {
       links.audiobookshelfAudiobookUrl,
       `https://books.example.com/library/${AUDIOBOOK_LIBRARY}/search?q=Steve%20Jobs`
     );
+    assert.strictEqual(links.nobookendsAudiobookUrl, null);
   });
 
   it('asks nothing for formats that are not available', async () => {

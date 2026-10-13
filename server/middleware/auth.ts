@@ -16,9 +16,11 @@ export const checkUser: Middleware = async (req, _res, next) => {
   if (isUserApiKey(apiKey)) {
     // A personal key always acts as its owner; X-API-User is ignored
     const userRepository = getRepository(User);
+    const keyHash = hashUserApiKey(apiKey);
 
+    // Either the key the user made or the one the NoBookEnds app connected with
     user = await userRepository.findOne({
-      where: { apiKeyHash: hashUserApiKey(apiKey) },
+      where: [{ apiKeyHash: keyHash }, { nobookendsKeyHash: keyHash }],
     });
   } else if (apiKey && apiKey === settings.main.apiKey) {
     const userRepository = getRepository(User);

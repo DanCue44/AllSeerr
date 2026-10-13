@@ -50,6 +50,9 @@ audiobookshelfRoutes.post<
     ...(req.body.apiKey !== undefined
       ? { apiKey: trimmed(req.body.apiKey) }
       : {}),
+    ...(typeof req.body.showNoBookEnds === 'boolean'
+      ? { showNoBookEnds: req.body.showNoBookEnds }
+      : {}),
   };
 
   await settings.save();

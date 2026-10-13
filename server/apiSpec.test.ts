@@ -109,6 +109,18 @@ describe('seerr-api.yml', () => {
     app.post('/api/v1/settings/audiobookshelf/test', (_req, res) => {
       res.status(200).json({});
     });
+    app.get('/api/v1/nobookends/status', (_req, res) => {
+      res.status(200).json({});
+    });
+    app.get('/api/v1/user/:userId/settings/nobookends', (_req, res) => {
+      res.status(200).json({ available: true, connected: false });
+    });
+    app.post('/api/v1/user/:userId/settings/nobookends', (_req, res) => {
+      res.status(201).json({});
+    });
+    app.delete('/api/v1/user/:userId/settings/nobookends', (_req, res) => {
+      res.status(204).send();
+    });
     app.use(
       (
         err: { status?: number; message?: string },
@@ -387,6 +399,48 @@ describe('seerr-api.yml', () => {
       200,
       testAudiobookshelf.body.message
     );
+
+    const hideNoBookEnds = await request(app)
+      .post('/api/v1/settings/audiobookshelf')
+      .send({ url: 'https://books.example.com', showNoBookEnds: false });
+    assert.strictEqual(hideNoBookEnds.status, 200, hideNoBookEnds.body.message);
+
+    const badShowNoBookEnds = await request(app)
+      .post('/api/v1/settings/audiobookshelf')
+      .send({ showNoBookEnds: 'sometimes' });
+    assert.strictEqual(badShowNoBookEnds.status, 400);
+
+    const nobookendsStatus = await request(app).get(
+      '/api/v1/nobookends/status'
+    );
+    assert.strictEqual(
+      nobookendsStatus.status,
+      200,
+      nobookendsStatus.body.message
+    );
+
+    const nobookendsConnection = await request(app).get(
+      '/api/v1/user/1/settings/nobookends'
+    );
+    assert.strictEqual(
+      nobookendsConnection.status,
+      200,
+      nobookendsConnection.body.message
+    );
+
+    const nobookendsConnect = await request(app).post(
+      '/api/v1/user/1/settings/nobookends'
+    );
+    assert.strictEqual(
+      nobookendsConnect.status,
+      201,
+      nobookendsConnect.body.message
+    );
+
+    const nobookendsDisconnect = await request(app).delete(
+      '/api/v1/user/1/settings/nobookends'
+    );
+    assert.strictEqual(nobookendsDisconnect.status, 204);
 
     const testWithoutUrl = await request(app)
       .post('/api/v1/settings/audiobookshelf/test')

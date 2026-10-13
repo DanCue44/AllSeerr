@@ -57,6 +57,7 @@ export class User {
     'jellyfinAuthToken',
     'plexToken',
     'apiKeyHash',
+    'nobookendsKeyHash',
     'settings',
   ];
 
@@ -118,6 +119,15 @@ export class User {
 
   @DbAwareColumn({ type: 'datetime', nullable: true })
   public apiKeyCreatedAt?: Date | null;
+
+  // A second personal key, made for the NoBookEnds app by its connect link,
+  // so connecting the app never replaces the key a user made themselves
+  @Index()
+  @Column({ type: 'varchar', nullable: true, select: false })
+  public nobookendsKeyHash?: string | null;
+
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public nobookendsKeyCreatedAt?: Date | null;
 
   @Column({ type: 'integer', default: 0 })
   public permissions = 0;

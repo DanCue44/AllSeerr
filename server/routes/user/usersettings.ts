@@ -16,6 +16,10 @@ import {
   TV_RATINGS,
   parseRatingLimit,
 } from '@server/lib/contentRatingLimit';
+import {
+  getNoBookEndsConnectUrl,
+  isNoBookEndsAvailable,
+} from '@server/lib/nobookends';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import { generateUserApiKey, hashUserApiKey } from '@server/lib/userApiKey';
@@ -969,6 +973,131 @@ userSettingsRoutes.delete<{ id: string }>(
       });
 
       logger.info('Personal API key revoked', {
+        label: 'API',
+        userId: user.id,
+        revokedBy: req.user?.id,
+      });
+
+      return res.status(204).send();
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+interface NoBookEndsConnection {
+  // Whether books and Audiobookshelf are set up, so the app can connect
+  available: boolean;
+  connected: boolean;
+  createdAt?: Date | null;
+}
+
+userSettingsRoutes.get<{ id: string }, NoBookEndsConnection>(
+  '/nobookends',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    const userRepository = getRepository(User);
+
+    try {
+      const user = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+        select: ['id', 'nobookendsKeyHash', 'nobookendsKeyCreatedAt'],
+      });
+
+      if (!user) {
+        return next({ status: 404, message: 'User not found.' });
+      }
+
+      return res.status(200).json({
+        available: isNoBookEndsAvailable(),
+        connected: !!user.nobookendsKeyHash,
+        createdAt: user.nobookendsKeyHash ? user.nobookendsKeyCreatedAt : null,
+      });
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+/**
+ * Makes the NoBookEnds key and the link that sets the app up with it. A new
+ * link replaces the old key, which signs out the app it was given to. Like
+ * the personal key, only the owner can make it, as it is shown once.
+ */
+userSettingsRoutes.post<
+  { id: string },
+  { apiKey: string; createdAt: Date; connectUrl: string }
+>('/nobookends', isOwnProfile(), async (req, res, next) => {
+  const settings = getSettings();
+  const userRepository = getRepository(User);
+
+  try {
+    if (!isNoBookEndsAvailable()) {
+      return next({
+        status: 400,
+        message: 'Books and Audiobookshelf must be set up first.',
+      });
+    }
+
+    const user = await userRepository.findOne({
+      where: { id: Number(req.params.id) },
+    });
+
+    if (!user) {
+      return next({ status: 404, message: 'User not found.' });
+    }
+
+    const apiKey = generateUserApiKey();
+    const createdAt = new Date();
+
+    await userRepository.update(user.id, {
+      nobookendsKeyHash: hashUserApiKey(apiKey),
+      nobookendsKeyCreatedAt: createdAt,
+    });
+
+    logger.info('NoBookEnds key generated', {
+      label: 'API',
+      userId: user.id,
+    });
+
+    return res.status(201).json({
+      apiKey,
+      createdAt,
+      connectUrl: getNoBookEndsConnectUrl({
+        audiobookshelfUrl: settings.audiobookshelf.url ?? '',
+        // The address the user opened AllSeerr at when none is set
+        allseerrUrl:
+          settings.main.applicationUrl ||
+          `${req.protocol}://${req.get('host')}`,
+        apiKey,
+      }),
+    });
+  } catch (e) {
+    next({ status: 500, message: e.message });
+  }
+});
+
+userSettingsRoutes.delete<{ id: string }>(
+  '/nobookends',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    const userRepository = getRepository(User);
+
+    try {
+      const user = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+      });
+
+      if (!user) {
+        return next({ status: 404, message: 'User not found.' });
+      }
+
+      await userRepository.update(user.id, {
+        nobookendsKeyHash: null,
+        nobookendsKeyCreatedAt: null,
+      });
+
+      logger.info('NoBookEnds key revoked', {
         label: 'API',
         userId: user.id,
         revokedBy: req.user?.id,

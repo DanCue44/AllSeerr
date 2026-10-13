@@ -28,6 +28,7 @@ const defaultSettings: PublicSettingsResponse = {
   blockedWatchProviders: '',
   musicEnabled: false,
   subtitlesEnabled: false,
+  audiobookshelfEnabled: false,
   originalLanguage: '',
   mediaServerType: MediaServerType.NOT_CONFIGURED,
   partialRequestsEnabled: true,

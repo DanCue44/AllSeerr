@@ -101,6 +101,9 @@ export interface AudiobookshelfSettings {
   // Lists the libraries in the settings and finds books in them, so links
   // open the book itself. Never sent to users.
   apiKey?: string;
+  // Offers to open available books in the NoBookEnds app. On unless turned
+  // off, so only false hides it.
+  showNoBookEnds?: boolean;
 }
 
 /**
@@ -340,6 +343,7 @@ interface FullPublicSettings extends PublicSettings {
   blockedWatchProviders: string;
   musicEnabled: boolean;
   subtitlesEnabled: boolean;
+  audiobookshelfEnabled: boolean;
   originalLanguage: string;
   mediaServerType: number;
   jellyfinExternalHost?: string;
@@ -994,6 +998,7 @@ class Settings {
         this.data.bazarr?.port &&
         this.data.bazarr?.apiKey
       ),
+      audiobookshelfEnabled: !!this.audiobookshelf.url,
       originalLanguage: this.data.main.originalLanguage,
       mediaServerType: this.main.mediaServerType,
       partialRequestsEnabled: this.data.main.partialRequestsEnabled,

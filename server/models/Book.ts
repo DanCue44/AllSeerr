@@ -59,6 +59,10 @@ export interface BookDetails {
   audiobookshelfUrl?: string | null;
   audiobookshelfEbookUrl?: string | null;
   audiobookshelfAudiobookUrl?: string | null;
+  audiobookshelfEbookItemId?: string | null;
+  audiobookshelfAudiobookItemId?: string | null;
+  nobookendsEbookUrl?: string | null;
+  nobookendsAudiobookUrl?: string | null;
   audiobookEdition?: AudiobookEdition | null;
   mediaInfo?: Media;
   onUserWatchlist?: boolean;

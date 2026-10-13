@@ -50,6 +50,7 @@ export interface PublicSettingsResponse {
   musicEnabled: boolean;
   // Whether Bazarr is set up, so subtitles can be checked and requested
   subtitlesEnabled: boolean;
+  audiobookshelfEnabled: boolean;
   originalLanguage: string;
   mediaServerType: number;
   partialRequestsEnabled: boolean;

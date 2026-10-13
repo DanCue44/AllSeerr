@@ -1,0 +1,273 @@
+import assert from 'node:assert/strict';
+import { before, beforeEach, describe, it } from 'node:test';
+
+import { getRepository } from '@server/datasource';
+import { User } from '@server/entity/User';
+import { getSettings } from '@server/lib/settings';
+import { checkUser, isAuthenticated } from '@server/middleware/auth';
+import authRoutes from '@server/routes/auth';
+import nobookendsRoutes from '@server/routes/nobookends';
+import userRoutes from '@server/routes/user';
+import { setupTestDb } from '@server/test/db';
+import type { Express } from 'express';
+import express from 'express';
+import session from 'express-session';
+import request from 'supertest';
+
+let app: Express;
+
+function createApp() {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    session({
+      secret: 'test-secret',
+      resave: false,
+      saveUninitialized: false,
+    })
+  );
+  app.use(checkUser);
+  app.use('/auth', authRoutes);
+  app.use('/user', isAuthenticated(), userRoutes);
+  app.use('/nobookends', isAuthenticated(), nobookendsRoutes);
+  app.use(
+    (
+      err: { status?: number; message?: string },
+      _req: express.Request,
+      res: express.Response,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      _next: express.NextFunction
+    ) => {
+      res
+        .status(err.status ?? 500)
+        .json({ status: err.status ?? 500, message: err.message });
+    }
+  );
+  return app;
+}
+
+before(async () => {
+  app = createApp();
+});
+
+setupTestDb();
+
+const enableBooks = () => {
+  const settings = getSettings();
+  settings.main.bookService = 'lazylibrarian';
+  settings.main.applicationUrl = 'https://allseerr.example.com';
+  settings.lazylibrarian = {
+    ...settings.lazylibrarian,
+    hostname: 'lazylibrarian',
+    apiKey: 'key',
+  };
+  settings.audiobookshelf = {
+    url: 'https://books.example.com',
+    libraryId: 'library',
+    apiKey: 'abs-key',
+    showNoBookEnds: true,
+  };
+};
+
+beforeEach(() => {
+  const settings = getSettings();
+  settings.main.localLogin = true;
+  settings.main.applicationUrl = '';
+  settings.main.bookService = undefined;
+  settings.chaptarr = [];
+  // The settings setters merge, so values are emptied rather than left out
+  settings.lazylibrarian = { hostname: '', apiKey: '' };
+  settings.audiobookshelf = { url: '', apiKey: '', showNoBookEnds: true };
+});
+
+async function loginAs(email: string, password = 'test1234') {
+  const agent = request.agent(app);
+  const res = await agent.post('/auth/local').send({ email, password });
+
+  assert.strictEqual(res.status, 200);
+  return { agent, userId: res.body.id as number };
+}
+
+describe('NoBookEnds connect link', () => {
+  it('creates a key and a link that sets the app up', async () => {
+    enableBooks();
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+
+    const created = await agent.post(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(created.status, 201);
+    assert.match(created.body.apiKey, /^asu_/);
+
+    const link = new URL(created.body.connectUrl);
+    assert.strictEqual(link.origin, 'https://nobookends.com');
+    assert.strictEqual(link.pathname, '/open/connect');
+    assert.strictEqual(
+      link.searchParams.get('abs'),
+      'https://books.example.com'
+    );
+    assert.strictEqual(
+      link.searchParams.get('allseerr'),
+      'https://allseerr.example.com'
+    );
+    assert.strictEqual(link.searchParams.get('key'), created.body.apiKey);
+
+    const status = await agent.get(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(status.status, 200);
+    assert.strictEqual(status.body.available, true);
+    assert.strictEqual(status.body.connected, true);
+    assert.strictEqual(status.body.apiKey, undefined);
+
+    const me = await request(app)
+      .get(`/user/${userId}`)
+      .set('X-API-Key', created.body.apiKey);
+    assert.strictEqual(me.status, 200);
+    assert.strictEqual(me.body.id, userId);
+  });
+
+  it('falls back to the address AllSeerr was opened at', async () => {
+    enableBooks();
+    getSettings().main.applicationUrl = '';
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+
+    const created = await agent
+      .post(`/user/${userId}/settings/nobookends`)
+      .set('Host', 'allseerr.lan:5055');
+
+    assert.strictEqual(
+      new URL(created.body.connectUrl).searchParams.get('allseerr'),
+      'http://allseerr.lan:5055'
+    );
+  });
+
+  it('replaces the old key when a new link is made', async () => {
+    enableBooks();
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+    const first = await agent.post(`/user/${userId}/settings/nobookends`);
+    const second = await agent.post(`/user/${userId}/settings/nobookends`);
+
+    assert.notStrictEqual(first.body.apiKey, second.body.apiKey);
+
+    const replaced = await request(app)
+      .get(`/user/${userId}`)
+      .set('X-API-Key', first.body.apiKey);
+    assert.strictEqual(replaced.status, 403);
+
+    const current = await request(app)
+      .get(`/user/${userId}`)
+      .set('X-API-Key', second.body.apiKey);
+    assert.strictEqual(current.status, 200);
+  });
+
+  it('keeps the personal API key the user made', async () => {
+    enableBooks();
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+    const personal = await agent.post(`/user/${userId}/settings/api-key`);
+    await agent.post(`/user/${userId}/settings/nobookends`);
+
+    const stored = await getRepository(User).findOneOrFail({
+      where: { id: userId },
+      select: ['id', 'apiKeyHash', 'nobookendsKeyHash'],
+    });
+    assert.ok(stored.apiKeyHash);
+    assert.ok(stored.nobookendsKeyHash);
+    assert.notStrictEqual(stored.apiKeyHash, stored.nobookendsKeyHash);
+
+    const res = await request(app)
+      .get(`/user/${userId}`)
+      .set('X-API-Key', personal.body.apiKey);
+    assert.strictEqual(res.status, 200);
+  });
+
+  it('signs the app out when disconnected', async () => {
+    enableBooks();
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+    const created = await agent.post(`/user/${userId}/settings/nobookends`);
+
+    const revoke = await agent.delete(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(revoke.status, 204);
+
+    const revoked = await request(app)
+      .get('/nobookends/status')
+      .set('X-API-Key', created.body.apiKey);
+    assert.strictEqual(revoked.status, 403);
+
+    const status = await agent.get(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(status.body.connected, false);
+  });
+
+  it('refuses a link while books or Audiobookshelf are not set up', async () => {
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+
+    const status = await agent.get(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(status.body.available, false);
+
+    const res = await agent.post(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(res.status, 400);
+  });
+
+  it("does not let an admin make another user's link", async () => {
+    enableBooks();
+    const { userId } = await loginAs('demo@seerr.dev');
+    const { agent: admin } = await loginAs('admin@seerr.dev');
+
+    const res = await admin.post(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(res.status, 403);
+
+    const revoke = await admin.delete(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(revoke.status, 204);
+  });
+});
+
+describe('GET /nobookends/status', () => {
+  it('tells the app what the user may do', async () => {
+    enableBooks();
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+    const created = await agent.post(`/user/${userId}/settings/nobookends`);
+
+    const res = await request(app)
+      .get('/nobookends/status')
+      .set('X-API-Key', created.body.apiKey);
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(typeof res.body.version, 'string');
+    assert.strictEqual(res.body.user.id, userId);
+    assert.deepStrictEqual(res.body.books, {
+      enabled: true,
+      // The demo user has the REQUEST permission only
+      canRequest: true,
+      autoApprove: false,
+      defaultFormat: 'both',
+    });
+    assert.deepStrictEqual(res.body.issues, { canCreate: false });
+    assert.deepStrictEqual(res.body.audiobookshelf, {
+      configured: true,
+      url: 'https://books.example.com',
+      itemLinks: true,
+    });
+    assert.strictEqual(res.body.openInNoBookEnds, true);
+  });
+
+  it('turns features off that are not set up or hidden', async () => {
+    const { agent } = await loginAs('admin@seerr.dev');
+
+    const bare = await agent.get('/nobookends/status');
+    assert.strictEqual(bare.status, 200);
+    assert.strictEqual(bare.body.books.enabled, false);
+    assert.strictEqual(bare.body.books.canRequest, false);
+    assert.strictEqual(bare.body.audiobookshelf.configured, false);
+    assert.strictEqual(bare.body.audiobookshelf.url, null);
+    assert.strictEqual(bare.body.openInNoBookEnds, false);
+
+    enableBooks();
+    getSettings().audiobookshelf = { showNoBookEnds: false };
+
+    const hidden = await agent.get('/nobookends/status');
+    assert.strictEqual(hidden.body.books.autoApprove, true);
+    assert.strictEqual(hidden.body.audiobookshelf.itemLinks, true);
+    assert.strictEqual(hidden.body.openInNoBookEnds, false);
+  });
+
+  it('needs a signed in user', async () => {
+    const res = await request(app).get('/nobookends/status');
+    assert.strictEqual(res.status, 403);
+  });
+});

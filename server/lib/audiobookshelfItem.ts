@@ -5,6 +5,10 @@ import OpenLibrary from '@server/api/openlibrary';
 import { MediaStatus } from '@server/constants/media';
 import type Media from '@server/entity/Media';
 import cacheManager from '@server/lib/cache';
+import {
+  getNoBookEndsItemUrl,
+  isNoBookEndsLinkEnabled,
+} from '@server/lib/nobookends';
 import type { AudiobookshelfSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { getAudiobookshelfUrl } from '@server/models/Book';
@@ -289,6 +293,12 @@ export interface AudiobookshelfLinks {
   audiobookshelfUrl: string | null;
   audiobookshelfEbookUrl: string | null;
   audiobookshelfAudiobookUrl: string | null;
+  // Library items of the available formats, once the book is found in them
+  audiobookshelfEbookItemId: string | null;
+  audiobookshelfAudiobookItemId: string | null;
+  // Open the items in the NoBookEnds app, unless an admin turned that off
+  nobookendsEbookUrl: string | null;
+  nobookendsAudiobookUrl: string | null;
 }
 
 /**
@@ -316,41 +326,48 @@ export const getAudiobookshelfLinks = async (
       media,
       'audiobook'
     ),
+    audiobookshelfEbookItemId: null,
+    audiobookshelfAudiobookItemId: null,
+    nobookendsEbookUrl: null,
+    nobookendsAudiobookUrl: null,
   };
 
   if (!baseUrl || !settings.apiKey) {
     return searchLinks;
   }
 
-  const itemLink = async (
+  const findItem = async (
     searchLink: string | null,
     libraryId: string | undefined,
     lookupBook: AudiobookshelfBook
   ): Promise<string | null> => {
     if (!searchLink || !libraryId) {
-      return searchLink;
+      return null;
     }
 
-    const itemId = await getAudiobookshelfItemId(
-      settings,
-      libraryId,
-      lookupBook
+    return (
+      (await getAudiobookshelfItemId(settings, libraryId, lookupBook)) ?? null
     );
-
-    return itemId
-      ? `${baseUrl}/item/${encodeURIComponent(itemId)}`
-      : searchLink;
   };
 
   // The Audible ASIN only belongs to the audiobook
-  const [ebookUrl, audiobookUrl] = await Promise.all([
-    itemLink(
+  const [ebookItemId, audiobookItemId] = await Promise.all([
+    findItem(
       searchLinks.audiobookshelfEbookUrl,
       settings.ebookLibraryId || settings.libraryId,
       { ...book, asin: undefined }
     ),
-    itemLink(searchLinks.audiobookshelfAudiobookUrl, settings.libraryId, book),
+    findItem(searchLinks.audiobookshelfAudiobookUrl, settings.libraryId, book),
   ]);
+
+  const itemUrl = (itemId: string | null, searchLink: string | null) =>
+    itemId ? `${baseUrl}/item/${encodeURIComponent(itemId)}` : searchLink;
+  const ebookUrl = itemUrl(ebookItemId, searchLinks.audiobookshelfEbookUrl);
+  const audiobookUrl = itemUrl(
+    audiobookItemId,
+    searchLinks.audiobookshelfAudiobookUrl
+  );
+  const showNoBookEnds = isNoBookEndsLinkEnabled(settings);
 
   return {
     // Like the search link, the audiobook when it is available
@@ -360,5 +377,15 @@ export const getAudiobookshelfLinks = async (
         : (ebookUrl ?? searchLinks.audiobookshelfUrl),
     audiobookshelfEbookUrl: ebookUrl,
     audiobookshelfAudiobookUrl: audiobookUrl,
+    audiobookshelfEbookItemId: ebookItemId,
+    audiobookshelfAudiobookItemId: audiobookItemId,
+    nobookendsEbookUrl:
+      showNoBookEnds && ebookItemId
+        ? getNoBookEndsItemUrl(baseUrl, ebookItemId, 'ebook')
+        : null,
+    nobookendsAudiobookUrl:
+      showNoBookEnds && audiobookItemId
+        ? getNoBookEndsItemUrl(baseUrl, audiobookItemId, 'audiobook')
+        : null,
   };
 };
