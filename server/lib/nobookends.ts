@@ -164,6 +164,8 @@ export interface NoBookEndsStatus {
     defaultFormat: 'ebook' | 'audiobook' | 'both';
   };
   issues: { canCreate: boolean };
+  // Whether the user may approve, decline and edit everyone's requests
+  requests: { canManage: boolean };
   audiobookshelf: {
     configured: boolean;
     url: string | null;
@@ -208,6 +210,9 @@ export const getNoBookEndsStatus = (user: User): NoBookEndsStatus => {
         [Permission.CREATE_ISSUES, Permission.MANAGE_ISSUES],
         { type: 'or' }
       ),
+    },
+    requests: {
+      canManage: user.hasPermission(Permission.MANAGE_REQUESTS),
     },
     audiobookshelf: {
       configured: !!audiobookshelfUrl,

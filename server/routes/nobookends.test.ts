@@ -4,6 +4,7 @@ import { before, beforeEach, describe, it } from 'node:test';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import { isPrivateHost } from '@server/lib/nobookends';
+import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
 import authRoutes from '@server/routes/auth';
@@ -305,6 +306,7 @@ describe('GET /nobookends/status', () => {
       defaultFormat: 'both',
     });
     assert.deepStrictEqual(res.body.issues, { canCreate: false });
+    assert.deepStrictEqual(res.body.requests, { canManage: false });
     assert.deepStrictEqual(res.body.audiobookshelf, {
       configured: true,
       url: 'https://books.example.com',
@@ -323,6 +325,8 @@ describe('GET /nobookends/status', () => {
     assert.strictEqual(bare.body.audiobookshelf.configured, false);
     assert.strictEqual(bare.body.audiobookshelf.url, null);
     assert.strictEqual(bare.body.openInNoBookEnds, false);
+    // Admins may manage requests without the permission itself
+    assert.deepStrictEqual(bare.body.requests, { canManage: true });
 
     enableBooks();
     getSettings().audiobookshelf = { showNoBookEnds: false };
@@ -331,6 +335,23 @@ describe('GET /nobookends/status', () => {
     assert.strictEqual(hidden.body.books.autoApprove, true);
     assert.strictEqual(hidden.body.audiobookshelf.itemLinks, true);
     assert.strictEqual(hidden.body.openInNoBookEnds, false);
+  });
+
+  it('lets the app know who may manage requests', async () => {
+    const manager = new User({
+      email: 'manager@example.com',
+      username: 'manager',
+      avatar: '',
+      permissions: Permission.REQUEST | Permission.MANAGE_REQUESTS,
+    });
+    await manager.setPassword('test1234');
+    await getRepository(User).save(manager);
+
+    const { agent } = await loginAs('manager@example.com');
+    const res = await agent.get('/nobookends/status');
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body.requests, { canManage: true });
   });
 
   it('needs a signed in user', async () => {
