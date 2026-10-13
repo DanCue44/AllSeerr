@@ -3,6 +3,7 @@ import { Permission } from '@server/lib/permissions';
 import type { AudiobookshelfSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { getAppVersion, getCommitTag } from '@server/utils/appVersion';
+import { isIP } from 'net';
 
 /**
  * NoBookEnds is a companion app for listening to audiobooks and reading
@@ -47,7 +48,9 @@ export const getNoBookEndsItemUrl = (
 
 /**
  * Sets NoBookEnds up in one tap: the Audiobookshelf server to sign in to,
- * and the AllSeerr server with the personal key it requests books with
+ * and the AllSeerr server with the personal key it requests books with. The
+ * values go in the fragment, which browsers never send, so the key does not
+ * reach the NoBookEnds site or its logs when the app is not installed.
  */
 export const getNoBookEndsConnectUrl = ({
   audiobookshelfUrl,
@@ -64,7 +67,79 @@ export const getNoBookEndsConnectUrl = ({
     key: apiKey,
   });
 
-  return `${NOBOOKENDS_OPEN_URL}/connect?${params.toString()}`;
+  return `${NOBOOKENDS_OPEN_URL}/connect#${params.toString()}`;
+};
+
+const PRIVATE_IPV4 = [
+  /^0\./,
+  /^10\./,
+  /^127\./,
+  /^169\.254\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, // Carrier-grade NAT, Tailscale
+];
+const PRIVATE_SUFFIXES = ['.local', '.lan', '.home', '.internal', '.home.arpa'];
+
+/**
+ * Whether a host can only be reached at home: localhost, a private address,
+ * a single label name or a local domain. A phone away from home cannot.
+ */
+export const isPrivateHost = (hostname: string): boolean => {
+  const host = hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '');
+
+  if (!host || host === 'localhost' || host.endsWith('.localhost')) {
+    return true;
+  }
+
+  const ipVersion = isIP(host);
+
+  if (ipVersion === 4) {
+    return PRIVATE_IPV4.some((range) => range.test(host));
+  }
+
+  if (ipVersion === 6) {
+    const mappedV4 = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+
+    return mappedV4
+      ? isPrivateHost(mappedV4[1])
+      : host === '::1' ||
+          host === '::' ||
+          /^f[cd]/.test(host) ||
+          /^fe[89ab]/.test(host);
+  }
+
+  return (
+    !host.includes('.') ||
+    PRIVATE_SUFFIXES.some((suffix) => host.endsWith(suffix))
+  );
+};
+
+/**
+ * The AllSeerr address the app connects to: the Application URL, or the
+ * address AllSeerr was opened at when that is reachable from anywhere.
+ * Undefined when neither is, and the Application URL must be set first.
+ */
+export const getNoBookEndsAllSeerrUrl = (request: {
+  protocol: string;
+  hostname: string;
+  host?: string;
+}): string | undefined => {
+  const applicationUrl = trimUrl(getSettings().main.applicationUrl);
+
+  if (applicationUrl) {
+    return applicationUrl;
+  }
+
+  if (!request.host || isPrivateHost(request.hostname)) {
+    return undefined;
+  }
+
+  return `${request.protocol}://${request.host}`;
 };
 
 /**

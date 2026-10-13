@@ -8085,12 +8085,16 @@ paths:
                     type: string
                     nullable: true
                     example: '2026-10-13T05:00:00.000Z'
+                  applicationUrlMissing:
+                    type: boolean
+                    description: True when no Application URL is set and AllSeerr was opened at a home address (localhost, a private IP or a local name), which the app could not reach away from home. A connect link can only be made once the Application URL is set.
+                    example: false
     post:
       summary: Create a NoBookEnds connect link
       description: |
         Creates a personal API key for the NoBookEnds app, replacing the previous NoBookEnds key, and returns it with a link that sets the app up in one tap. The key is only returned once. It is separate from the key at `/user/{userId}/settings/api-key`, which it never replaces.
 
-        Only the user themselves can create it, and books and Audiobookshelf must be set up.
+        Only the user themselves can create it, and books and Audiobookshelf must be set up. The AllSeerr address in the link is the Application URL, or the address of this request when none is set and it is a public address.
       tags:
         - users
         - nobookends
@@ -8116,10 +8120,10 @@ paths:
                     example: '2026-10-13T05:00:00.000Z'
                   connectUrl:
                     type: string
-                    description: Opens the app, or its site when it is not installed, with the Audiobookshelf address, the AllSeerr address (the application URL, or the address of this request when none is set) and the key
-                    example: 'https://nobookends.com/open/connect?abs=https%3A%2F%2Fbooks.example.com&allseerr=https%3A%2F%2Fallseerr.example.com&key=asu_6p1x...'
+                    description: Opens the app, or its site when it is not installed. The Audiobookshelf address (`abs`), the AllSeerr address (`allseerr`) and the key (`key`) are URL-encoded parameters in the fragment, which browsers never send to the site.
+                    example: 'https://nobookends.com/open/connect#abs=https%3A%2F%2Fbooks.example.com&allseerr=https%3A%2F%2Fallseerr.example.com&key=asu_6p1x...'
         '400':
-          description: Books or Audiobookshelf are not set up
+          description: Books or Audiobookshelf are not set up, or no Application URL is set and AllSeerr was opened at a home address
     delete:
       summary: Disconnect NoBookEnds
       description: Revokes the NoBookEnds key, which signs the app out of AllSeerr. Requires `MANAGE_USERS` permission if revoking another user's key.

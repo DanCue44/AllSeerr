@@ -17,6 +17,7 @@ import {
   parseRatingLimit,
 } from '@server/lib/contentRatingLimit';
 import {
+  getNoBookEndsAllSeerrUrl,
   getNoBookEndsConnectUrl,
   isNoBookEndsAvailable,
 } from '@server/lib/nobookends';
@@ -33,6 +34,7 @@ import {
   isOwnProfile,
   isOwnProfileOrAdmin,
 } from '@server/utils/profileMiddleware';
+import type { Request } from 'express';
 import { Router } from 'express';
 import net from 'net';
 import { Not } from 'typeorm';
@@ -990,7 +992,16 @@ interface NoBookEndsConnection {
   available: boolean;
   connected: boolean;
   createdAt?: Date | null;
+  // No Application URL is set and AllSeerr was opened at a home address,
+  // which the app could not reach away from home
+  applicationUrlMissing: boolean;
 }
+
+const noBookEndsRequest = (req: Request) => ({
+  protocol: req.protocol,
+  hostname: req.hostname,
+  host: req.get('host'),
+});
 
 userSettingsRoutes.get<{ id: string }, NoBookEndsConnection>(
   '/nobookends',
@@ -1012,6 +1023,9 @@ userSettingsRoutes.get<{ id: string }, NoBookEndsConnection>(
         available: isNoBookEndsAvailable(),
         connected: !!user.nobookendsKeyHash,
         createdAt: user.nobookendsKeyHash ? user.nobookendsKeyCreatedAt : null,
+        applicationUrlMissing: !getNoBookEndsAllSeerrUrl(
+          noBookEndsRequest(req)
+        ),
       });
     } catch (e) {
       next({ status: 500, message: e.message });
@@ -1036,6 +1050,16 @@ userSettingsRoutes.post<
       return next({
         status: 400,
         message: 'Books and Audiobookshelf must be set up first.',
+      });
+    }
+
+    const allseerrUrl = getNoBookEndsAllSeerrUrl(noBookEndsRequest(req));
+
+    if (!allseerrUrl) {
+      return next({
+        status: 400,
+        message:
+          'Set the Application URL in the General settings first, so the app can reach AllSeerr away from home.',
       });
     }
 
@@ -1065,10 +1089,7 @@ userSettingsRoutes.post<
       createdAt,
       connectUrl: getNoBookEndsConnectUrl({
         audiobookshelfUrl: settings.audiobookshelf.url ?? '',
-        // The address the user opened AllSeerr at when none is set
-        allseerrUrl:
-          settings.main.applicationUrl ||
-          `${req.protocol}://${req.get('host')}`,
+        allseerrUrl,
         apiKey,
       }),
     });

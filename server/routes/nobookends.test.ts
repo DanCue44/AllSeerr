@@ -3,6 +3,7 @@ import { before, beforeEach, describe, it } from 'node:test';
 
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
+import { isPrivateHost } from '@server/lib/nobookends';
 import { getSettings } from '@server/lib/settings';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
 import authRoutes from '@server/routes/auth';
@@ -97,18 +98,17 @@ describe('NoBookEnds connect link', () => {
     assert.strictEqual(created.status, 201);
     assert.match(created.body.apiKey, /^asu_/);
 
+    // Everything is in the fragment, which never reaches the site's server
     const link = new URL(created.body.connectUrl);
     assert.strictEqual(link.origin, 'https://nobookends.com');
     assert.strictEqual(link.pathname, '/open/connect');
-    assert.strictEqual(
-      link.searchParams.get('abs'),
-      'https://books.example.com'
-    );
-    assert.strictEqual(
-      link.searchParams.get('allseerr'),
-      'https://allseerr.example.com'
-    );
-    assert.strictEqual(link.searchParams.get('key'), created.body.apiKey);
+    assert.strictEqual(link.search, '');
+    assert.doesNotMatch(link.href.split('#')[0], /asu_/);
+
+    const params = new URLSearchParams(link.hash.slice(1));
+    assert.strictEqual(params.get('abs'), 'https://books.example.com');
+    assert.strictEqual(params.get('allseerr'), 'https://allseerr.example.com');
+    assert.strictEqual(params.get('key'), created.body.apiKey);
 
     const status = await agent.get(`/user/${userId}/settings/nobookends`);
     assert.strictEqual(status.status, 200);
@@ -123,19 +123,52 @@ describe('NoBookEnds connect link', () => {
     assert.strictEqual(me.body.id, userId);
   });
 
-  it('falls back to the address AllSeerr was opened at', async () => {
+  it('falls back to a public address AllSeerr was opened at', async () => {
     enableBooks();
     getSettings().main.applicationUrl = '';
     const { agent, userId } = await loginAs('demo@seerr.dev');
 
+    const status = await agent
+      .get(`/user/${userId}/settings/nobookends`)
+      .set('Host', 'requests.example.org');
+    assert.strictEqual(status.body.applicationUrlMissing, false);
+
     const created = await agent
       .post(`/user/${userId}/settings/nobookends`)
-      .set('Host', 'allseerr.lan:5055');
+      .set('Host', 'requests.example.org');
 
+    assert.strictEqual(created.status, 201);
     assert.strictEqual(
-      new URL(created.body.connectUrl).searchParams.get('allseerr'),
-      'http://allseerr.lan:5055'
+      new URLSearchParams(new URL(created.body.connectUrl).hash.slice(1)).get(
+        'allseerr'
+      ),
+      'http://requests.example.org'
     );
+  });
+
+  it('asks for the Application URL when opened at a home address', async () => {
+    enableBooks();
+    getSettings().main.applicationUrl = '';
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+
+    for (const host of ['allseerr.lan:5055', '192.168.1.10:5055', 'unraid']) {
+      const status = await agent
+        .get(`/user/${userId}/settings/nobookends`)
+        .set('Host', host);
+      assert.strictEqual(status.body.applicationUrlMissing, true, host);
+
+      const created = await agent
+        .post(`/user/${userId}/settings/nobookends`)
+        .set('Host', host);
+      assert.strictEqual(created.status, 400, host);
+      assert.match(created.body.message, /Application URL/);
+    }
+
+    const stored = await getRepository(User).findOneOrFail({
+      where: { id: userId },
+      select: ['id', 'nobookendsKeyHash'],
+    });
+    assert.strictEqual(stored.nobookendsKeyHash, null);
   });
 
   it('replaces the old key when a new link is made', async () => {
@@ -214,6 +247,40 @@ describe('NoBookEnds connect link', () => {
 
     const revoke = await admin.delete(`/user/${userId}/settings/nobookends`);
     assert.strictEqual(revoke.status, 204);
+  });
+});
+
+describe('isPrivateHost', () => {
+  it('knows home addresses from public ones', () => {
+    for (const host of [
+      'localhost',
+      '127.0.0.1',
+      '10.0.0.5',
+      '172.20.1.1',
+      '192.168.1.10',
+      '100.101.102.103',
+      '169.254.1.1',
+      '::1',
+      '[fd00::1]',
+      'fe80::1',
+      '::ffff:192.168.1.2',
+      'unraid',
+      'allseerr.lan',
+      'nas.local',
+      'tower.home.arpa',
+    ]) {
+      assert.strictEqual(isPrivateHost(host), true, host);
+    }
+
+    for (const host of [
+      'requests.example.org',
+      '203.0.113.10',
+      '172.32.0.1',
+      '8.8.8.8',
+      '2606:4700::1111',
+    ]) {
+      assert.strictEqual(isPrivateHost(host), false, host);
+    }
   });
 });
 

@@ -4,7 +4,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import CopyButton from '@app/components/Settings/CopyButton';
 import useToasts from '@app/hooks/useToasts';
-import { useUser } from '@app/hooks/useUser';
+import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import {
@@ -14,6 +14,7 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
@@ -41,6 +42,11 @@ const messages = defineMessages(
       'This link signs NoBookEnds in as you. It is only shown once, and a new link signs out the app the old one was used in.',
     qrAlt: 'QR code that connects NoBookEnds',
     connectError: 'Something went wrong while creating the connect link.',
+    applicationUrlMissing:
+      'NoBookEnds needs an address that works away from home. Set the Application URL in the General settings first.',
+    applicationUrlMissingUser:
+      'NoBookEnds needs an address that works away from home. Ask an admin to set the Application URL in the General settings.',
+    openGeneralSettings: 'Open General Settings',
     disconnectSuccess: 'NoBookEnds disconnected.',
     disconnectError: 'Something went wrong while disconnecting NoBookEnds.',
   }
@@ -50,13 +56,14 @@ interface NoBookEndsConnection {
   available: boolean;
   connected: boolean;
   createdAt?: string | null;
+  applicationUrlMissing: boolean;
 }
 
 const UserNoBookEnds = () => {
   const intl = useIntl();
   const router = useRouter();
   const { addToast } = useToasts();
-  const { user: currentUser } = useUser();
+  const { user: currentUser, hasPermission } = useUser();
   const { user } = useUser({ id: Number(router.query.userId) });
   const [connectUrl, setConnectUrl] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -225,21 +232,42 @@ const UserNoBookEnds = () => {
                     : intl.formatMessage(messages.notConnectedOther)}
               </p>
             )}
+            {data.applicationUrlMissing && !connectUrl && (
+              <Alert
+                title={intl.formatMessage(
+                  hasPermission(Permission.ADMIN)
+                    ? messages.applicationUrlMissing
+                    : messages.applicationUrlMissingUser
+                )}
+                type="warning"
+              >
+                {hasPermission(Permission.ADMIN) && (
+                  <Link
+                    href="/settings/main"
+                    className="font-semibold underline hover:no-underline"
+                  >
+                    {intl.formatMessage(messages.openGeneralSettings)}
+                  </Link>
+                )}
+              </Alert>
+            )}
             <div className="flex flex-wrap gap-3">
-              {isOwnProfile && data.available && (
-                <Button
-                  buttonType={connectUrl ? 'default' : 'primary'}
-                  onClick={() => connect()}
-                  disabled={isUpdating}
-                >
-                  {data.connected ? <ArrowPathIcon /> : <LinkIcon />}
-                  <span>
-                    {intl.formatMessage(
-                      data.connected ? messages.newLink : messages.connect
-                    )}
-                  </span>
-                </Button>
-              )}
+              {isOwnProfile &&
+                data.available &&
+                !data.applicationUrlMissing && (
+                  <Button
+                    buttonType={connectUrl ? 'default' : 'primary'}
+                    onClick={() => connect()}
+                    disabled={isUpdating}
+                  >
+                    {data.connected ? <ArrowPathIcon /> : <LinkIcon />}
+                    <span>
+                      {intl.formatMessage(
+                        data.connected ? messages.newLink : messages.connect
+                      )}
+                    </span>
+                  </Button>
+                )}
               {data.connected && (
                 <Button
                   buttonType="danger"
