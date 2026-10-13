@@ -48,6 +48,8 @@ tags:
       - `GET /nobookends/attention` for book downloads Chaptarr is stuck on, and `POST /nobookends/attention/{key}/dismiss` to remove one and search again
       - `GET /media/{mediaId}/arr?bookFormat=` for what can be done to a format in its arr
       - `POST /media/{mediaId}/arr/search` to search again, `GET /media/{mediaId}/arr/releases` to list releases, `POST /media/{mediaId}/arr/grab` to grab one and `POST /media/{mediaId}/arr/replace` to replace the file
+
+      When an admin set up NoBookEnds Sync, the status carries its public address in `nobookendsSync.url`. The app fetches Listen and Read alignments from there with the user's Audiobookshelf token. AllSeerr queues each book on the Sync server once it has both an audiobook and an ebook in Audiobookshelf.
   - name: other
     description: Endpoints related to other TMDB data
   - name: person
@@ -905,6 +907,29 @@ components:
           type: boolean
           description: Offer to open available books in the NoBookEnds app. Needs the API key, which finds the book in the library. On unless set to false.
           example: true
+    NoBookEndsSyncSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Queue books that have both an audiobook and an ebook in Audiobookshelf on the NoBookEnds Sync server, and hand its address to the NoBookEnds app
+          example: true
+        url:
+          type: string
+          description: Public address of the NoBookEnds Sync server, which the apps open. Saved without a trailing slash.
+          example: 'https://sync.example.com'
+        internalUrl:
+          type: string
+          description: Optional. Address AllSeerr reaches the Sync server at, when the public one does not work from the AllSeerr server. Falls back to url.
+          example: 'http://NoBookEnds-Sync:8000'
+        adminTokenSet:
+          type: boolean
+          readOnly: true
+          description: Whether an admin token is saved. The token itself is never returned.
+        adminToken:
+          type: string
+          writeOnly: true
+          description: The Sync server's ADMIN_TOKEN. Leave it out to keep the saved token, send an empty string to remove it.
     BookRelease:
       type: object
       properties:
@@ -4803,6 +4828,139 @@ paths:
                     description: Only returned when an API key was given
                     items:
                       $ref: '#/components/schemas/AudiobookshelfLibrary'
+  /settings/nobookends-sync:
+    get:
+      summary: Get NoBookEnds Sync settings
+      description: Retrieves the NoBookEnds Sync settings. The admin token is never returned, only whether one is saved.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoBookEndsSyncSettings'
+    post:
+      summary: Update NoBookEnds Sync settings
+      description: Saves the NoBookEnds Sync settings. Fields left out keep their saved values. Enabling needs a URL.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoBookEndsSyncSettings'
+      responses:
+        '200':
+          description: 'Values were successfully updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoBookEndsSyncSettings'
+        '400':
+          description: A URL is not an http or https address, or the integration was enabled without a URL
+  /settings/nobookends-sync/test:
+    post:
+      summary: Test NoBookEnds Sync configuration
+      description: Checks that the Sync server answers `GET /api/v1/health` at the internal URL, or the public one when there is no internal URL. With an admin token, also reads its queue (`GET /api/v1/admin/jobs`) to check the token. Without a token in the body, the saved token is used when the URL is the saved one.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  example: 'https://sync.example.com'
+                internalUrl:
+                  type: string
+                  example: 'http://NoBookEnds-Sync:8000'
+                adminToken:
+                  type: string
+      responses:
+        '200':
+          description: The Sync server answered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    description: Whether the Sync server's worker is running
+                  version:
+                    type: string
+                    example: '1.0.0'
+                  gpu:
+                    type: boolean
+                    description: Whether it transcribes on a GPU, otherwise on the CPU
+                  tokenValid:
+                    type: boolean
+                    description: Only set when an admin token was checked
+                  queue:
+                    type: object
+                    description: Only set when the admin token works
+                    properties:
+                      queued:
+                        type: number
+                        example: 12
+                      queueCapped:
+                        type: boolean
+                        description: Whether more jobs wait than were counted (2000)
+                      workerAlive:
+                        type: boolean
+                      processing:
+                        type: object
+                        nullable: true
+                        properties:
+                          audioItemId:
+                            type: string
+                          ebookItemId:
+                            type: string
+                          title:
+                            type: string
+                            nullable: true
+                          progress:
+                            type: number
+                            nullable: true
+                            example: 0.42
+        '400':
+          description: The URL is not an http or https address
+        '500':
+          description: The Sync server did not answer
+  /settings/nobookends-sync/backfill:
+    post:
+      summary: Queue every book on NoBookEnds Sync
+      description: Queues every book that has both an audiobook and an ebook item in Audiobookshelf on the Sync server (`POST /api/v1/admin/alignments`). The Sync server leaves pairs it already has alone. Pairs it does not take are tried again later.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Books queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: number
+                    description: Books with both formats
+                    example: 40
+                  queued:
+                    type: number
+                    example: 40
+                  failed:
+                    type: number
+                    example: 0
+        '400':
+          description: NoBookEnds Sync is not enabled or has no admin token
+        '502':
+          description: The Sync server did not answer
   /settings/bazarr/test:
     post:
       summary: Test Bazarr configuration
@@ -10514,6 +10672,14 @@ paths:
                   openInNoBookEnds:
                     type: boolean
                     description: Whether book pages offer to open books in NoBookEnds
+                  nobookendsSync:
+                    type: object
+                    description: The NoBookEnds Sync server to fetch Listen and Read alignments from. Only present while an admin enabled it and set its public URL.
+                    properties:
+                      url:
+                        type: string
+                        description: Public address of the Sync server, without a trailing slash
+                        example: https://sync.example.com
         '403':
           description: Not signed in
   /nobookends/attention:

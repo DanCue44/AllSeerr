@@ -1,3 +1,7 @@
+import type {
+  NoBookEndsSyncHealth,
+  NoBookEndsSyncQueue,
+} from '@server/api/nobookendsSync';
 import type { BookLanguage } from '@server/constants/bookLanguages';
 import type { BookFormatChoice } from '@server/constants/media';
 import type { BookService } from '@server/lib/settings';
@@ -97,4 +101,27 @@ export interface StatusResponse {
   updateAvailable?: boolean;
   commitsBehind?: number;
   restartRequired: boolean;
+}
+
+/**
+ * The NoBookEnds Sync settings as the API returns them: the admin token
+ * never leaves the server, only whether one is saved
+ */
+export interface NoBookEndsSyncSettingsResponse {
+  enabled: boolean;
+  url: string;
+  internalUrl: string;
+  adminTokenSet: boolean;
+}
+
+export interface NoBookEndsSyncTestResponse extends NoBookEndsSyncHealth {
+  // Set when an admin token was checked
+  tokenValid?: boolean;
+  queue?: NoBookEndsSyncQueue;
+}
+
+export interface NoBookEndsSyncBackfillResponse {
+  total: number;
+  queued: number;
+  failed: number;
 }

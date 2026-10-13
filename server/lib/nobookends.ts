@@ -1,4 +1,5 @@
 import type { User } from '@server/entity/User';
+import { getNoBookEndsSyncPublicUrl } from '@server/lib/nobookendsSync';
 import { Permission } from '@server/lib/permissions';
 import type { AudiobookshelfSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -210,6 +211,9 @@ export interface NoBookEndsStatus {
     itemLinks: boolean;
   };
   openInNoBookEnds: boolean;
+  // The NoBookEnds Sync server the apps fetch Listen and Read alignments
+  // from, only while it is enabled and has a public address
+  nobookendsSync?: { url: string };
 }
 
 /**
@@ -223,6 +227,7 @@ export const getNoBookEndsStatus = async (
   const audiobookshelfUrl = trimUrl(audiobookshelf.url) ?? null;
   const booksEnabled = !!settings.bookService;
   const canManageRequests = user.hasPermission(Permission.MANAGE_REQUESTS);
+  const syncUrl = getNoBookEndsSyncPublicUrl(settings.nobookendsSync);
 
   return {
     version: getAppVersion(),
@@ -266,5 +271,6 @@ export const getNoBookEndsStatus = async (
       itemLinks: !!audiobookshelfUrl && !!audiobookshelf.apiKey,
     },
     openInNoBookEnds: isNoBookEndsLinkEnabled(audiobookshelf),
+    ...(syncUrl ? { nobookendsSync: { url: syncUrl } } : {}),
   };
 };

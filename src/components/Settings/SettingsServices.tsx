@@ -12,6 +12,7 @@ import BazarrModal from '@app/components/Settings/BazarrModal';
 import ChaptarrModal from '@app/components/Settings/ChaptarrModal';
 import LazyLibrarianModal from '@app/components/Settings/LazyLibrarianModal';
 import LidarrModal from '@app/components/Settings/LidarrModal';
+import NoBookEndsSyncModal from '@app/components/Settings/NoBookEndsSyncModal';
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
 import OverrideRuleTiles from '@app/components/Settings/OverrideRule/OverrideRuleTiles';
 import RadarrModal from '@app/components/Settings/RadarrModal';
@@ -24,11 +25,13 @@ import {
   BookOpenIcon,
   LanguageIcon,
   PencilIcon,
+  PlayCircleIcon,
   PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/solid';
 import type OverrideRule from '@server/entity/OverrideRule';
 import type { OverrideRuleResultsResponse } from '@server/interfaces/api/overrideRuleInterfaces';
+import type { NoBookEndsSyncSettingsResponse } from '@server/interfaces/api/settingsInterfaces';
 import type {
   AudiobookshelfSettings,
   BazarrSettings,
@@ -59,6 +62,17 @@ const messages = defineMessages('components.Settings', {
     'Are you sure you want to remove Audiobookshelf? Book pages will no longer link to it.',
   library: 'Library',
   homepage: 'Home page',
+  nobookendssyncsettings: 'NoBookEnds Sync Settings',
+  nobookendsSyncSettingsDescription:
+    'Connect a NoBookEnds Sync server, which aligns audiobooks to their EPUBs so the NoBookEnds app can highlight the words as they are read. Books are queued there once both formats are in Audiobookshelf.',
+  configurenobookendssync: 'Configure NoBookEnds Sync',
+  deletenobookendssync: 'Remove NoBookEnds Sync',
+  deletenobookendssyncconfirm:
+    'Are you sure you want to remove NoBookEnds Sync? Books will no longer be queued there and the app will no longer offer Listen and Read.',
+  syncStatus: 'Status',
+  syncEnabled: 'Enabled',
+  syncDisabled: 'Disabled',
+  syncNoToken: 'Enabled, no admin token',
   bazarrsettings: 'Bazarr Settings',
   bazarrSettingsDescription:
     'Configure your Bazarr server below to show downloaded, wanted and missing subtitles on title pages and let users search for or request a subtitle language.',
@@ -131,6 +145,7 @@ interface ServerInstanceProps {
   isChaptarr?: boolean;
   isBazarr?: boolean;
   isAudiobookshelf?: boolean;
+  isNoBookEndsSync?: boolean;
   /** The address to show and link, for services set up by URL */
   url?: string;
   /** Shown in place of the active profile */
@@ -187,6 +202,7 @@ const ServerInstance = ({
   isChaptarr = false,
   isBazarr = false,
   isAudiobookshelf = false,
+  isNoBookEndsSync = false,
   url,
   detail,
   externalUrl,
@@ -252,7 +268,8 @@ const ServerInstance = ({
           ) : (
             !isLazyLibrarian &&
             !isBazarr &&
-            !isAudiobookshelf && (
+            !isAudiobookshelf &&
+            !isNoBookEndsSync && (
               <p className="mt-1 truncate text-sm leading-5 text-gray-300">
                 <span className="mr-2 font-bold">
                   {intl.formatMessage(messages.activeProfile)}
@@ -270,6 +287,8 @@ const ServerInstance = ({
         >
           {isBazarr ? (
             <LanguageIcon className="h-10 w-10 flex-shrink-0" />
+          ) : isNoBookEndsSync ? (
+            <PlayCircleIcon className="h-10 w-10 flex-shrink-0" />
           ) : isLazyLibrarian || isChaptarr || isAudiobookshelf ? (
             <BookOpenIcon className="h-10 w-10 flex-shrink-0" />
           ) : isSonarr ? (
@@ -353,6 +372,16 @@ const SettingsServices = () => {
   } = useSWR<AudiobookshelfSettings>('/api/v1/settings/audiobookshelf');
   const [editAudiobookshelfModal, setEditAudiobookshelfModal] = useState(false);
   const [deleteAudiobookshelfModal, setDeleteAudiobookshelfModal] =
+    useState(false);
+  const {
+    data: nobookendsSyncData,
+    error: nobookendsSyncError,
+    mutate: revalidateNoBookEndsSync,
+  } = useSWR<NoBookEndsSyncSettingsResponse>(
+    '/api/v1/settings/nobookends-sync'
+  );
+  const [editNoBookEndsSyncModal, setEditNoBookEndsSyncModal] = useState(false);
+  const [deleteNoBookEndsSyncModal, setDeleteNoBookEndsSyncModal] =
     useState(false);
   const [editBazarrModal, setEditBazarrModal] = useState(false);
   const [deleteBazarrModal, setDeleteBazarrModal] = useState(false);
@@ -457,6 +486,18 @@ const SettingsServices = () => {
     });
     setDeleteAudiobookshelfModal(false);
     revalidateAudiobookshelf();
+  };
+
+  // NoBookEnds Sync is a single server, removing it clears and disables it
+  const deleteNoBookEndsSync = async () => {
+    await axios.post('/api/v1/settings/nobookends-sync', {
+      enabled: false,
+      url: '',
+      internalUrl: '',
+      adminToken: '',
+    });
+    setDeleteNoBookEndsSyncModal(false);
+    revalidateNoBookEndsSync();
   };
 
   // Bazarr is a single server, removing it clears its connection
@@ -975,6 +1016,90 @@ const SettingsServices = () => {
                     <PlusIcon />
                     <span>
                       {intl.formatMessage(messages.configureaudiobookshelf)}
+                    </span>
+                  </Button>
+                </div>
+              </li>
+            )}
+          </ul>
+        )}
+      </div>
+      <div className="mb-6 mt-10">
+        <h3 className="heading">
+          {intl.formatMessage(messages.nobookendssyncsettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.nobookendsSyncSettingsDescription)}
+        </p>
+      </div>
+      {editNoBookEndsSyncModal && nobookendsSyncData && (
+        <NoBookEndsSyncModal
+          nobookendsSync={nobookendsSyncData}
+          onClose={() => setEditNoBookEndsSyncModal(false)}
+          onSave={() => {
+            revalidateNoBookEndsSync();
+            setEditNoBookEndsSyncModal(false);
+          }}
+        />
+      )}
+      <Transition
+        as={Fragment}
+        show={deleteNoBookEndsSyncModal}
+        enter="transition-opacity ease-in-out duration-300"
+        enterFrom="opacity-0"
+        enterTo="opacity-100"
+        leave="transition-opacity ease-in-out duration-300"
+        leaveFrom="opacity-100"
+        leaveTo="opacity-0"
+      >
+        <Modal
+          okText={intl.formatMessage(globalMessages.delete)}
+          okButtonType="danger"
+          onOk={() => deleteNoBookEndsSync()}
+          onCancel={() => setDeleteNoBookEndsSyncModal(false)}
+          title={intl.formatMessage(messages.deletenobookendssync)}
+        >
+          {intl.formatMessage(messages.deletenobookendssyncconfirm)}
+        </Modal>
+      </Transition>
+      <div className="section">
+        {!nobookendsSyncData && !nobookendsSyncError && <LoadingSpinner />}
+        {nobookendsSyncData && !nobookendsSyncError && (
+          <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+            {nobookendsSyncData.url || nobookendsSyncData.internalUrl ? (
+              <ServerInstance
+                name="NoBookEnds Sync"
+                hostname=""
+                port={0}
+                url={nobookendsSyncData.url || nobookendsSyncData.internalUrl}
+                profileName="-"
+                isSSL={(
+                  nobookendsSyncData.url || nobookendsSyncData.internalUrl
+                ).startsWith('https://')}
+                isNoBookEndsSync
+                detail={{
+                  label: intl.formatMessage(messages.syncStatus),
+                  value: intl.formatMessage(
+                    !nobookendsSyncData.enabled
+                      ? messages.syncDisabled
+                      : nobookendsSyncData.adminTokenSet
+                        ? messages.syncEnabled
+                        : messages.syncNoToken
+                  ),
+                }}
+                onEdit={() => setEditNoBookEndsSyncModal(true)}
+                onDelete={() => setDeleteNoBookEndsSyncModal(true)}
+              />
+            ) : (
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    onClick={() => setEditNoBookEndsSyncModal(true)}
+                  >
+                    <PlusIcon />
+                    <span>
+                      {intl.formatMessage(messages.configurenobookendssync)}
                     </span>
                   </Button>
                 </div>

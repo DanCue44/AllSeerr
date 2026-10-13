@@ -109,6 +109,18 @@ describe('seerr-api.yml', () => {
     app.post('/api/v1/settings/audiobookshelf/test', (_req, res) => {
       res.status(200).json({});
     });
+    app.get('/api/v1/settings/nobookends-sync', (_req, res) => {
+      res.status(200).json({});
+    });
+    app.post('/api/v1/settings/nobookends-sync', (_req, res) => {
+      res.status(200).json({});
+    });
+    app.post('/api/v1/settings/nobookends-sync/test', (_req, res) => {
+      res.status(200).json({});
+    });
+    app.post('/api/v1/settings/nobookends-sync/backfill', (_req, res) => {
+      res.status(200).json({ total: 0, queued: 0, failed: 0 });
+    });
     app.get('/api/v1/nobookends/status', (_req, res) => {
       res.status(200).json({});
     });
@@ -449,6 +461,34 @@ describe('seerr-api.yml', () => {
       '/api/v1/user/1/settings/nobookends'
     );
     assert.strictEqual(nobookendsDisconnect.status, 204);
+
+    const getSync = await request(app).get('/api/v1/settings/nobookends-sync');
+    assert.strictEqual(getSync.status, 200, getSync.body.message);
+
+    const saveSync = await request(app)
+      .post('/api/v1/settings/nobookends-sync')
+      .send({
+        enabled: true,
+        url: 'https://sync.example.com',
+        internalUrl: 'http://192.168.1.20:8000',
+        adminToken: 'token',
+      });
+    assert.strictEqual(saveSync.status, 200, saveSync.body.message);
+
+    const badSync = await request(app)
+      .post('/api/v1/settings/nobookends-sync')
+      .send({ enabled: 'yes' });
+    assert.strictEqual(badSync.status, 400);
+
+    const testSync = await request(app)
+      .post('/api/v1/settings/nobookends-sync/test')
+      .send({ url: 'https://sync.example.com' });
+    assert.strictEqual(testSync.status, 200, testSync.body.message);
+
+    const backfillSync = await request(app).post(
+      '/api/v1/settings/nobookends-sync/backfill'
+    );
+    assert.strictEqual(backfillSync.status, 200, backfillSync.body.message);
 
     const testWithoutUrl = await request(app)
       .post('/api/v1/settings/audiobookshelf/test')

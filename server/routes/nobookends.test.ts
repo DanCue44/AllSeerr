@@ -90,6 +90,12 @@ beforeEach(() => {
   // The settings setters merge, so values are emptied rather than left out
   settings.lazylibrarian = { hostname: '', apiKey: '' };
   settings.audiobookshelf = { url: '', apiKey: '', showNoBookEnds: true };
+  settings.nobookendsSync = {
+    enabled: false,
+    url: '',
+    internalUrl: '',
+    adminToken: '',
+  };
 });
 
 async function loginAs(email: string, password = 'test1234') {
@@ -386,6 +392,37 @@ describe('GET /nobookends/status', () => {
   it('needs a signed in user', async () => {
     const res = await request(app).get('/nobookends/status');
     assert.strictEqual(res.status, 403);
+  });
+
+  it('hands the app the NoBookEnds Sync address only while enabled', async () => {
+    enableBooks();
+    const { agent } = await loginAs('demo@seerr.dev');
+
+    const off = await agent.get('/nobookends/status');
+    assert.strictEqual(off.status, 200);
+    assert.strictEqual('nobookendsSync' in off.body, false);
+
+    getSettings().nobookendsSync = {
+      enabled: true,
+      url: 'https://sync.example.com/',
+      internalUrl: 'http://192.168.1.20:8000',
+      adminToken: 'admin-token',
+    };
+    const on = await agent.get('/nobookends/status');
+    // The public address without the trailing slash, never the internal
+    // one or the token
+    assert.deepStrictEqual(on.body.nobookendsSync, {
+      url: 'https://sync.example.com',
+    });
+    assert.doesNotMatch(JSON.stringify(on.body), /admin-token|192\.168/);
+
+    getSettings().nobookendsSync = { enabled: false };
+    const disabled = await agent.get('/nobookends/status');
+    assert.strictEqual('nobookendsSync' in disabled.body, false);
+
+    getSettings().nobookendsSync = { enabled: true, url: '' };
+    const noUrl = await agent.get('/nobookends/status');
+    assert.strictEqual('nobookendsSync' in noUrl.body, false);
   });
 });
 

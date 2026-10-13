@@ -11,6 +11,7 @@ import {
   getNoBookEndsItemUrl,
   isNoBookEndsLinkEnabled,
 } from '@server/lib/nobookends';
+import { onAudiobookshelfItemIdsChanged } from '@server/lib/nobookendsSync';
 import type { AudiobookshelfSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -347,6 +348,7 @@ export const rememberAudiobookshelfItemIds = async (
       .where('id = :id', { id: media.id })
       .execute();
     Object.assign(media, changes);
+    onAudiobookshelfItemIdsChanged(media);
   } catch (e) {
     logger.debug('Failed to remember the Audiobookshelf items of a book', {
       label: 'Audiobookshelf',

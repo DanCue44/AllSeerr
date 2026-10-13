@@ -128,6 +128,18 @@ export const resolveAudiobookshelfSettings = ({
   };
 };
 
+export interface NoBookEndsSyncSettings {
+  // Queues audiobook and ebook pairs for Listen and Read alignment
+  enabled?: boolean;
+  // Public address of the NoBookEnds Sync server, handed to the apps
+  url?: string;
+  // Address this server reaches it at, when the public one does not work
+  // from here (http://NoBookEnds-Sync:8000 on a Docker network, say)
+  internalUrl?: string;
+  // The Sync server's ADMIN_TOKEN. Never returned by the API.
+  adminToken?: string;
+}
+
 export interface DVRSettings {
   id: number;
   name: string;
@@ -544,6 +556,7 @@ export interface AllSettings {
   bazarr: BazarrSettings;
   lazylibrarian: LazyLibrarianSettings;
   audiobookshelf: AudiobookshelfSettings;
+  nobookendsSync: NoBookEndsSyncSettings;
   radarr: RadarrSettings[];
   sonarr: SonarrSettings[];
   lidarr: LidarrSettings[];
@@ -634,6 +647,12 @@ class Settings {
       bazarr: {},
       lazylibrarian: {},
       audiobookshelf: {},
+      nobookendsSync: {
+        enabled: false,
+        url: '',
+        internalUrl: '',
+        adminToken: '',
+      },
       metadataSettings: {
         tv: MetadataProviderType.TMDB,
         anime: MetadataProviderType.TMDB,
@@ -905,6 +924,14 @@ class Settings {
       delete this.data.lazylibrarian.audiobookshelfUrl;
       delete this.data.lazylibrarian.audiobookshelfLibraryId;
     }
+  }
+
+  get nobookendsSync(): NoBookEndsSyncSettings {
+    return this.data.nobookendsSync ?? {};
+  }
+
+  set nobookendsSync(data: NoBookEndsSyncSettings) {
+    this.data.nobookendsSync = mergeSettings(this.data.nobookendsSync, data);
   }
 
   get metadataSettings(): MetadataSettings {

@@ -68,6 +68,7 @@ import audiobookshelfRoutes from './audiobookshelf';
 import chaptarrRoutes from './chaptarr';
 import lidarrRoutes from './lidarr';
 import metadataRoutes from './metadata';
+import nobookendsSyncRoutes from './nobookendsSync';
 import notificationRoutes from './notifications';
 import radarrRoutes from './radarr';
 import sonarrRoutes from './sonarr';
@@ -80,6 +81,7 @@ settingsRoutes.use('/sonarr', sonarrRoutes);
 settingsRoutes.use('/lidarr', lidarrRoutes);
 settingsRoutes.use('/chaptarr', chaptarrRoutes);
 settingsRoutes.use('/audiobookshelf', audiobookshelfRoutes);
+settingsRoutes.use('/nobookends-sync', nobookendsSyncRoutes);
 settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 
