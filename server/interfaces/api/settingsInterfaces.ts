@@ -1,6 +1,6 @@
 import type {
   NoBookEndsSyncHealth,
-  NoBookEndsSyncQueue,
+  NoBookEndsSyncStatus,
 } from '@server/api/nobookendsSync';
 import type { BookLanguage } from '@server/constants/bookLanguages';
 import type { BookFormatChoice } from '@server/constants/media';
@@ -117,11 +117,23 @@ export interface NoBookEndsSyncSettingsResponse {
 export interface NoBookEndsSyncTestResponse extends NoBookEndsSyncHealth {
   // Set when an admin token was checked
   tokenValid?: boolean;
-  queue?: NoBookEndsSyncQueue;
+  // Window, queue and running job, when the token works on a Sync server
+  // that reports them
+  status?: NoBookEndsSyncStatus;
+  // The Sync server has no status endpoint (an older version), so only
+  // its health is known
+  statusUnavailable?: boolean;
 }
 
 export interface NoBookEndsSyncBackfillResponse {
+  // Books with both an audiobook and an ebook item
   total: number;
-  queued: number;
+  // Taken by the Sync server
+  accepted: number;
+  // Refused for good: an item gone, or without audio or EPUB
+  rejected: number;
+  // Not taken this time, tried again later
   failed: number;
+  // When background alignments run, when the Sync server reports it
+  window?: NoBookEndsSyncStatus['window'];
 }

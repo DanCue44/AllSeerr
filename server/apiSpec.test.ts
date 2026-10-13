@@ -119,7 +119,7 @@ describe('seerr-api.yml', () => {
       res.status(200).json({});
     });
     app.post('/api/v1/settings/nobookends-sync/backfill', (_req, res) => {
-      res.status(200).json({ total: 0, queued: 0, failed: 0 });
+      res.status(200).json({ total: 0, accepted: 0, rejected: 0, failed: 0 });
     });
     app.get('/api/v1/nobookends/status', (_req, res) => {
       res.status(200).json({});

@@ -1,4 +1,8 @@
-import NoBookEndsSyncAPI from '@server/api/nobookendsSync';
+import type { NoBookEndsSyncPriority } from '@server/api/nobookendsSync';
+import NoBookEndsSyncAPI, {
+  MAX_BULK_PAIRS,
+  getNoBookEndsSyncReason,
+} from '@server/api/nobookendsSync';
 import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
@@ -6,6 +10,7 @@ import type { NoBookEndsSyncSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { runInBackground } from '@server/utils/backgroundTasks';
+import { isAxiosError } from 'axios';
 import { IsNull, Not } from 'typeorm';
 
 /**
@@ -77,11 +82,30 @@ export const RETRY_DELAYS_MS = [
   24 * 60 * 60 * 1000,
 ];
 
+// Reasons the Sync server refuses a pair that a retry cannot change: an
+// item is gone, or has no audio or no EPUB
+export const PERMANENT_REASONS = ['not_found', 'no_audio', 'no_epub'];
+
+interface QueueOptions {
+  priority: NoBookEndsSyncPriority;
+  source: string;
+}
+
+// Pairs found on import are queued like a reader's request, so they are
+// aligned soon. The backfill is background work for the overnight window.
+const IMPORT_OPTIONS: QueueOptions = { priority: 'user', source: 'allseerr' };
+const BACKFILL_OPTIONS: QueueOptions = {
+  priority: 'auto',
+  source: 'allseerr-backfill',
+};
+
 const pairKey = ({ audioItemId, ebookItemId }: NoBookEndsSyncPair) =>
   `${audioItemId}:${ebookItemId}`;
 
-// Pairs the Sync server took since this server started
+// Pairs the Sync server took, and ones it refused for good, since this
+// server started
 const queuedPairs = new Set<string>();
+const rejectedPairs = new Set<string>();
 const inFlight = new Map<string, Promise<NoBookEndsSyncQueueResult>>();
 const retries = new Map<
   string,
@@ -93,6 +117,7 @@ const retries = new Map<
  */
 export const resetNoBookEndsSyncState = (): void => {
   queuedPairs.clear();
+  rejectedPairs.clear();
   inFlight.clear();
 
   for (const { timer } of retries.values()) {
@@ -102,19 +127,29 @@ export const resetNoBookEndsSyncState = (): void => {
   retries.clear();
 };
 
-export type NoBookEndsSyncQueueResult = 'queued' | 'skipped' | 'failed';
+export type NoBookEndsSyncQueueResult =
+  | 'queued'
+  | 'skipped'
+  | 'rejected'
+  | 'failed';
 
-const scheduleRetry = (pair: NoBookEndsSyncPair) => {
+const clearRetry = (key: string) => {
+  const retry = retries.get(key);
+
+  if (retry) {
+    clearTimeout(retry.timer);
+    retries.delete(key);
+  }
+};
+
+const scheduleRetry = (pair: NoBookEndsSyncPair, options: QueueOptions) => {
   const key = pairKey(pair);
   const attempts = (retries.get(key)?.attempts ?? 0) + 1;
   const delay = RETRY_DELAYS_MS[attempts - 1];
 
-  if (retries.has(key)) {
-    clearTimeout(retries.get(key)!.timer);
-  }
+  clearRetry(key);
 
   if (delay === undefined) {
-    retries.delete(key);
     logger.info('Gave up queueing a book on NoBookEnds Sync for now', {
       label: 'NoBookEnds Sync',
       ...pair,
@@ -123,62 +158,90 @@ const scheduleRetry = (pair: NoBookEndsSyncPair) => {
   }
 
   const timer = setTimeout(() => {
-    runInBackground(queuePair(pair, { retry: true }));
+    runInBackground(queuePair(pair, { ...options, retry: true }));
   }, delay);
   // A pending retry never keeps the process alive
   timer.unref?.();
   retries.set(key, { attempts, timer });
 };
 
+const markQueued = (key: string) => {
+  queuedPairs.add(key);
+  rejectedPairs.delete(key);
+  clearRetry(key);
+};
+
+const markRejected = (pair: NoBookEndsSyncPair, reason: string | undefined) => {
+  const key = pairKey(pair);
+  rejectedPairs.add(key);
+  clearRetry(key);
+  logger.info('NoBookEnds Sync cannot align a book', {
+    label: 'NoBookEnds Sync',
+    ...pair,
+    reason,
+  });
+};
+
 const queuePair = async (
   pair: NoBookEndsSyncPair,
-  { force = false, retry = false }: { force?: boolean; retry?: boolean } = {}
+  {
+    force = false,
+    retry = false,
+    ...options
+  }: QueueOptions & { force?: boolean; retry?: boolean }
 ): Promise<NoBookEndsSyncQueueResult> => {
   const target = getNoBookEndsSyncTarget();
   const key = pairKey(pair);
 
   if (!target) {
     // Turned off meanwhile, a later change or a backfill queues the pair
-    if (retries.has(key)) {
-      clearTimeout(retries.get(key)!.timer);
-      retries.delete(key);
-    }
-
+    clearRetry(key);
     return 'skipped';
   }
 
-  if (!force && queuedPairs.has(key)) {
+  if (!force && (queuedPairs.has(key) || rejectedPairs.has(key))) {
     return 'skipped';
   }
 
   try {
     const client = new NoBookEndsSyncAPI(target);
-    const job = await client.queueAlignment(pair.audioItemId, pair.ebookItemId);
+    const job = await client.queueAlignment(pair, options);
 
-    queuedPairs.add(key);
-
-    if (retries.has(key)) {
-      clearTimeout(retries.get(key)!.timer);
-      retries.delete(key);
-    }
-
+    markQueued(key);
     logger.info('Queued a book on NoBookEnds Sync', {
       label: 'NoBookEnds Sync',
       ...pair,
+      priority: options.priority,
       status: job?.status,
     });
 
     return 'queued';
   } catch (e) {
+    const reason = getNoBookEndsSyncReason(e);
+    const status = isAxiosError(e) ? e.response?.status : undefined;
+
+    if (
+      (status === 404 || status === 422) &&
+      reason &&
+      PERMANENT_REASONS.includes(reason)
+    ) {
+      markRejected(pair, reason);
+      return 'rejected';
+    }
+
+    // Everything else, Audiobookshelf being down (502 abs_unavailable) or
+    // refusing the service key (502 abs_auth) included, may pass
     logger.debug('Failed to queue a book on NoBookEnds Sync', {
       label: 'NoBookEnds Sync',
       ...pair,
       retry,
+      status,
+      reason,
       errorMessage: e.message,
     });
 
     if (!retry || retries.has(key)) {
-      scheduleRetry(pair);
+      scheduleRetry(pair, options);
     }
 
     return 'failed';
@@ -186,14 +249,15 @@ const queuePair = async (
 };
 
 /**
- * Queues a pair on the Sync server unless it was queued before. Calls for
- * a pair already on its way share the one request. A pair the server does
- * not take is tried again later. With force the pair is sent even when it
- * was queued before, the Sync server ignoring pairs it already has.
+ * Queues a pair on the Sync server unless it was queued or refused before.
+ * Calls for a pair already on its way share the one request. A pair the
+ * server could not take is tried again later, one it refused for good
+ * (an item gone, or without audio or EPUB) is not. With force the pair is
+ * sent anyway, the Sync server ignoring pairs it already has.
  */
 export const queueNoBookEndsSyncPair = (
   pair: NoBookEndsSyncPair,
-  options: { force?: boolean } = {}
+  options: { force?: boolean } & Partial<QueueOptions> = {}
 ): Promise<NoBookEndsSyncQueueResult> => {
   const key = pairKey(pair);
   const running = inFlight.get(key);
@@ -202,9 +266,11 @@ export const queueNoBookEndsSyncPair = (
     return running;
   }
 
-  const task = queuePair(pair, options).finally(() => {
-    inFlight.delete(key);
-  });
+  const task = queuePair(pair, { ...IMPORT_OPTIONS, ...options }).finally(
+    () => {
+      inFlight.delete(key);
+    }
+  );
   inFlight.set(key, task);
 
   return task;
@@ -232,27 +298,99 @@ export const onAudiobookshelfItemIdsChanged = (
 };
 
 export interface NoBookEndsSyncBackfillResult {
+  // Books with both items
   total: number;
-  queued: number;
+  // Taken by the Sync server (new, or already queued or aligned)
+  accepted: number;
+  // Refused for good: an item gone, or without audio or EPUB
+  rejected: number;
+  // Not taken this time, tried again later
   failed: number;
 }
 
-// Requests to the Sync server at a time during a backfill
-const BACKFILL_CONCURRENCY = 4;
+/**
+ * Sends a chunk of pairs in one bulk call. A Sync server from before bulk
+ * calls refuses the body without a reason, then the pairs go one by one.
+ */
+const backfillChunk = async (
+  client: NoBookEndsSyncAPI,
+  chunk: NoBookEndsSyncPair[],
+  result: NoBookEndsSyncBackfillResult
+): Promise<void> => {
+  try {
+    const response = await client.queueAlignments(chunk, BACKFILL_OPTIONS);
+
+    response.results.forEach((item, index) => {
+      const pair = chunk[index];
+
+      if (!pair) {
+        return;
+      }
+
+      if (item.ok) {
+        markQueued(pairKey(pair));
+        result.accepted++;
+      } else if (item.reason && PERMANENT_REASONS.includes(item.reason)) {
+        markRejected(pair, item.reason);
+        result.rejected++;
+      } else {
+        result.failed++;
+        scheduleRetry(pair, BACKFILL_OPTIONS);
+      }
+    });
+  } catch (e) {
+    const status = isAxiosError(e) ? e.response?.status : undefined;
+
+    if (status === 422 && !getNoBookEndsSyncReason(e)) {
+      for (const pair of chunk) {
+        const outcome = await queueNoBookEndsSyncPair(pair, {
+          ...BACKFILL_OPTIONS,
+          force: true,
+        });
+
+        if (outcome === 'queued') {
+          result.accepted++;
+        } else if (outcome === 'rejected') {
+          result.rejected++;
+        } else if (outcome === 'failed') {
+          result.failed++;
+        }
+      }
+      return;
+    }
+
+    logger.debug('Failed to queue a chunk of books on NoBookEnds Sync', {
+      label: 'NoBookEnds Sync',
+      pairs: chunk.length,
+      status,
+      reason: getNoBookEndsSyncReason(e),
+      errorMessage: e.message,
+    });
+
+    for (const pair of chunk) {
+      result.failed++;
+      scheduleRetry(pair, BACKFILL_OPTIONS);
+    }
+  }
+};
 
 /**
- * Queues every book that has both an audiobook and an ebook item. Pairs
- * queued before are sent again, the Sync server leaving alone what it has.
+ * Queues every book that has both an audiobook and an ebook item as
+ * background work, which the Sync server runs in its overnight window.
+ * Pairs queued before are sent again, the Sync server leaving alone what it
+ * has, in bulk calls of at most MAX_BULK_PAIRS pairs.
  */
 export const backfillNoBookEndsSync =
   async (): Promise<NoBookEndsSyncBackfillResult> => {
     const result: NoBookEndsSyncBackfillResult = {
       total: 0,
-      queued: 0,
+      accepted: 0,
+      rejected: 0,
       failed: 0,
     };
+    const target = getNoBookEndsSyncTarget();
 
-    if (!getNoBookEndsSyncTarget()) {
+    if (!target) {
       return result;
     }
 
@@ -276,23 +414,16 @@ export const backfillNoBookEndsSync =
     }
 
     const queue = [...pairs.values()];
+    const client = new NoBookEndsSyncAPI(target);
     result.total = queue.length;
 
-    const worker = async () => {
-      for (let pair = queue.shift(); pair; pair = queue.shift()) {
-        const outcome = await queueNoBookEndsSyncPair(pair, { force: true });
-
-        if (outcome === 'queued') {
-          result.queued++;
-        } else if (outcome === 'failed') {
-          result.failed++;
-        }
-      }
-    };
-
-    await Promise.all(
-      Array.from({ length: BACKFILL_CONCURRENCY }, () => worker())
-    );
+    for (let start = 0; start < queue.length; start += MAX_BULK_PAIRS) {
+      await backfillChunk(
+        client,
+        queue.slice(start, start + MAX_BULK_PAIRS),
+        result
+      );
+    }
 
     logger.info('Queued the books with both formats on NoBookEnds Sync', {
       label: 'NoBookEnds Sync',

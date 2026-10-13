@@ -49,7 +49,7 @@ tags:
       - `GET /media/{mediaId}/arr?bookFormat=` for what can be done to a format in its arr
       - `POST /media/{mediaId}/arr/search` to search again, `GET /media/{mediaId}/arr/releases` to list releases, `POST /media/{mediaId}/arr/grab` to grab one and `POST /media/{mediaId}/arr/replace` to replace the file
 
-      When an admin set up NoBookEnds Sync, the status carries its public address in `nobookendsSync.url`. The app fetches Listen and Read alignments from there with the user's Audiobookshelf token. AllSeerr queues each book on the Sync server once it has both an audiobook and an ebook in Audiobookshelf.
+      When an admin set up NoBookEnds Sync, the status carries its public address in `nobookendsSync.url`. The app fetches Listen and Read alignments from there with the user's Audiobookshelf token. AllSeerr queues each book on the Sync server, at user priority, once it has both an audiobook and an ebook in Audiobookshelf.
   - name: other
     description: Endpoints related to other TMDB data
   - name: person
@@ -4864,7 +4864,7 @@ paths:
   /settings/nobookends-sync/test:
     post:
       summary: Test NoBookEnds Sync configuration
-      description: Checks that the Sync server answers `GET /api/v1/health` at the internal URL, or the public one when there is no internal URL. With an admin token, also reads its queue (`GET /api/v1/admin/jobs`) to check the token. Without a token in the body, the saved token is used when the URL is the saved one.
+      description: Checks that the Sync server answers `GET /api/v1/health` at the internal URL, or the public one when there is no internal URL. With an admin token, also reads its status (`GET /api/v1/admin/status`) to check the token and report the background window, the queue and the running job. A Sync server without that endpoint (an older version) answers with its health and `statusUnavailable`. Without a token in the body, the saved token is used when the URL is the saved one.
       tags:
         - settings
       requestBody:
@@ -4902,19 +4902,46 @@ paths:
                   tokenValid:
                     type: boolean
                     description: Only set when an admin token was checked
-                  queue:
+                  statusUnavailable:
+                    type: boolean
+                    description: Set when the Sync server has no status endpoint (an older version, or no ADMIN_TOKEN), so only its health is known
+                  status:
                     type: object
                     description: Only set when the admin token works
                     properties:
-                      queued:
-                        type: number
-                        example: 12
-                      queueCapped:
+                      version:
+                        type: string
+                      gpu:
                         type: boolean
-                        description: Whether more jobs wait than were counted (2000)
-                      workerAlive:
-                        type: boolean
-                      processing:
+                      window:
+                        type: object
+                        description: Background alignments only run inside this window. Start and end are null and active is true when there is none.
+                        properties:
+                          start:
+                            type: string
+                            nullable: true
+                            example: '01:00'
+                          end:
+                            type: string
+                            nullable: true
+                            example: '06:00'
+                          active:
+                            type: boolean
+                      queue:
+                        type: object
+                        properties:
+                          user:
+                            type: number
+                            description: Queued at user or admin priority
+                            example: 0
+                          auto:
+                            type: number
+                            description: Queued background work
+                            example: 12
+                          total:
+                            type: number
+                            example: 12
+                      current:
                         type: object
                         nullable: true
                         properties:
@@ -4936,7 +4963,7 @@ paths:
   /settings/nobookends-sync/backfill:
     post:
       summary: Queue every book on NoBookEnds Sync
-      description: Queues every book that has both an audiobook and an ebook item in Audiobookshelf on the Sync server (`POST /api/v1/admin/alignments`). The Sync server leaves pairs it already has alone. Pairs it does not take are tried again later.
+      description: Queues every book that has both an audiobook and an ebook item in Audiobookshelf on the Sync server as background work, in bulk calls of at most 500 pairs (`POST /api/v1/admin/alignments` with `pairs`, priority `auto`, source `allseerr-backfill`). The Sync server runs background work in its overnight window and leaves pairs it already has alone. Pairs it refuses for good (an item missing, or without audio or an EPUB) are counted as rejected, pairs it could not check are tried again later.
       tags:
         - settings
       responses:
@@ -4951,12 +4978,32 @@ paths:
                     type: number
                     description: Books with both formats
                     example: 40
-                  queued:
+                  accepted:
                     type: number
-                    example: 40
+                    description: Pairs the Sync server took
+                    example: 38
+                  rejected:
+                    type: number
+                    description: Pairs refused for good (not_found, no_audio or no_epub)
+                    example: 2
                   failed:
                     type: number
+                    description: Pairs not taken this time, tried again later
                     example: 0
+                  window:
+                    type: object
+                    description: When background alignments run, when the Sync server reports it
+                    properties:
+                      start:
+                        type: string
+                        nullable: true
+                        example: '01:00'
+                      end:
+                        type: string
+                        nullable: true
+                        example: '06:00'
+                      active:
+                        type: boolean
         '400':
           description: NoBookEnds Sync is not enabled or has no admin token
         '502':

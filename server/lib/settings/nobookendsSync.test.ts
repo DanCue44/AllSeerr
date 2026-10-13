@@ -5,6 +5,7 @@ import NoBookEndsSyncAPI from '@server/api/nobookendsSync';
 import { getSettings } from '@server/lib/settings';
 import addNoBookEndsSyncSettings from '@server/lib/settings/migrations/0011_add_nobookends_sync_settings';
 import nobookendsSyncRoutes from '@server/routes/settings/nobookendsSync';
+import { setupTestDb } from '@server/test/db';
 import { AxiosError, AxiosHeaders } from 'axios';
 import express from 'express';
 import request from 'supertest';
@@ -12,6 +13,9 @@ import request from 'supertest';
 const SYNC_URL = 'https://sync.example.com';
 const INTERNAL_URL = 'http://192.168.1.20:8000';
 const TOKEN = 'admin-token-1234';
+
+// The backfill reads the books from the database
+setupTestDb();
 
 // Settings routes save to the settings file, which tests leave alone
 mock.method(getSettings(), 'save', async () => undefined);
@@ -24,9 +28,9 @@ type ClientThis = {
 
 // What each call to the Sync server was sent with
 let healthCalls: { url?: string; auth?: unknown }[] = [];
-let queueCalls: { url?: string; auth?: unknown }[] = [];
+let statusCalls: { url?: string; auth?: unknown }[] = [];
 let healthImpl: () => Promise<{ ok: boolean; version: string; gpu: boolean }>;
-let queueImpl: () => Promise<unknown>;
+let statusImpl: () => Promise<unknown>;
 
 mock.method(
   NoBookEndsSyncAPI.prototype,
@@ -41,15 +45,28 @@ mock.method(
 );
 mock.method(
   NoBookEndsSyncAPI.prototype,
-  'getQueue',
+  'getStatus',
   async function (this: ClientThis) {
-    queueCalls.push({
+    statusCalls.push({
       url: this.axios.defaults.baseURL,
       auth: this.axios.defaults.headers.Authorization,
     });
-    return queueImpl();
+    return statusImpl();
   }
 );
+
+const STATUS = {
+  version: '1.1.0',
+  gpu: true,
+  window: { start: '01:00', end: '06:00', active: false },
+  queue: { user: 1, auto: 2, total: 3 },
+  current: {
+    audioItemId: 'li_audio0001',
+    ebookItemId: 'li_ebook0001',
+    title: 'The Lighthouse Keeper',
+    progress: 0.42,
+  },
+};
 
 const refused = (status: number) =>
   new AxiosError('refused', 'ERR_BAD_REQUEST', undefined, undefined, {
@@ -125,14 +142,9 @@ describe('/settings/nobookends-sync', () => {
 
   beforeEach(() => {
     healthCalls = [];
-    queueCalls = [];
+    statusCalls = [];
     healthImpl = async () => ({ ok: true, version: '1.0.0', gpu: true });
-    queueImpl = async () => ({
-      queued: 3,
-      queueCapped: false,
-      workerAlive: true,
-      processing: null,
-    });
+    statusImpl = async () => STATUS;
     getSettings().nobookendsSync = {
       enabled: false,
       url: '',
@@ -227,7 +239,7 @@ describe('/settings/nobookends-sync', () => {
     assert.deepStrictEqual(healthCalls, [
       { url: INTERNAL_URL, auth: undefined },
     ]);
-    assert.strictEqual(queueCalls.length, 0);
+    assert.strictEqual(statusCalls.length, 0);
   });
 
   it('checks the saved token, but only against the saved server', async () => {
@@ -244,25 +256,26 @@ describe('/settings/nobookends-sync', () => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.tokenValid, true);
-    assert.strictEqual(res.body.queue.queued, 3);
-    assert.deepStrictEqual(queueCalls, [
+    assert.strictEqual(res.body.version, '1.1.0');
+    assert.deepStrictEqual(res.body.status, STATUS);
+    assert.deepStrictEqual(statusCalls, [
       { url: INTERNAL_URL, auth: `Bearer ${TOKEN}` },
     ]);
 
     // Another address does not get the saved token
-    queueCalls = [];
+    statusCalls = [];
     const other = await request(app)
       .post('/settings/nobookends-sync/test')
       .send({ url: 'https://203.0.113.10' });
 
     assert.strictEqual(other.status, 200);
     assert.strictEqual(other.body.tokenValid, undefined);
-    assert.strictEqual(queueCalls.length, 0);
+    assert.strictEqual(statusCalls.length, 0);
     assert.strictEqual(healthCalls.at(-1)?.auth, undefined);
   });
 
   it('reports a token the Sync server refuses', async () => {
-    queueImpl = async () => {
+    statusImpl = async () => {
       throw refused(403);
     };
 
@@ -272,7 +285,25 @@ describe('/settings/nobookends-sync', () => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.tokenValid, false);
-    assert.strictEqual(res.body.queue, undefined);
+    assert.strictEqual(res.body.status, undefined);
+  });
+
+  it('falls back to the health of a Sync server without the status endpoint', async () => {
+    statusImpl = async () => {
+      throw refused(404);
+    };
+
+    const res = await request(app)
+      .post('/settings/nobookends-sync/test')
+      .send({ url: SYNC_URL, adminToken: TOKEN });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body, {
+      ok: true,
+      version: '1.0.0',
+      gpu: true,
+      statusUnavailable: true,
+    });
   });
 
   it('reports a server that does not answer', async () => {
@@ -291,5 +322,33 @@ describe('/settings/nobookends-sync', () => {
     const res = await request(app).post('/settings/nobookends-sync/backfill');
 
     assert.strictEqual(res.status, 400);
+  });
+
+  it('tells when the backfilled books will be aligned', async () => {
+    getSettings().nobookendsSync = {
+      enabled: true,
+      url: SYNC_URL,
+      internalUrl: INTERNAL_URL,
+      adminToken: TOKEN,
+    };
+
+    const res = await request(app).post('/settings/nobookends-sync/backfill');
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body, {
+      total: 0,
+      accepted: 0,
+      rejected: 0,
+      failed: 0,
+      window: STATUS.window,
+    });
+
+    // An older Sync server without the status endpoint
+    statusImpl = async () => {
+      throw refused(404);
+    };
+    const older = await request(app).post('/settings/nobookends-sync/backfill');
+    assert.strictEqual(older.status, 200);
+    assert.strictEqual(older.body.window, undefined);
   });
 });

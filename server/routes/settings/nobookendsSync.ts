@@ -1,6 +1,7 @@
 import type { NoBookEndsSyncHealth } from '@server/api/nobookendsSync';
 import NoBookEndsSyncAPI from '@server/api/nobookendsSync';
 import type {
+  NoBookEndsSyncBackfillResponse,
   NoBookEndsSyncSettingsResponse,
   NoBookEndsSyncTestResponse,
 } from '@server/interfaces/api/settingsInterfaces';
@@ -97,7 +98,8 @@ nobookendsSyncRoutes.post<
 /**
  * Checks that the Sync server answers at the internal address (the public
  * one when there is none), and with an admin token, that the token works
- * by reading the queue. The saved token is only used for the saved server.
+ * by reading its status. The saved token is only used for the saved server.
+ * A Sync server without the status endpoint reports its health only.
  */
 nobookendsSyncRoutes.post<
   never,
@@ -141,63 +143,87 @@ nobookendsSyncRoutes.post<
   }
 
   try {
-    const queue = await client.getQueue();
+    const status = await client.getStatus();
 
-    return res.status(200).json({ ...health, tokenValid: true, queue });
+    return res.status(200).json({
+      ...health,
+      version: status.version ?? health.version,
+      gpu: status.gpu,
+      tokenValid: true,
+      status,
+    });
   } catch (e) {
     const status = isAxiosError(e) ? e.response?.status : undefined;
 
-    if (status === 401 || status === 403 || status === 404) {
-      // 404 is what the Sync server answers while it has no ADMIN_TOKEN
+    if (status === 401 || status === 403) {
       return res.status(200).json({ ...health, tokenValid: false });
     }
 
-    logger.error('Failed to read the NoBookEnds Sync queue', {
+    if (status === 404) {
+      // An older Sync server without the status endpoint, or one started
+      // without ADMIN_TOKEN, which hides the admin API
+      return res.status(200).json({ ...health, statusUnavailable: true });
+    }
+
+    logger.error('Failed to read the NoBookEnds Sync status', {
       label: 'NoBookEnds Sync',
       errorMessage: e.message,
     });
     return next({
       status: 500,
-      message: 'NoBookEnds Sync answered, but its queue could not be read.',
+      message: 'NoBookEnds Sync answered, but its status could not be read.',
     });
   }
 });
 
 /**
  * Queues every book with both an audiobook and an ebook in Audiobookshelf
+ * as background work, which the Sync server runs in its overnight window
  */
-nobookendsSyncRoutes.post('/backfill', async (_req, res, next) => {
-  const target = getNoBookEndsSyncTarget();
+nobookendsSyncRoutes.post<never, NoBookEndsSyncBackfillResponse>(
+  '/backfill',
+  async (_req, res, next) => {
+    const target = getNoBookEndsSyncTarget();
 
-  if (!target) {
-    return next({
-      status: 400,
-      message: 'NoBookEnds Sync is not enabled or has no admin token.',
-    });
-  }
+    if (!target) {
+      return next({
+        status: 400,
+        message: 'NoBookEnds Sync is not enabled or has no admin token.',
+      });
+    }
 
-  try {
-    await new NoBookEndsSyncAPI(target).getHealth();
-  } catch (e) {
-    logger.error('Failed to reach NoBookEnds Sync for a backfill', {
-      label: 'NoBookEnds Sync',
-      errorMessage: e.message,
-    });
-    return next({
-      status: 502,
-      message: 'Failed to connect to NoBookEnds Sync.',
-    });
-  }
+    const client = new NoBookEndsSyncAPI(target);
 
-  try {
-    return res.status(200).json(await backfillNoBookEndsSync());
-  } catch (e) {
-    logger.error('Failed to queue books on NoBookEnds Sync', {
-      label: 'NoBookEnds Sync',
-      errorMessage: e.message,
-    });
-    return next({ status: 500, message: 'Failed to queue the books.' });
+    try {
+      await client.getHealth();
+    } catch (e) {
+      logger.error('Failed to reach NoBookEnds Sync for a backfill', {
+        label: 'NoBookEnds Sync',
+        errorMessage: e.message,
+      });
+      return next({
+        status: 502,
+        message: 'Failed to connect to NoBookEnds Sync.',
+      });
+    }
+
+    try {
+      const result = await backfillNoBookEndsSync();
+      // Only to tell the admin when the books will be aligned
+      const window = await client
+        .getStatus()
+        .then((status) => status.window)
+        .catch(() => undefined);
+
+      return res.status(200).json({ ...result, ...(window ? { window } : {}) });
+    } catch (e) {
+      logger.error('Failed to queue books on NoBookEnds Sync', {
+        label: 'NoBookEnds Sync',
+        errorMessage: e.message,
+      });
+      return next({ status: 500, message: 'Failed to queue the books.' });
+    }
   }
-});
+);
 
 export default nobookendsSyncRoutes;

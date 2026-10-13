@@ -1,7 +1,7 @@
 import { proxyRequestInterceptor } from '@server/utils/customProxyAgent';
 import { userAgentRequestInterceptor } from '@server/utils/userAgent';
 import type { AxiosInstance } from 'axios';
-import axios from 'axios';
+import axios, { isAxiosError } from 'axios';
 
 export interface NoBookEndsSyncHealth {
   ok: boolean;
@@ -10,31 +10,17 @@ export interface NoBookEndsSyncHealth {
 }
 
 /**
- * An alignment job as the Sync server's admin API describes it
+ * The summary from GET /api/v1/admin/status
  */
-export interface NoBookEndsSyncJob {
-  audioItemId: string;
-  ebookItemId: string;
-  status: 'queued' | 'processing' | 'ready' | 'failed' | string;
-  progress?: number;
-  titles?: {
-    audio_id?: { title?: string; author?: string };
-    ebook_id?: { title?: string; author?: string };
-  };
-}
-
-interface NoBookEndsSyncJobsResponse {
-  worker?: { alive?: boolean; current?: [string, string] | null };
-  counts?: Record<string, number>;
-  jobs?: NoBookEndsSyncJob[];
-}
-
-export interface NoBookEndsSyncQueue {
-  // Jobs waiting, capped at QUEUE_LIMIT
-  queued: number;
-  queueCapped: boolean;
-  workerAlive: boolean;
-  processing: {
+export interface NoBookEndsSyncStatus {
+  version?: string;
+  gpu: boolean;
+  // Background (auto priority) jobs only run inside this window. Start and
+  // end are null and active is true when there is no window.
+  window: { start: string | null; end: string | null; active: boolean };
+  // Queued jobs: user includes admin priority, auto is background work
+  queue: { user: number; auto: number; total: number };
+  current: {
     audioItemId: string;
     ebookItemId: string;
     title: string | null;
@@ -42,8 +28,62 @@ export interface NoBookEndsSyncQueue {
   } | null;
 }
 
-// Queued jobs counted for the settings page, the admin API lists each one
-const QUEUE_LIMIT = 2000;
+/**
+ * user: like a reader's request, ahead of background work and never held
+ * for the window. auto: background work, only run inside the window.
+ */
+export type NoBookEndsSyncPriority = 'user' | 'auto';
+
+export interface NoBookEndsSyncPairInput {
+  audioItemId: string;
+  ebookItemId: string;
+}
+
+/**
+ * An alignment job as the Sync server's admin API describes it
+ */
+export interface NoBookEndsSyncJob {
+  audioItemId: string;
+  ebookItemId: string;
+  status: string;
+  progress?: number;
+  priority?: number;
+  waitingForWindow?: boolean;
+}
+
+export interface NoBookEndsSyncBulkResult {
+  audioItemId: string;
+  ebookItemId: string;
+  ok: boolean;
+  status?: string;
+  priority?: number;
+  waitingForWindow?: boolean;
+  reason?: string;
+  error?: string;
+}
+
+export interface NoBookEndsSyncBulkResponse {
+  accepted: number;
+  rejected: number;
+  results: NoBookEndsSyncBulkResult[];
+}
+
+// Pairs the Sync server takes in one bulk call
+export const MAX_BULK_PAIRS = 500;
+
+/**
+ * Why the Sync server refused a request, from the reason in its error body
+ * ({ detail, reason }), or undefined when it gave none
+ */
+export const getNoBookEndsSyncReason = (e: unknown): string | undefined => {
+  if (!isAxiosError(e)) {
+    return undefined;
+  }
+
+  const reason = (e.response?.data as { reason?: unknown } | undefined)?.reason;
+
+  return typeof reason === 'string' ? reason : undefined;
+};
 
 /**
  * Talks to a NoBookEnds Sync server, which aligns an Audiobookshelf
@@ -87,59 +127,93 @@ class NoBookEndsSyncAPI {
   }
 
   /**
-   * How many jobs wait and which one runs. Read only.
+   * Version, GPU, background window, queue counts and the running job.
+   * Read only. Older Sync servers answer 404.
    */
-  public async getQueue(): Promise<NoBookEndsSyncQueue> {
-    const response = await this.axios.get<NoBookEndsSyncJobsResponse>(
-      '/api/v1/admin/jobs',
-      { params: { status: 'queued', limit: QUEUE_LIMIT } }
+  public async getStatus(): Promise<NoBookEndsSyncStatus> {
+    const response = await this.axios.get<Partial<NoBookEndsSyncStatus>>(
+      '/api/v1/admin/status'
     );
-    const queued = response.data.jobs?.length ?? 0;
-    const current = response.data.worker?.current;
-    let processing: NoBookEndsSyncQueue['processing'] = null;
+    const data = response.data ?? {};
 
-    if (current?.[0] && current[1]) {
-      processing = {
-        audioItemId: current[0],
-        ebookItemId: current[1],
-        title: null,
-        progress: null,
-      };
-
-      try {
-        const job = await this.axios.get<NoBookEndsSyncJob>(
-          `/api/v1/admin/jobs/${encodeURIComponent(
-            current[0]
-          )}/${encodeURIComponent(current[1])}`
-        );
-        processing.title = job.data.titles?.audio_id?.title ?? null;
-        processing.progress =
-          typeof job.data.progress === 'number' ? job.data.progress : null;
-      } catch {
-        // The job may have finished between the two calls
-      }
+    if (!data.queue || typeof data.queue.total !== 'number') {
+      throw new Error('Unexpected answer to /api/v1/admin/status');
     }
 
     return {
-      queued,
-      queueCapped: queued >= QUEUE_LIMIT,
-      workerAlive: !!response.data.worker?.alive,
-      processing,
+      version: data.version,
+      gpu: !!data.gpu,
+      window: {
+        start: data.window?.start ?? null,
+        end: data.window?.end ?? null,
+        active: data.window?.active ?? true,
+      },
+      queue: {
+        user: data.queue.user ?? 0,
+        auto: data.queue.auto ?? 0,
+        total: data.queue.total,
+      },
+      current: data.current
+        ? {
+            audioItemId: data.current.audioItemId,
+            ebookItemId: data.current.ebookItemId,
+            title: data.current.title ?? null,
+            progress:
+              typeof data.current.progress === 'number'
+                ? data.current.progress
+                : null,
+          }
+        : null,
     };
   }
 
   /**
-   * Queues an audiobook and ebook pair. The Sync server makes this
-   * idempotent: a pair already queued, running or aligned is left alone.
+   * Queues one pair. Idempotent on the Sync server: a pair already queued,
+   * running or aligned is left alone. A refused pair answers 404 or 422
+   * with a reason, and 502 when Audiobookshelf could not be asked.
    */
   public async queueAlignment(
-    audioItemId: string,
-    ebookItemId: string
+    pair: NoBookEndsSyncPairInput,
+    { priority, source }: { priority: NoBookEndsSyncPriority; source: string }
   ): Promise<NoBookEndsSyncJob> {
     const response = await this.axios.post<NoBookEndsSyncJob>(
       '/api/v1/admin/alignments',
-      { audioItemId, ebookItemId }
+      {
+        audioItemId: pair.audioItemId,
+        ebookItemId: pair.ebookItemId,
+        priority,
+        source,
+      }
     );
+
+    return response.data;
+  }
+
+  /**
+   * Queues up to MAX_BULK_PAIRS pairs in one call. Answers 200 with a
+   * result per pair, in request order, even when some are refused.
+   */
+  public async queueAlignments(
+    pairs: NoBookEndsSyncPairInput[],
+    { priority, source }: { priority: NoBookEndsSyncPriority; source: string }
+  ): Promise<NoBookEndsSyncBulkResponse> {
+    const response = await this.axios.post<NoBookEndsSyncBulkResponse>(
+      '/api/v1/admin/alignments',
+      {
+        pairs: pairs.map(({ audioItemId, ebookItemId }) => ({
+          audioItemId,
+          ebookItemId,
+        })),
+        priority,
+        source,
+      },
+      // A call checks up to 1000 items with Audiobookshelf
+      { timeout: 120000 }
+    );
+
+    if (!Array.isArray(response.data?.results)) {
+      throw new Error('Unexpected answer to a bulk alignment request');
+    }
 
     return response.data;
   }

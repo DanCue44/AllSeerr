@@ -25,7 +25,7 @@ const messages = defineMessages('components.Settings.NoBookEndsSyncModal', {
   installLink: 'How to install NoBookEnds Sync',
   composeTitle: 'Docker Compose example',
   composeHelp:
-    'Replace the Audiobookshelf address and API key (a read only user with download permission) and pick a long random admin token. For an NVIDIA GPU, install the NVIDIA Container Toolkit and uncomment the GPU lines. Without a GPU it runs on the CPU, more slowly.',
+    'Replace the Audiobookshelf address and API key (a read only user with download permission), pick a long random admin token and set your time zone. Background alignments run overnight, in AUTO_WINDOW. For an NVIDIA GPU, install the NVIDIA Container Toolkit and uncomment the GPU lines. Without a GPU, use the :cpu image; it runs more slowly.',
   copyCompose: 'Copied the Docker Compose example',
   enabled: 'Enable NoBookEnds Sync',
   enabledHelp:
@@ -47,8 +47,12 @@ const messages = defineMessages('components.Settings.NoBookEndsSyncModal', {
   cpu: 'CPU',
   workerStopped: 'The worker is not running.',
   queueLength:
-    '{count, plural, =0 {Nothing is waiting} one {# book is waiting} other {# books are waiting}}',
-  queueLengthCapped: 'More than {count} books are waiting',
+    '{total, plural, =0 {Nothing is waiting} one {# book is waiting} other {# books are waiting}} ({user} requested, {auto} in the background)',
+  windowLine:
+    'Background alignments run {start} to {end}{active, select, true { (running now)} other {}}.',
+  noWindow: 'Background alignments run at any time.',
+  statusUnavailable:
+    'This Sync server does not report its queue. It may be an older version, or have no ADMIN_TOKEN.',
   processing: 'Aligning {title}',
   processingProgress: 'Aligning {title} ({progress}%)',
   unknownTitle: 'a book',
@@ -64,9 +68,10 @@ const messages = defineMessages('components.Settings.NoBookEndsSyncModal', {
   toastSaveFailure:
     'Something went wrong while saving NoBookEnds Sync settings.',
   toastQueued:
-    'Queued {queued, plural, one {# book} other {# books}} on NoBookEnds Sync.',
-  toastQueuedWithFailures:
-    'Queued {queued} of {total} books on NoBookEnds Sync. The rest are tried again later.',
+    'NoBookEnds Sync accepted {accepted, plural, one {# book} other {# books}}{rejected, plural, =0 {} other {, # rejected (missing, or without audio or an EPUB)}}{failed, plural, =0 {} other {, # tried again later}}.',
+  toastQueuedWindow:
+    'They are aligned in the background between {start} and {end}.',
+  toastQueuedNoWindow: 'They are aligned in the background.',
   toastQueueFailure: 'Failed to queue the books on NoBookEnds Sync.',
 });
 
@@ -74,18 +79,20 @@ export const NOBOOKENDS_SYNC_INSTALL_URL = 'https://nobookends.com/sync/';
 
 export const NOBOOKENDS_SYNC_COMPOSE = `services:
   nobookends-sync:
+    # :latest has NVIDIA GPU support and falls back to the CPU,
+    # :cpu is a much smaller image for servers without a GPU
     image: ghcr.io/dancue44/nobookends-sync:latest
     container_name: nobookends-sync
     restart: unless-stopped
     ports:
-      - 8000:8000
+      - "8000:8000"
     environment:
       ABS_URL: http://audiobookshelf:80
       ABS_API_KEY: your-audiobookshelf-api-key
       ADMIN_TOKEN: a-long-random-token
-      WHISPER_MODEL: small.en
-      WHISPER_DEVICE: auto
-      AUTO_ALIGN: "true"
+      TZ: America/Chicago
+      # Background alignments only run in this window
+      AUTO_WINDOW: "01:00-06:00"
     volumes:
       - ./nobookends-sync:/data
     # NVIDIA GPU (optional, needs the NVIDIA Container Toolkit):
@@ -191,18 +198,24 @@ const NoBookEndsSyncModal = ({
         '/api/v1/settings/nobookends-sync/backfill'
       );
 
-      addToast(
-        response.data.failed
-          ? intl.formatMessage(messages.toastQueuedWithFailures, {
-              queued: response.data.queued,
-              total: response.data.total,
+      const { accepted, rejected, failed, window } = response.data;
+      const windowText =
+        window?.start && window.end
+          ? intl.formatMessage(messages.toastQueuedWindow, {
+              start: window.start,
+              end: window.end,
             })
-          : intl.formatMessage(messages.toastQueued, {
-              queued: response.data.queued,
-            }),
+          : intl.formatMessage(messages.toastQueuedNoWindow);
+
+      addToast(
+        `${intl.formatMessage(messages.toastQueued, {
+          accepted,
+          rejected,
+          failed,
+        })} ${accepted ? windowText : ''}`.trim(),
         {
           autoDismiss: true,
-          appearance: response.data.failed ? 'warning' : 'success',
+          appearance: rejected || failed ? 'warning' : 'success',
         }
       );
     } catch {
@@ -229,29 +242,40 @@ const NoBookEndsSyncModal = ({
 
     if (result.tokenValid === false) {
       lines.push(intl.formatMessage(messages.tokenInvalid));
-    } else if (result.queue) {
-      const { queue } = result;
+    } else if (result.status) {
+      const { current, queue, window } = result.status;
 
-      if (queue.processing) {
+      if (current) {
         const title =
-          queue.processing.title ?? intl.formatMessage(messages.unknownTitle);
+          current.title ?? intl.formatMessage(messages.unknownTitle);
         lines.push(
-          queue.processing.progress !== null
+          current.progress !== null
             ? intl.formatMessage(messages.processingProgress, {
                 title,
-                progress: Math.round(queue.processing.progress * 100),
+                progress: Math.round(current.progress * 100),
               })
             : intl.formatMessage(messages.processing, { title })
         );
       }
 
       lines.push(
-        queue.queueCapped
-          ? intl.formatMessage(messages.queueLengthCapped, {
-              count: queue.queued,
-            })
-          : intl.formatMessage(messages.queueLength, { count: queue.queued })
+        intl.formatMessage(messages.queueLength, {
+          total: queue.total,
+          user: queue.user,
+          auto: queue.auto,
+        })
       );
+      lines.push(
+        window.start && window.end
+          ? intl.formatMessage(messages.windowLine, {
+              start: window.start,
+              end: window.end,
+              active: String(window.active),
+            })
+          : intl.formatMessage(messages.noWindow)
+      );
+    } else if (result.statusUnavailable) {
+      lines.push(intl.formatMessage(messages.statusUnavailable));
     } else {
       lines.push(intl.formatMessage(messages.noToken));
     }
