@@ -152,6 +152,41 @@ export const isNoBookEndsAvailable = (): boolean => {
   return !!settings.bookService && !!trimUrl(settings.audiobookshelf.url);
 };
 
+/**
+ * A request quota as the app shows it: how many requests are allowed in
+ * how many days (null days counts every request ever made)
+ */
+export interface NoBookEndsQuota {
+  limit: number;
+  days: number | null;
+  used: number;
+  remaining: number;
+  restricted: boolean;
+}
+
+/**
+ * The user's book quota, from the same count the request endpoint enforces.
+ * Null when the user may request without a limit. Ebook and audiobook
+ * requests share the quota, a book requested in both formats counts twice.
+ */
+export const getNoBookEndsQuota = async (
+  user: User
+): Promise<NoBookEndsQuota | null> => {
+  const { book } = await user.getQuota();
+
+  if (!book.limit) {
+    return null;
+  }
+
+  return {
+    limit: book.limit,
+    days: book.days || null,
+    used: book.used,
+    remaining: book.remaining ?? Math.max(0, book.limit - book.used),
+    restricted: book.restricted,
+  };
+};
+
 export interface NoBookEndsStatus {
   version: string;
   commitTag: string;
@@ -162,10 +197,13 @@ export interface NoBookEndsStatus {
     canRequest: boolean;
     autoApprove: boolean;
     defaultFormat: 'ebook' | 'audiobook' | 'both';
+    quota: NoBookEndsQuota | null;
   };
   issues: { canCreate: boolean };
   // Whether the user may approve, decline and edit everyone's requests
   requests: { canManage: boolean };
+  // Whether the user may see and fix book downloads Chaptarr is stuck on
+  downloads: { canManage: boolean };
   audiobookshelf: {
     configured: boolean;
     url: string | null;
@@ -177,11 +215,14 @@ export interface NoBookEndsStatus {
 /**
  * What the app may offer this user, so it can hide what is turned off
  */
-export const getNoBookEndsStatus = (user: User): NoBookEndsStatus => {
+export const getNoBookEndsStatus = async (
+  user: User
+): Promise<NoBookEndsStatus> => {
   const settings = getSettings();
   const audiobookshelf = settings.audiobookshelf;
   const audiobookshelfUrl = trimUrl(audiobookshelf.url) ?? null;
   const booksEnabled = !!settings.bookService;
+  const canManageRequests = user.hasPermission(Permission.MANAGE_REQUESTS);
 
   return {
     version: getAppVersion(),
@@ -204,6 +245,7 @@ export const getNoBookEndsStatus = (user: User): NoBookEndsStatus => {
           }
         ),
       defaultFormat: settings.main.defaultBookFormat ?? 'both',
+      quota: booksEnabled ? await getNoBookEndsQuota(user) : null,
     },
     issues: {
       canCreate: user.hasPermission(
@@ -212,7 +254,11 @@ export const getNoBookEndsStatus = (user: User): NoBookEndsStatus => {
       ),
     },
     requests: {
-      canManage: user.hasPermission(Permission.MANAGE_REQUESTS),
+      canManage: canManageRequests,
+    },
+    downloads: {
+      // Only Chaptarr's queue can be read for stuck downloads
+      canManage: canManageRequests && settings.bookService === 'chaptarr',
     },
     audiobookshelf: {
       configured: !!audiobookshelfUrl,

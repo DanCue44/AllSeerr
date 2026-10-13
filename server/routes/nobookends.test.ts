@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
-import { before, beforeEach, describe, it } from 'node:test';
+import { before, beforeEach, describe, it, mock } from 'node:test';
 
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import Media from '@server/entity/Media';
+import MediaRequest from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { isPrivateHost } from '@server/lib/nobookends';
 import { Permission } from '@server/lib/permissions';
+import type { ChaptarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
 import authRoutes from '@server/routes/auth';
@@ -17,6 +25,8 @@ import session from 'express-session';
 import request from 'supertest';
 
 let app: Express;
+
+mock.method(MediaRequest, 'sendNotification', async () => undefined);
 
 function createApp() {
   const app = express();
@@ -304,9 +314,11 @@ describe('GET /nobookends/status', () => {
       canRequest: true,
       autoApprove: false,
       defaultFormat: 'both',
+      quota: null,
     });
     assert.deepStrictEqual(res.body.issues, { canCreate: false });
     assert.deepStrictEqual(res.body.requests, { canManage: false });
+    assert.deepStrictEqual(res.body.downloads, { canManage: false });
     assert.deepStrictEqual(res.body.audiobookshelf, {
       configured: true,
       url: 'https://books.example.com',
@@ -352,10 +364,108 @@ describe('GET /nobookends/status', () => {
 
     assert.strictEqual(res.status, 200);
     assert.deepStrictEqual(res.body.requests, { canManage: true });
+    // Stuck downloads are only read from Chaptarr
+    assert.deepStrictEqual(res.body.downloads, { canManage: false });
+
+    getSettings().main.bookService = 'chaptarr';
+    getSettings().chaptarr = [
+      {
+        id: 0,
+        name: 'Chaptarr',
+        hostname: 'chaptarr',
+        port: 8789,
+        apiKey: 'test-key',
+        useSsl: false,
+        isDefault: true,
+      } as ChaptarrSettings,
+    ];
+    const chaptarr = await agent.get('/nobookends/status');
+    assert.deepStrictEqual(chaptarr.body.downloads, { canManage: true });
   });
 
   it('needs a signed in user', async () => {
     const res = await request(app).get('/nobookends/status');
     assert.strictEqual(res.status, 403);
+  });
+});
+
+describe('GET /nobookends/status book quota', () => {
+  const createReader = async (bookQuotaLimit?: number, bookQuotaDays = 7) => {
+    const reader = new User({
+      email: 'reader@example.com',
+      username: 'reader',
+      avatar: '',
+      permissions: Permission.REQUEST,
+      bookQuotaLimit,
+      bookQuotaDays,
+    });
+    await reader.setPassword('test1234');
+    return getRepository(User).save(reader);
+  };
+
+  const addBookRequests = async (user: User, formats: boolean[]) => {
+    for (const [index, isAudiobook] of formats.entries()) {
+      const media = await getRepository(Media).save(
+        new Media({
+          mediaType: MediaType.BOOK,
+          olId: `OL90000${index}W`,
+          status: MediaStatus.PENDING,
+        })
+      );
+      await getRepository(MediaRequest).save(
+        new MediaRequest({
+          type: MediaType.BOOK,
+          status: MediaRequestStatus.PENDING,
+          media,
+          requestedBy: user,
+          isAudiobook,
+        })
+      );
+    }
+  };
+
+  it('is null for a user without a limit', async () => {
+    enableBooks();
+    await createReader();
+    const { agent } = await loginAs('reader@example.com');
+
+    const res = await agent.get('/nobookends/status');
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.books.quota, null);
+  });
+
+  it('counts both formats against one limit', async () => {
+    enableBooks();
+    const reader = await createReader(5, 7);
+    await addBookRequests(reader, [false, true]);
+    const { agent } = await loginAs('reader@example.com');
+
+    const res = await agent.get('/nobookends/status');
+
+    assert.deepStrictEqual(res.body.books.quota, {
+      limit: 5,
+      days: 7,
+      used: 2,
+      remaining: 3,
+      restricted: false,
+    });
+  });
+
+  it('says when the quota is used up', async () => {
+    enableBooks();
+    const reader = await createReader(2, 0);
+    await addBookRequests(reader, [true, true, false]);
+    const { agent } = await loginAs('reader@example.com');
+
+    const res = await agent.get('/nobookends/status');
+
+    assert.deepStrictEqual(res.body.books.quota, {
+      limit: 2,
+      days: null,
+      used: 3,
+      remaining: 0,
+      restricted: true,
+    });
   });
 });

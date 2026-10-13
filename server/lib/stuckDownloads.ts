@@ -91,6 +91,16 @@ export const getStuckReason = (item: TrackedQueueItem): string | undefined => {
   return undefined;
 };
 
+/**
+ * The key a stuck download is remembered by: the server scope, such as
+ * "chaptarr:0", the download id (or queue id) and why it is stuck
+ */
+export const getStuckKey = (
+  scope: string,
+  item: TrackedQueueItem,
+  reason: string
+): string => `${scope}:${item.downloadId || item.id}:${reason}`;
+
 export interface StuckDownloadEntry {
   // When the download was first seen stuck for this reason, in ms
   firstSeen: number;
@@ -178,7 +188,7 @@ export class StuckDownloadMonitor {
         continue;
       }
 
-      const key = `${prefix}${item.downloadId || item.id}:${reason}`;
+      const key = getStuckKey(scope, item, reason);
 
       if (seen.has(key)) {
         continue;
@@ -212,6 +222,14 @@ export class StuckDownloadMonitor {
     }
 
     return due;
+  }
+
+  /**
+   * Since when a download has been stuck, or undefined when it is not
+   * known to be
+   */
+  public getEntry(key: string): StuckDownloadEntry | undefined {
+    return this.load()[key];
   }
 
   public reset(): void {

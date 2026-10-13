@@ -42,6 +42,12 @@ tags:
       - `GET /request?mediaType=book&requestedBy={userId}` for the user's requests, with download progress in `media.downloadStatus` (ebook) and `media.downloadStatusAudio` (audiobook)
       - `POST /issue` with `bookFormat` to report a problem with a format
       - `GET /discover/books` and `GET /discover/books/upcoming` for discovery
+
+      For users who may manage requests (`downloads.canManage` in the status), it also uses:
+
+      - `GET /nobookends/attention` for book downloads Chaptarr is stuck on, and `POST /nobookends/attention/{key}/dismiss` to remove one and search again
+      - `GET /media/{mediaId}/arr?bookFormat=` for what can be done to a format in its arr
+      - `POST /media/{mediaId}/arr/search` to search again, `GET /media/{mediaId}/arr/releases` to list releases, `POST /media/{mediaId}/arr/grab` to grab one and `POST /media/{mediaId}/arr/replace` to replace the file
   - name: other
     description: Endpoints related to other TMDB data
   - name: person
@@ -10450,6 +10456,30 @@ paths:
                         type: string
                         enum: [ebook, audiobook, both]
                         description: Format the request dialog picks first
+                      quota:
+                        type: object
+                        nullable: true
+                        description: The user's book request quota, the same count `POST /request` enforces. Null when the user may request books without a limit. Ebook and audiobook requests share one quota, so a book requested in both formats counts twice; there is no quota per format.
+                        properties:
+                          limit:
+                            type: number
+                            description: Requests allowed in the period
+                            example: 5
+                          days:
+                            type: number
+                            nullable: true
+                            description: Length of the period in days, null when every request ever made counts
+                            example: 7
+                          used:
+                            type: number
+                            description: Requests made in the period, declined ones not counted
+                            example: 2
+                          remaining:
+                            type: number
+                            example: 3
+                          restricted:
+                            type: boolean
+                            description: Whether the quota is used up, so book requests are refused
                   issues:
                     type: object
                     properties:
@@ -10462,6 +10492,12 @@ paths:
                       canManage:
                         type: boolean
                         description: Whether the user may approve, decline and edit the requests of all users (the Manage Requests or Admin permission)
+                  downloads:
+                    type: object
+                    properties:
+                      canManage:
+                        type: boolean
+                        description: Whether the user may list and fix stuck book downloads with `/nobookends/attention` and the `/media/{mediaId}/arr` actions (the Manage Requests or Admin permission, with Chaptarr as the book service)
                   audiobookshelf:
                     type: object
                     properties:
@@ -10480,6 +10516,127 @@ paths:
                     description: Whether book pages offer to open books in NoBookEnds
         '403':
           description: Not signed in
+  /nobookends/attention:
+    get:
+      summary: List stuck book downloads
+      description: |
+        Lists the book downloads Chaptarr cannot finish by itself, the ones the "Download Needs Attention" notification reports, newest first. Chaptarr's queue is read live (answers are kept for 15 seconds); downloads stuck for less than 10 minutes are left out, as they may still import by themselves. Empty when LazyLibrarian is the book service or Chaptarr does not answer.
+
+        Requires the `MANAGE_REQUESTS` permission. Works with a personal key.
+      tags:
+        - nobookends
+      responses:
+        '200':
+          description: Stuck downloads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key:
+                          type: string
+                          description: Identifies the download for the dismiss endpoint
+                          example: chaptarr:0:SABnzbd_nzo_a1b2c3d4:importblocked
+                        mediaId:
+                          type: number
+                          nullable: true
+                          description: AllSeerr media ID, for the `/media/{mediaId}/arr` actions. Null when the book is not in AllSeerr.
+                          example: 42
+                        olId:
+                          type: string
+                          nullable: true
+                          description: OpenLibrary work ID, for `GET /book/{bookId}`
+                          example: OL900001W
+                        title:
+                          type: string
+                          example: The Lantern Keeper
+                        author:
+                          type: string
+                          nullable: true
+                          example: Jane Example
+                        format:
+                          type: string
+                          nullable: true
+                          enum: [ebook, audiobook]
+                        reason:
+                          type: string
+                          nullable: true
+                          description: What Chaptarr says is wrong, its first status message
+                          example: No supported audio or ebook files were found in /downloads/complete/books/The.Lantern.Keeper
+                        state:
+                          type: string
+                          description: Why the download counts as stuck, its Chaptarr state (importblocked, importfailed, failedpending, failed) or status (warning, error)
+                          example: importblocked
+                        since:
+                          type: string
+                          format: date-time
+                          description: When AllSeerr first saw the download stuck
+                        downloadTitle:
+                          type: string
+                          description: Name of the release in the download client
+                          example: Jane.Example.The.Lantern.Keeper.Unabridged.M4B
+                        requesters:
+                          type: array
+                          description: Display names of the users still waiting for this format
+                          items:
+                            type: string
+        '403':
+          description: Not allowed to manage requests
+  /nobookends/attention/{key}/dismiss:
+    post:
+      summary: Remove a stuck book download and search again
+      description: |
+        Removes the download from Chaptarr's queue and its download client, blocklists its release unless `blocklist=false`, then starts a new automatic search for the book's format (as `POST /media/{mediaId}/arr/search` does when the book is in AllSeerr). The removal stands when the search cannot be started; `searchError` then says why.
+
+        Requires the `MANAGE_REQUESTS` permission. Works with a personal key.
+      tags:
+        - nobookends
+      parameters:
+        - in: path
+          name: key
+          required: true
+          description: Key of the download from `GET /nobookends/attention`, URL encoded
+          schema:
+            type: string
+            example: chaptarr:0:SABnzbd_nzo_a1b2c3d4:importblocked
+        - in: query
+          name: blocklist
+          required: false
+          description: Blocklist the release so it is not grabbed again
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: The download was removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  removed:
+                    type: boolean
+                  blocklisted:
+                    type: boolean
+                  searched:
+                    type: boolean
+                    description: Whether a new search was started
+                  searchError:
+                    type: string
+                    description: Why the new search could not be started
+        '400':
+          description: Invalid download key
+        '403':
+          description: Not allowed to manage requests
+        '404':
+          description: The download is no longer stuck, or its Chaptarr server is not set up
+        '502':
+          description: Chaptarr returned an error
   /nobookends/item/{absItemId}:
     get:
       summary: Get the book of an Audiobookshelf item
@@ -11762,9 +11919,10 @@ paths:
       description: |
         Looks the media up in the arr that holds it (Radarr, Sonarr, Lidarr, Chaptarr or LazyLibrarian) and lists the actions an admin can take there: search again, search manually and replace the file. For series, the episodes Sonarr has are included.
 
-        Requires the `MANAGE_REQUESTS` permission.
+        Requires the `MANAGE_REQUESTS` permission. Works with a personal key.
       tags:
         - media
+        - nobookends
       parameters:
         - in: path
           name: mediaId
@@ -11815,9 +11973,10 @@ paths:
       description: |
         Has the arr run its automatic search for the movie, series, season, episode, album or book format (MoviesSearch, SeriesSearch, SeasonSearch, EpisodeSearch, AlbumSearch, BookSearch, or a LazyLibrarian book search).
 
-        Requires the `MANAGE_REQUESTS` permission.
+        Requires the `MANAGE_REQUESTS` permission. Works with a personal key.
       tags:
         - media
+        - nobookends
       parameters:
         - in: path
           name: mediaId
@@ -11877,9 +12036,10 @@ paths:
       description: |
         Runs the arr's interactive search and lists the releases its indexers returned, approved ones first. Searching every indexer can take a minute or two. Series need a season or an episode. LazyLibrarian cannot list releases.
 
-        Requires the `MANAGE_REQUESTS` permission.
+        Requires the `MANAGE_REQUESTS` permission. Works with a personal key.
       tags:
         - media
+        - nobookends
       parameters:
         - in: path
           name: mediaId
@@ -11941,9 +12101,10 @@ paths:
       description: |
         Sends a release from the last release search to the arr's download client. The arr keeps search results for about 30 minutes.
 
-        Requires the `MANAGE_REQUESTS` permission.
+        Requires the `MANAGE_REQUESTS` permission. Works with a personal key.
       tags:
         - media
+        - nobookends
       parameters:
         - in: path
           name: mediaId
@@ -12017,9 +12178,10 @@ paths:
       description: |
         Deletes the current file(s) of the movie, season, episode, album or book format in the arr, optionally marks the download they came from as failed so the arr blocklists that release, then has the arr search again unless the admin will pick a release. The media shows as processing until a scan finds the new file. Series need a season or an episode. LazyLibrarian cannot delete files.
 
-        Requires the `MANAGE_REQUESTS` permission.
+        Requires the `MANAGE_REQUESTS` permission. Works with a personal key.
       tags:
         - media
+        - nobookends
       parameters:
         - in: path
           name: mediaId
