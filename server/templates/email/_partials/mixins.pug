@@ -2,6 +2,11 @@
 //- src/styles/allseerr-theme.css with the orange accent. Everything is
 //- styled inline and colors are repeated as bgcolor attributes, since many
 //- mail apps drop <style> blocks or CSS backgrounds.
+//-
+//- The dark look is the default. Mail apps that follow the system
+//- appearance (Apple Mail, iOS Mail) switch to the light palette `L`
+//- through the color role classes below (as-bg-*, as-c-*, as-b-line),
+//- which layout.pug overrides in a prefers-color-scheme media query.
 -
   var C = {
     ground: '#202124',
@@ -15,6 +20,18 @@
     accent: '#ec703e',
     accentSoft: '#f7b091',
   };
+  //- Light mode, every text color at least 4.5:1 on the page and the card
+  var L = {
+    ground: '#f5f4f2',
+    surface: '#ffffff',
+    tile: '#edebe8',
+    line: '#e2dfdb',
+    ink: '#1f2023',
+    inkSoft: '#3c4043',
+    inkMuted: '#5f6368',
+    inkFaint: '#6b6e73',
+    accentSoft: '#a84a22',
+  };
   var F = {
     heading: "'Unbounded', 'Segoe UI', Helvetica, Arial, sans-serif",
     body: "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
@@ -25,7 +42,7 @@
 //- One paragraph of body copy.
 mixin text(muted)
   tr
-    td(style=`padding:0 4px 16px;font-family:${F.body};font-size:${muted ? '14px' : '16px'};line-height:${muted ? '21px' : '24px'};color:${muted ? C.inkFaint : C.inkSoft};`)
+    td(class=muted ? 'as-c-faint' : 'as-c-soft' style=`padding:0 4px 16px;font-family:${F.body};font-size:${muted ? '14px' : '16px'};line-height:${muted ? '21px' : '24px'};color:${muted ? C.inkFaint : C.inkSoft};`)
       div
         block
 
@@ -47,24 +64,24 @@ mixin detailRows(rows)
       each row in rows
         tr
           td(style='padding:14px 0 0;')
-            div(style=`font-family:${F.body};font-size:11px;line-height:16px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${C.inkFaint};`)
+            div.as-c-faint(style=`font-family:${F.body};font-size:11px;line-height:16px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${C.inkFaint};`)
               | #{row.name}
-            div(style=`padding-top:2px;font-family:${F.body};font-size:15px;line-height:22px;color:${C.inkSoft};word-break:break-word;`)
+            div.as-c-soft(style=`padding-top:2px;font-family:${F.body};font-size:15px;line-height:22px;color:${C.inkSoft};word-break:break-word;`)
               | #{row.value}
 
 //- The title card: name, details, timestamp and cover art on the right.
 mixin mediaCard(card)
   tr
     td(style='padding:4px 0 20px;')
-      table(width='100%' bgcolor=C.surface style=`width:100%;background-color:${C.surface};border:1px solid ${C.line};border-radius:16px;border-collapse:separate;`)&attributes(TABLE)
+      table.as-bg-surface.as-b-line(width='100%' bgcolor=C.surface style=`width:100%;background-color:${C.surface};border:1px solid ${C.line};border-radius:16px;border-collapse:separate;`)&attributes(TABLE)
         tr
           td.as-card-pad(valign='top' style='padding:20px;')
             if card.url
-              div.as-h2(style=`font-family:${F.heading};font-size:18px;line-height:24px;font-weight:700;color:${C.ink};word-break:break-word;`)
-                a.as-title(href=card.url target='_blank' style=`color:${C.ink};text-decoration:none;`)
+              div.as-h2.as-c-ink(style=`font-family:${F.heading};font-size:18px;line-height:24px;font-weight:700;color:${C.ink};word-break:break-word;`)
+                a.as-title.as-c-ink(href=card.url target='_blank' style=`color:${C.ink};text-decoration:none;`)
                   | #{card.title}
             else
-              div.as-h2(style=`font-family:${F.heading};font-size:18px;line-height:24px;font-weight:700;color:${C.ink};word-break:break-word;`)
+              div.as-h2.as-c-ink(style=`font-family:${F.heading};font-size:18px;line-height:24px;font-weight:700;color:${C.ink};word-break:break-word;`)
                 | #{card.title}
             +detailRows(card.rows)
           if card.imageUrl
@@ -76,14 +93,28 @@ mixin mediaCard(card)
                 img.as-cover(src=card.imageUrl alt='' width='96' style='display:block;width:96px;max-width:96px;height:auto;border:0;border-radius:10px;')
         if card.timestamp
           tr
-            td.as-card-foot(colspan=card.imageUrl ? 2 : 1 style=`padding:12px 20px 14px;border-top:1px solid ${C.line};font-family:${F.body};font-size:13px;line-height:18px;color:${C.inkFaint};`)
+            td.as-card-foot.as-b-line.as-c-faint(colspan=card.imageUrl ? 2 : 1 style=`padding:12px 20px 14px;border-top:1px solid ${C.line};font-family:${F.body};font-size:13px;line-height:18px;color:${C.inkFaint};`)
               div #{card.timestamp}
 
 //- Quoted user text such as an issue description or comment.
 mixin quote(content)
   tr
     td(style='padding:0 0 20px;')
-      table(width='100%' bgcolor=C.tile style=`width:100%;background-color:${C.tile};border-left:3px solid ${C.accent};border-radius:12px;border-collapse:separate;`)&attributes(TABLE)
+      table.as-bg-tile(width='100%' bgcolor=C.tile style=`width:100%;background-color:${C.tile};border-left:3px solid ${C.accent};border-radius:12px;border-collapse:separate;`)&attributes(TABLE)
         tr
-          td(style=`padding:14px 18px;font-family:${F.body};font-size:15px;line-height:23px;color:${C.inkSoft};white-space:pre-line;word-break:break-word;`)
+          td.as-c-soft(style=`padding:14px 18px;font-family:${F.body};font-size:15px;line-height:23px;color:${C.inkSoft};white-space:pre-line;word-break:break-word;`)
             div #{content}
+
+//- The header wordmark. With a light mode variant, both are sent and the
+//- media query in layout.pug shows the one that fits; Outlook for Windows
+//- never sees the light one.
+mixin logo
+  - var logoStyle = `display:block;width:168px;max-width:100%;height:auto;border:0;font-family:${F.heading};font-size:20px;font-weight:700;color:${C.ink};`
+  if logoLightUrl
+    img.as-logo-dark.as-c-ink(src=logoUrl alt=applicationTitle width='168' style=logoStyle)
+    <!--[if !mso]><!-->
+    div.as-logo-light(style='display:none;max-height:0;overflow:hidden;mso-hide:all;')
+      img.as-c-ink(src=logoLightUrl alt=applicationTitle width='168' style=logoStyle)
+    <!--<![endif]-->
+  else
+    img.as-c-ink(src=logoUrl alt=applicationTitle width='168' style=logoStyle)

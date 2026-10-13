@@ -12,7 +12,10 @@ export const DEFAULT_APPLICATION_TITLE = 'AllSeerr';
 
 // AllSeerr logo for mail clients that cannot reach this server, a PNG since
 // many of them do not show SVG images
-export const PUBLIC_LOGO_URL = `https://raw.githubusercontent.com/${ALLSEERR_REPO}/refs/heads/${ALLSEERR_BRANCH}/public/logo_full.png`;
+const PUBLIC_ASSET_URL = `https://raw.githubusercontent.com/${ALLSEERR_REPO}/refs/heads/${ALLSEERR_BRANCH}/public`;
+export const PUBLIC_LOGO_URL = `${PUBLIC_ASSET_URL}/logo_full.png`;
+// The same wordmark with dark text, for mail apps in light mode
+export const PUBLIC_LOGO_LIGHT_URL = `${PUBLIC_ASSET_URL}/logo_full_dark.png`;
 
 export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 export const LOGO_MIN_SIZE = 64;
@@ -591,19 +594,29 @@ export const buildWebManifest = (): Record<string, unknown> => {
   return manifest;
 };
 
+export interface EmailLogo {
+  /** The bundled wordmark, made for the dark look. */
+  logoUrl?: string;
+  /** The wordmark with dark text, shown when the mail app is in light mode. */
+  logoLightUrl?: string;
+  /** An uploaded logo, shown next to the title. */
+  logoIconUrl?: string;
+}
+
 /**
  * Logo locals for the email templates. A renamed or rebranded instance
  * shows its title as text, next to the uploaded logo, instead of the
- * bundled wordmark.
+ * bundled wordmark. Only the bundled wordmark has a light mode variant;
+ * an uploaded logo and the title text work on both backgrounds.
  */
-export const getEmailLogo = (): { logoUrl?: string; logoIconUrl?: string } => {
+export const getEmailLogo = (): EmailLogo => {
   const settings = getSettings();
   const { applicationUrl, applicationTitle, applicationLogoVersion } =
     settings.main;
   const { usePublicLogo } = settings.notifications.agents.email.options;
 
   if (usePublicLogo) {
-    return { logoUrl: PUBLIC_LOGO_URL };
+    return { logoUrl: PUBLIC_LOGO_URL, logoLightUrl: PUBLIC_LOGO_LIGHT_URL };
   }
 
   if (!applicationUrl) {
@@ -624,5 +637,8 @@ export const getEmailLogo = (): { logoUrl?: string; logoIconUrl?: string } => {
   }
 
   // PNG rather than SVG, since Gmail and Outlook do not show SVG images
-  return { logoUrl: `${applicationUrl}/logo_full.png` };
+  return {
+    logoUrl: `${applicationUrl}/logo_full.png`,
+    logoLightUrl: `${applicationUrl}/logo_full_dark.png`,
+  };
 };

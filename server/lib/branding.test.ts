@@ -1,20 +1,25 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { afterEach, describe, it } from 'node:test';
 
 import {
   ICON_SPECS,
   LOGO_MAX_BYTES,
   LogoValidationError,
+  PUBLIC_LOGO_LIGHT_URL,
+  PUBLIC_LOGO_URL,
   SPLASH_SIZES,
+  brandingDirectory,
   buildIco,
   decodeLogoUpload,
   detectLogoType,
+  getEmailLogo,
   parseSplashName,
   renderLogoFiles,
   renderSplash,
   validateLogo,
 } from '@server/lib/branding';
-import { existsSync } from 'fs';
+import { getSettings } from '@server/lib/settings';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 
@@ -312,5 +317,67 @@ describe('launch screens', () => {
 
     assert.strictEqual(width, 2732);
     assert.strictEqual(height, 2048);
+  });
+});
+
+describe('getEmailLogo', () => {
+  const settings = getSettings();
+  const emailOptions = settings.notifications.agents.email.options;
+
+  afterEach(() => {
+    settings.main.applicationUrl = '';
+    settings.main.applicationTitle = 'AllSeerr';
+    settings.main.applicationLogoVersion = '';
+    emailOptions.usePublicLogo = false;
+    rmSync(brandingDirectory(), { recursive: true, force: true });
+  });
+
+  it('sends the bundled wordmark with a dark text variant for light mode', () => {
+    settings.main.applicationUrl = 'https://requests.example.com';
+
+    assert.deepStrictEqual(getEmailLogo(), {
+      logoUrl: 'https://requests.example.com/logo_full.png',
+      logoLightUrl: 'https://requests.example.com/logo_full_dark.png',
+    });
+  });
+
+  it('ships the light mode wordmark next to the default one', () => {
+    for (const name of ['logo_full.png', 'logo_full_dark.png']) {
+      assert.ok(
+        existsSync(path.join(__dirname, '../../public', name)),
+        `public/${name}`
+      );
+    }
+  });
+
+  it('uses both public wordmarks when asked to', () => {
+    emailOptions.usePublicLogo = true;
+
+    assert.deepStrictEqual(getEmailLogo(), {
+      logoUrl: PUBLIC_LOGO_URL,
+      logoLightUrl: PUBLIC_LOGO_LIGHT_URL,
+    });
+    assert.match(PUBLIC_LOGO_LIGHT_URL, /\/public\/logo_full_dark\.png$/);
+  });
+
+  it('shows an uploaded logo with the title and no light variant', () => {
+    settings.main.applicationUrl = 'https://requests.example.com';
+    settings.main.applicationLogoVersion = 'abc123';
+    mkdirSync(brandingDirectory(), { recursive: true });
+    writeFileSync(path.join(brandingDirectory(), 'logo.png'), 'png');
+
+    assert.deepStrictEqual(getEmailLogo(), {
+      logoIconUrl:
+        'https://requests.example.com/api/v1/branding/icon/android-chrome-192x192.png?v=abc123',
+    });
+  });
+
+  it('shows only the title for a renamed instance or without a URL', () => {
+    assert.deepStrictEqual(getEmailLogo(), {});
+
+    settings.main.applicationUrl = 'https://requests.example.com';
+    settings.main.applicationTitle = 'Movie Night';
+
+    assert.deepStrictEqual(getEmailLogo(), {});
   });
 });

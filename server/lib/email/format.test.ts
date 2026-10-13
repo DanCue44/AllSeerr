@@ -60,7 +60,7 @@ describe('formatEmailTimestamp', () => {
 
 describe('getGreetingName', () => {
   it('uses the display name', () => {
-    assert.equal(getGreetingName('Dan', 'dan@example.com'), 'Dan');
+    assert.equal(getGreetingName('Robin', 'robin@example.com'), 'Robin');
     assert.equal(
       getGreetingName('  Alex Rivera  ', 'a@example.com'),
       'Alex Rivera'
@@ -69,21 +69,21 @@ describe('getGreetingName', () => {
 
   it('skips names that are only an email address', () => {
     assert.equal(
-      getGreetingName('dan@example.com', 'dan@example.com'),
+      getGreetingName('robin@example.com', 'robin@example.com'),
       undefined
     );
     assert.equal(
-      getGreetingName('DAN@example.com', 'dan@example.com'),
+      getGreetingName('ROBIN@example.com', 'robin@example.com'),
       undefined
     );
     assert.equal(
-      getGreetingName('other@example.com', 'dan@example.com'),
+      getGreetingName('other@example.com', 'robin@example.com'),
       undefined
     );
   });
 
   it('skips empty names', () => {
-    assert.equal(getGreetingName(undefined, 'dan@example.com'), undefined);
+    assert.equal(getGreetingName(undefined, 'robin@example.com'), undefined);
     assert.equal(getGreetingName(null), undefined);
     assert.equal(getGreetingName('   '), undefined);
   });
@@ -96,7 +96,7 @@ describe('getEmailLayoutLocals', () => {
       applicationTitle: 'AllSeerr',
       applicationUrl: 'https://requests.example.com',
       recipientName: 'dan.c',
-      recipientEmail: 'dan@example.com',
+      recipientEmail: 'robin@example.com',
     });
 
     assert.equal(locals.greeting, `Hi ${breakAutoLinks('dan.c')},`);
@@ -113,8 +113,8 @@ describe('getEmailLayoutLocals', () => {
       intl,
       applicationTitle: 'Cue Media',
       applicationUrl: '',
-      recipientName: 'dan@example.com',
-      recipientEmail: 'dan@example.com',
+      recipientName: 'robin@example.com',
+      recipientEmail: 'robin@example.com',
     });
 
     assert.equal(locals.greeting, 'Hi there,');
@@ -145,8 +145,8 @@ describe('email templates', () => {
     intl,
     applicationTitle: 'AllSeerr',
     applicationUrl: 'https://requests.example.com',
-    recipientName: 'Dan',
-    recipientEmail: 'dan@example.com',
+    recipientName: 'Robin',
+    recipientEmail: 'robin@example.com',
   });
   const timestamp = formatEmailTimestamp(
     new Date('2026-10-12T19:04:20Z'),
@@ -166,12 +166,12 @@ describe('email templates', () => {
         mediaExtra: [{ name: 'Reason', value: 'Already in 1080p' }],
         imageUrl: 'https://image.example.com/poster.jpg',
         timestamp,
-        requestedBy: 'Dan',
+        requestedBy: 'Robin',
         actionUrl: 'https://requests.example.com/movie/693134',
       }
     );
 
-    assert.match(html, /Hi Dan,/);
+    assert.match(html, /Hi Robin,/);
     assert.match(html, /Oct 12, 2026 at 3:04/);
     assert.match(html, /Already in 1080p/);
     assert.match(html, /View in AllSeerr/);
@@ -181,13 +181,52 @@ describe('email templates', () => {
     assert.doesNotMatch(html, /\u2014/);
   });
 
+  it('keeps the light mode media query and swaps the wordmark', async () => {
+    const html = await email.render(path.join(templates, 'test-email/html'), {
+      ...layout,
+      applicationTitle: 'AllSeerr',
+      applicationUrl: 'https://requests.example.com',
+      body: 'Test body',
+      logoUrl: 'https://requests.example.com/logo_full.png',
+      logoLightUrl: 'https://requests.example.com/logo_full_dark.png',
+    });
+
+    assert.match(html, /<meta name="color-scheme" content="light dark">/);
+    assert.match(html, /@media \(prefers-color-scheme: light\)/);
+    assert.match(
+      html,
+      /\.as-bg-ground \{ background-color: #f5f4f2 !important; \}/
+    );
+    // The dark look stays inline for mail apps without media queries
+    assert.match(html, /<body class="as-bg-ground" bgcolor="#202124"/);
+    assert.doesNotMatch(html, /100vh/);
+    assert.match(html, /class="as-logo-dark[^"]*" src="[^"]*\/logo_full\.png"/);
+    assert.match(
+      html,
+      /<!--\[if !mso\]><!-->\s*<div class="as-logo-light" style="display:none;[^"]*mso-hide:all;">\s*<img[^>]*src="[^"]*\/logo_full_dark\.png"/
+    );
+  });
+
+  it('sends one wordmark when there is no light variant', async () => {
+    const html = await email.render(path.join(templates, 'test-email/html'), {
+      ...layout,
+      applicationTitle: 'AllSeerr',
+      applicationUrl: 'https://requests.example.com',
+      body: 'Test body',
+      logoUrl: 'https://requests.example.com/logo.png',
+    });
+
+    assert.match(html, /src="https:\/\/requests\.example\.com\/logo\.png"/);
+    assert.doesNotMatch(html, /class="as-logo-/);
+  });
+
   it('renders every template', async () => {
     const base = {
       ...getEmailLayoutLocals({
         intl,
         applicationTitle: 'AllSeerr',
         applicationUrl: '',
-        recipientName: 'Dan',
+        recipientName: 'Robin',
       }),
       applicationTitle: 'AllSeerr',
       applicationUrl: '',
@@ -212,7 +251,7 @@ describe('email templates', () => {
         ...locals,
       });
 
-      assert.match(html, /Hi Dan,/, template);
+      assert.match(html, /Hi Robin,/, template);
       assert.doesNotMatch(html, /settings\/notifications/, template);
     }
   });

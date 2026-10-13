@@ -111,7 +111,7 @@ class EmailAgent
     const settings = getSettings();
     const { applicationUrl, applicationTitle } = settings.main;
     const { embedPoster } = settings.notifications.agents.email;
-    const { logoUrl, logoIconUrl } = getEmailLogo();
+    const { logoUrl, logoLightUrl, logoIconUrl } = getEmailLogo();
     const layout = getEmailLayoutLocals({
       intl,
       applicationTitle,
@@ -132,6 +132,7 @@ class EmailAgent
           applicationUrl,
           applicationTitle,
           logoUrl,
+          logoLightUrl,
           logoIconUrl,
           recipientName,
           recipientEmail,
@@ -162,6 +163,7 @@ class EmailAgent
           applicationUrl,
           applicationTitle,
           logoUrl,
+          logoLightUrl,
           logoIconUrl,
           recipientName,
           recipientEmail,
@@ -263,6 +265,7 @@ class EmailAgent
           applicationUrl,
           applicationTitle,
           logoUrl,
+          logoLightUrl,
           logoIconUrl,
           recipientName,
           recipientEmail,
@@ -309,6 +312,7 @@ class EmailAgent
           applicationUrl,
           applicationTitle,
           logoUrl,
+          logoLightUrl,
           logoIconUrl,
           recipientName,
           recipientEmail,
@@ -337,6 +341,7 @@ class EmailAgent
           applicationUrl,
           applicationTitle,
           logoUrl,
+          logoLightUrl,
           logoIconUrl,
           recipientName,
           recipientEmail,
@@ -411,6 +416,7 @@ class EmailAgent
           applicationUrl,
           applicationTitle,
           logoUrl,
+          logoLightUrl,
           logoIconUrl,
           recipientName,
           recipientEmail,

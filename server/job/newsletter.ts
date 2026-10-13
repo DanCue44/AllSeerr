@@ -210,7 +210,7 @@ class RecentlyAddedNewsletter {
     const { applicationUrl, applicationTitle } = settings.main;
     const emailSettings = settings.notifications.agents.email;
     const intl = getIntl(user.settings?.locale as AvailableLocale);
-    const { logoUrl, logoIconUrl } = getEmailLogo();
+    const { logoUrl, logoLightUrl, logoIconUrl } = getEmailLogo();
 
     if (!validator.isEmail(user.email, { require_tld: false })) {
       logger.warn('Invalid email address provided for user', {
@@ -250,6 +250,7 @@ class RecentlyAddedNewsletter {
           applicationUrl,
           applicationTitle,
           logoUrl,
+          logoLightUrl,
           logoIconUrl,
           recipientName: user.displayName,
           recipientEmail: user.email,

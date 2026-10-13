@@ -1,19 +1,20 @@
 include mixins.pug
 
 doctype html
-html(lang=locale || 'en' style=`height:100%;min-height:100%;background-color:${C.ground};`)
+html.as-bg-ground(lang=locale || 'en' style=`background-color:${C.ground};`)
   head
     meta(charset='utf-8')
     meta(name='viewport' content='width=device-width, initial-scale=1')
     meta(name='x-apple-disable-message-reformatting')
     meta(http-equiv='x-ua-compatible' content='ie=edge')
     meta(name='format-detection' content='telephone=no, date=no, address=no, email=no')
-    meta(name='color-scheme' content='dark')
-    meta(name='supported-color-schemes' content='dark')
+    //- Tells Apple Mail the email has its own light and dark look, so it
+    //- does not invert the colors itself
+    meta(name='color-scheme' content='light dark')
+    meta(name='supported-color-schemes' content='light dark')
     title #{applicationTitle}
     style.
-      :root { color-scheme: dark; supported-color-schemes: dark; }
-      html, body { height: 100% !important; min-height: 100vh !important; }
+      :root { color-scheme: light dark; supported-color-schemes: light dark; }
       body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
       a.as-title:hover { text-decoration: underline !important; }
       @media only screen and (max-width: 480px) {
@@ -27,12 +28,27 @@ html(lang=locale || 'en' style=`height:100%;min-height:100%;background-color:${C
         .as-btn { width: 100% !important; }
         .as-btn a { display: block !important; }
       }
+    //- A separate block, so a mail app that rejects this media query does
+    //- not also drop the rules above. Apps without it keep the dark look.
+    style.
+      @media (prefers-color-scheme: light) {
+        .as-bg-ground { background-color: #{L.ground} !important; }
+        .as-bg-surface { background-color: #{L.surface} !important; }
+        .as-bg-tile { background-color: #{L.tile} !important; }
+        .as-b-line { border-color: #{L.line} !important; }
+        .as-c-ink { color: #{L.ink} !important; }
+        .as-c-soft { color: #{L.inkSoft} !important; }
+        .as-c-muted { color: #{L.inkMuted} !important; }
+        .as-c-faint { color: #{L.inkFaint} !important; }
+        .as-c-accent-soft { color: #{L.accentSoft} !important; }
+        .as-logo-dark { display: none !important; }
+        .as-logo-light { display: block !important; max-height: none !important; overflow: visible !important; }
+      }
     <!--[if mso]><style>table, td, div, a, span { font-family: 'Segoe UI', Arial, sans-serif !important; }</style><![endif]-->
-  body(bgcolor=C.ground style=`margin:0;padding:0;width:100%;height:100%;min-height:100vh;background-color:${C.ground};-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;`)
-    //- At least a screen tall, so the mail app's own background does not show below
-    table(width='100%' height='100%' bgcolor=C.ground style=`width:100%;height:100%;min-height:100vh;background-color:${C.ground};`)&attributes(TABLE)
+  body.as-bg-ground(bgcolor=C.ground style=`margin:0;padding:0;width:100%;background-color:${C.ground};-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;`)
+    table.as-bg-ground(width='100%' bgcolor=C.ground style=`width:100%;background-color:${C.ground};`)&attributes(TABLE)
       tr
-        td.as-outer(align='center' valign='top' bgcolor=C.ground style=`padding:32px 16px 40px;background-color:${C.ground};`)
+        td.as-outer.as-bg-ground(align='center' valign='top' bgcolor=C.ground style=`padding:32px 16px 40px;background-color:${C.ground};`)
           <!--[if mso]><table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td><![endif]-->
           table(width='100%' style='width:100%;max-width:560px;margin:0 auto;')&attributes(TABLE)
             //- Header: the wordmark, an uploaded icon with the title, or the title
@@ -41,20 +57,20 @@ html(lang=locale || 'en' style=`height:100%;min-height:100%;background-color:${C
                 if logoUrl
                   if applicationUrl
                     a.as-img-link(href=applicationUrl target='_blank' style='display:inline-block;text-decoration:none;')
-                      img(src=logoUrl alt=applicationTitle width='168' style=`display:block;width:168px;max-width:100%;height:auto;border:0;font-family:${F.heading};font-size:20px;font-weight:700;color:${C.ink};`)
+                      +logo
                   else
-                    img(src=logoUrl alt=applicationTitle width='168' style=`display:block;width:168px;max-width:100%;height:auto;border:0;font-family:${F.heading};font-size:20px;font-weight:700;color:${C.ink};`)
+                    +logo
                 else
                   table&attributes(TABLE)
                     tr
                       if logoIconUrl
                         td(valign='middle' style='padding-right:12px;')
                           img(src=logoIconUrl alt='' width='40' height='40' style='display:block;width:40px;height:40px;border:0;border-radius:10px;')
-                      td(valign='middle' style=`font-family:${F.heading};font-size:20px;line-height:26px;font-weight:700;color:${C.ink};`)
+                      td.as-c-ink(valign='middle' style=`font-family:${F.heading};font-size:20px;line-height:26px;font-weight:700;color:${C.ink};`)
                         div #{applicationTitle}
             if greeting
               tr
-                td(style=`padding:0 4px 8px;font-family:${F.heading};font-size:20px;line-height:28px;font-weight:600;color:${C.ink};`)
+                td.as-c-ink(style=`padding:0 4px 8px;font-family:${F.heading};font-size:20px;line-height:28px;font-weight:600;color:${C.ink};`)
                   div #{greeting}
             block content
             //- Footer
@@ -62,12 +78,12 @@ html(lang=locale || 'en' style=`height:100%;min-height:100%;background-color:${C
               td(style='padding:16px 4px 0;')
                 table(width='100%' style='width:100%;')&attributes(TABLE)
                   tr
-                    td(style=`padding-top:20px;border-top:1px solid ${C.line};font-family:${F.body};font-size:12px;line-height:18px;color:${C.inkFaint};`)
+                    td.as-b-line.as-c-faint(style=`padding-top:20px;border-top:1px solid ${C.line};font-family:${F.body};font-size:12px;line-height:18px;color:${C.inkFaint};`)
                       div
                         block footer
                           | #{labels.sentBy}
                           if manageNotificationsUrl
                             | &nbsp;&middot;&nbsp;
-                            a(href=manageNotificationsUrl target='_blank' style=`color:${C.inkMuted};text-decoration:underline;`)
+                            a.as-c-muted(href=manageNotificationsUrl target='_blank' style=`color:${C.inkMuted};text-decoration:underline;`)
                               | #{labels.manageNotifications}
           <!--[if mso]></td></tr></table><![endif]-->

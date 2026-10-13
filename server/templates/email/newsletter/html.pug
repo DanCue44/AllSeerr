@@ -3,24 +3,24 @@ extends ../_partials/layout.pug
 mixin newsletterItem(item)
   tr
     td(style='padding:0 0 12px;')
-      table(width='100%' bgcolor=C.surface style=`width:100%;background-color:${C.surface};border:1px solid ${C.line};border-radius:16px;border-collapse:separate;`)&attributes(TABLE)
+      table.as-bg-surface.as-b-line(width='100%' bgcolor=C.surface style=`width:100%;background-color:${C.surface};border:1px solid ${C.line};border-radius:16px;border-collapse:separate;`)&attributes(TABLE)
         tr
           td.as-card-pad(valign='top' style='padding:16px 18px;')
             if item.actionUrl
-              div.as-h2(style=`font-family:${F.heading};font-size:16px;line-height:22px;font-weight:700;color:${C.ink};word-break:break-word;`)
-                a.as-title(href=item.actionUrl target='_blank' style=`color:${C.ink};text-decoration:none;`)
+              div.as-h2.as-c-ink(style=`font-family:${F.heading};font-size:16px;line-height:22px;font-weight:700;color:${C.ink};word-break:break-word;`)
+                a.as-title.as-c-ink(href=item.actionUrl target='_blank' style=`color:${C.ink};text-decoration:none;`)
                   | #{item.title}
                   if item.year
-                    span(style=`font-family:${F.body};font-weight:400;color:${C.inkFaint};`)
+                    span.as-c-faint(style=`font-family:${F.body};font-weight:400;color:${C.inkFaint};`)
                       | &nbsp;(#{item.year})
             else
-              div.as-h2(style=`font-family:${F.heading};font-size:16px;line-height:22px;font-weight:700;color:${C.ink};word-break:break-word;`)
+              div.as-h2.as-c-ink(style=`font-family:${F.heading};font-size:16px;line-height:22px;font-weight:700;color:${C.ink};word-break:break-word;`)
                 | #{item.title}
                 if item.year
-                  span(style=`font-family:${F.body};font-weight:400;color:${C.inkFaint};`)
+                  span.as-c-faint(style=`font-family:${F.body};font-weight:400;color:${C.inkFaint};`)
                     | &nbsp;(#{item.year})
             if item.overview
-              div(style=`padding-top:6px;font-family:${F.body};font-size:14px;line-height:21px;color:${C.inkMuted};`)
+              div.as-c-muted(style=`padding-top:6px;font-family:${F.body};font-size:14px;line-height:21px;color:${C.inkMuted};`)
                 | #{item.overview}
           if item.imageUrl
             td.as-thumb-cell(valign='top' width='84' style='width:68px;padding:16px 16px 16px 0;')
@@ -30,7 +30,7 @@ mixin newsletterItem(item)
 mixin newsletterSection(title, items)
   if items.length
     tr
-      td(style=`padding:12px 4px 12px;font-family:${F.heading};font-size:15px;line-height:20px;font-weight:700;letter-spacing:0.02em;color:${C.accentSoft};`)
+      td.as-c-accent-soft(style=`padding:12px 4px 12px;font-family:${F.heading};font-size:15px;line-height:20px;font-weight:700;letter-spacing:0.02em;color:${C.accentSoft};`)
         div #{title}
     each item in items
       +newsletterItem(item)
@@ -49,7 +49,7 @@ block footer
   | #{labels.sentBy}
   br
   if settingsUrl
-    a(href=settingsUrl target='_blank' style=`color:${C.inkMuted};text-decoration:underline;`)
+    a.as-c-muted(href=settingsUrl target='_blank' style=`color:${C.inkMuted};text-decoration:underline;`)
       | #{optOut}
   else
     | #{optOut}
