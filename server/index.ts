@@ -23,6 +23,7 @@ import checkOverseerrMerge from '@server/lib/overseerrMerge';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import clearCookies from '@server/middleware/clearcookies';
+import plusAsSpace from '@server/middleware/plusAsSpace';
 import routes from '@server/routes';
 import avatarproxy from '@server/routes/avatarproxy';
 import imageproxy from '@server/routes/imageproxy';
@@ -248,6 +249,8 @@ app
     const apiSpecContent = await fs.readFile(API_SPEC_PATH, 'utf-8');
     const apiDocs = yaml.load(apiSpecContent) as Record<string, unknown>;
     server.use('/api-docs', swaggerUi.serve, swaggerUi.setup(apiDocs));
+    // Lets clients send spaces in query parameters as `+`
+    server.use('/api', plusAsSpace);
     server.use(
       OpenApiValidator.middleware({
         apiSpec: API_SPEC_PATH,
