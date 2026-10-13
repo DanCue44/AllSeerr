@@ -89,6 +89,9 @@ const messages = defineMessages('components.AllSeerr.BookDetails', {
   managebook: 'Manage Book',
   readinaudiobookshelf: 'Read in Audiobookshelf',
   listeninaudiobookshelf: 'Listen in Audiobookshelf',
+  openinnobookends: 'Open in NoBookEnds',
+  readinnobookends: 'Read in NoBookEnds',
+  listeninnobookends: 'Listen in NoBookEnds',
   moreby: 'More by {author}',
   seeall: 'See all',
   requestedby: 'Requested by {user} on {date}',
@@ -101,6 +104,38 @@ const getSubjectSlug = (subject: string): string =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
+
+// The NoBookEnds app opens the format's Audiobookshelf item, or its site
+// shows the store links when the app is not installed
+const noBookEndsLinks = (book: BookDetailsType) => [
+  ...(book.nobookendsEbookUrl
+    ? [
+        {
+          key: 'nobookends-ebook',
+          href: book.nobookendsEbookUrl,
+          format: 'ebook' as const,
+        },
+      ]
+    : []),
+  ...(book.nobookendsAudiobookUrl
+    ? [
+        {
+          key: 'nobookends-audiobook',
+          href: book.nobookendsAudiobookUrl,
+          format: 'audiobook' as const,
+        },
+      ]
+    : []),
+];
+
+const NoBookEndsIcon = () => (
+  // eslint-disable-next-line @next/next/no-img-element
+  <img
+    src="/nobookends-icon.png"
+    alt=""
+    className="h-4 w-4 shrink-0 rounded-[4px]"
+  />
+);
 
 interface BookDetailsProps {
   book?: BookDetailsType;
@@ -250,6 +285,17 @@ const BookDetails = ({ book }: BookDetailsProps) => {
           },
         ]
       : []),
+    ...noBookEndsLinks(data).map((link, _index, links) => ({
+      key: link.key,
+      href: link.href,
+      label:
+        links.length > 1
+          ? link.format === 'ebook'
+            ? messages.readinnobookends
+            : messages.listeninnobookends
+          : messages.openinnobookends,
+      icon: <NoBookEndsIcon />,
+    })),
   ];
 
   const externalLinks = [

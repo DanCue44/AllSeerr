@@ -34,6 +34,9 @@ const messages = defineMessages('components.Settings.AudiobookshelfModal', {
   sameLibrary: 'Same as the audiobook library',
   nolibrary: 'No library (home page)',
   testForLibraries: 'Enter an API key and click Test to list your libraries.',
+  showNoBookEnds: 'Show Open in NoBookEnds',
+  showNoBookEndsHelp:
+    'Available books offer to open in the NoBookEnds app, which reads and listens through Audiobookshelf. Needs an API key to find the book.',
   validationUrlRequired: 'You must provide a valid URL',
   validationUrlTrailingSlash: 'URL must not end in a trailing slash',
   toastTestSuccess: 'Audiobookshelf connection established successfully!',
@@ -130,6 +133,7 @@ const AudiobookshelfModal = ({
           apiKey: audiobookshelf.apiKey ?? '',
           libraryId: audiobookshelf.libraryId ?? '',
           ebookLibraryId: audiobookshelf.ebookLibraryId ?? '',
+          showNoBookEnds: audiobookshelf.showNoBookEnds !== false,
         }}
         validationSchema={AudiobookshelfSettingsSchema}
         onSubmit={async (values) => {
@@ -145,7 +149,15 @@ const AudiobookshelfModal = ({
           }
         }}
       >
-        {({ errors, touched, values, handleSubmit, isSubmitting, isValid }) => {
+        {({
+          errors,
+          touched,
+          values,
+          handleSubmit,
+          isSubmitting,
+          isValid,
+          setFieldValue,
+        }) => {
           const libraryRow = ({
             name,
             label,
@@ -292,6 +304,24 @@ const AudiobookshelfModal = ({
                   help: messages.ebookLibraryHelp,
                   empty: messages.sameLibrary,
                 })}
+                <div className="form-row">
+                  <label htmlFor="showNoBookEnds" className="checkbox-label">
+                    {intl.formatMessage(messages.showNoBookEnds)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.showNoBookEndsHelp)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <Field
+                      type="checkbox"
+                      id="showNoBookEnds"
+                      name="showNoBookEnds"
+                      onChange={() => {
+                        setFieldValue('showNoBookEnds', !values.showNoBookEnds);
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             </Modal>
           );

@@ -20,6 +20,7 @@ const messages = defineMessages('components.UserProfile.UserSettings', {
   menuChangePass: 'Password',
   menuLinkedAccounts: 'Linked Accounts',
   menuApiKey: 'API Key',
+  menuNoBookEnds: 'NoBookEnds',
   menuNotifications: 'Notifications',
   menuPermissions: 'Permissions',
   unauthorizedDescription:
@@ -74,6 +75,15 @@ const UserSettings = ({ children }: UserSettingsProps) => {
       text: intl.formatMessage(messages.menuApiKey),
       route: '/settings/api-key',
       regex: /\/settings\/api-key/,
+    },
+    {
+      text: intl.formatMessage(messages.menuNoBookEnds),
+      route: '/settings/nobookends',
+      regex: /\/settings\/nobookends/,
+      // The app reads and listens through Audiobookshelf and requests books
+      hidden:
+        !settings.currentSettings.booksEnabled ||
+        !settings.currentSettings.audiobookshelfEnabled,
     },
     {
       text: intl.formatMessage(messages.menuNotifications),

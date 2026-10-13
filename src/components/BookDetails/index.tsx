@@ -63,6 +63,9 @@ const messages = defineMessages('components.BookDetails', {
   managebook: 'Manage Book',
   readinaudiobookshelf: 'Read in Audiobookshelf',
   listeninaudiobookshelf: 'Listen in Audiobookshelf',
+  openinnobookends: 'Open in NoBookEnds',
+  readinnobookends: 'Read in NoBookEnds',
+  listeninnobookends: 'Listen in NoBookEnds',
   openinopenlibrary: 'Open in OpenLibrary',
   reportissue: 'Report an Issue',
 });
@@ -138,6 +141,40 @@ const BookDetails = ({ book }: BookDetailsProps) => {
       text: intl.formatMessage(messages.listeninaudiobookshelf),
       url: data.audiobookshelfAudiobookUrl,
       svg: <PlayIcon />,
+    });
+  }
+
+  // Opens the format's Audiobookshelf item in the NoBookEnds app
+  const bothInNoBookEnds =
+    !!data.nobookendsEbookUrl && !!data.nobookendsAudiobookUrl;
+  const noBookEndsIcon = (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/nobookends-icon.png"
+      alt=""
+      className="mr-2 h-5 w-5 shrink-0 rounded-[4px]"
+    />
+  );
+
+  if (data.nobookendsEbookUrl) {
+    mediaLinks.push({
+      text: intl.formatMessage(
+        bothInNoBookEnds ? messages.readinnobookends : messages.openinnobookends
+      ),
+      url: data.nobookendsEbookUrl,
+      svg: noBookEndsIcon,
+    });
+  }
+
+  if (data.nobookendsAudiobookUrl) {
+    mediaLinks.push({
+      text: intl.formatMessage(
+        bothInNoBookEnds
+          ? messages.listeninnobookends
+          : messages.openinnobookends
+      ),
+      url: data.nobookendsAudiobookUrl,
+      svg: noBookEndsIcon,
     });
   }
 
