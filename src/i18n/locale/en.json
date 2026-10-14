@@ -2363,7 +2363,7 @@
   "components.Settings.deletelazylibrarian": "Remove LazyLibrarian",
   "components.Settings.deletelazylibrarianconfirm": "Are you sure you want to remove LazyLibrarian? Books can no longer be requested.",
   "components.Settings.deletenobookendssync": "Remove NoBookEnds Sync",
-  "components.Settings.deletenobookendssyncconfirm": "Are you sure you want to remove NoBookEnds Sync? Books will no longer be queued there and the app will no longer offer Listen and Read.",
+  "components.Settings.deletenobookendssyncconfirm": "Are you sure you want to remove NoBookEnds Sync? Books will no longer be queued there, and NoBookEnds will fall back to chapter-level Listen and Read.",
   "components.Settings.deleteserverconfirm": "Are you sure you want to delete this server?",
   "components.Settings.email": "Email",
   "components.Settings.enablessl": "Use SSL",

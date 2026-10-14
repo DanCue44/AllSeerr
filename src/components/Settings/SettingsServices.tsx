@@ -72,7 +72,7 @@ const messages = defineMessages('components.Settings', {
   configurenobookendssync: 'Configure NoBookEnds Sync',
   deletenobookendssync: 'Remove NoBookEnds Sync',
   deletenobookendssyncconfirm:
-    'Are you sure you want to remove NoBookEnds Sync? Books will no longer be queued there and the app will no longer offer Listen and Read.',
+    'Are you sure you want to remove NoBookEnds Sync? Books will no longer be queued there, and NoBookEnds will fall back to chapter-level Listen and Read.',
   syncStatus: 'Status',
   syncEnabled: 'Enabled',
   syncDisabled: 'Disabled',
