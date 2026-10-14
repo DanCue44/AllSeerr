@@ -109,6 +109,11 @@ describe('seerr-api.yml', () => {
     app.post('/api/v1/settings/audiobookshelf/test', (_req, res) => {
       res.status(200).json({});
     });
+    app.post('/api/v1/settings/audiobookshelf/match-authors', (_req, res) => {
+      res
+        .status(200)
+        .json({ total: 0, matched: 0, noPhoto: 0, failed: 0, done: true });
+    });
     app.get('/api/v1/settings/nobookends-sync', (_req, res) => {
       res.status(200).json({});
     });
@@ -424,6 +429,25 @@ describe('seerr-api.yml', () => {
       .post('/api/v1/settings/audiobookshelf')
       .send({ showNoBookEnds: 'sometimes' });
     assert.strictEqual(badShowNoBookEnds.status, 400);
+
+    const authorMatchSettings = await request(app)
+      .post('/api/v1/settings/audiobookshelf')
+      .send({ adminApiKey: 'admin-key', authorMatchRegion: 'uk' });
+    assert.strictEqual(
+      authorMatchSettings.status,
+      200,
+      authorMatchSettings.body.message
+    );
+
+    const badMatchRegion = await request(app)
+      .post('/api/v1/settings/audiobookshelf')
+      .send({ authorMatchRegion: 'mars' });
+    assert.strictEqual(badMatchRegion.status, 400);
+
+    const matchAuthors = await request(app).post(
+      '/api/v1/settings/audiobookshelf/match-authors'
+    );
+    assert.strictEqual(matchAuthors.status, 200, matchAuthors.body.message);
 
     const nobookendsStatus = await request(app).get(
       '/api/v1/nobookends/status'

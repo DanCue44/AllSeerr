@@ -8,6 +8,7 @@ import {
   resolveAudiobookshelfSettings,
 } from '@server/lib/settings';
 import migrateAudiobookshelfSettings from '@server/lib/settings/migrations/0009_migrate_audiobookshelf_settings';
+import addAudiobookshelfAuthorMatchSettings from '@server/lib/settings/migrations/0012_add_audiobookshelf_author_match_settings';
 import audiobookshelfRoutes from '@server/routes/settings/audiobookshelf';
 import express from 'express';
 import request from 'supertest';
@@ -61,6 +62,54 @@ describe('0009_migrate_audiobookshelf_settings', () => {
     const migrated = migrateAudiobookshelfSettings(structuredClone(settings));
 
     assert.deepStrictEqual(migrated, settings);
+  });
+});
+
+describe('0012_add_audiobookshelf_author_match_settings', () => {
+  it('adds no admin key and the us region, keeping the rest', () => {
+    const migrated = addAudiobookshelfAuthorMatchSettings({
+      audiobookshelf: { url: ABS_URL, apiKey: 'key' },
+    });
+
+    assert.deepStrictEqual(migrated.audiobookshelf, {
+      url: ABS_URL,
+      apiKey: 'key',
+      adminApiKey: '',
+      authorMatchRegion: 'us',
+    });
+  });
+
+  it('adds the block to settings without one', () => {
+    const migrated = addAudiobookshelfAuthorMatchSettings({ main: {} });
+
+    assert.deepStrictEqual(migrated.audiobookshelf, {
+      adminApiKey: '',
+      authorMatchRegion: 'us',
+    });
+  });
+
+  it('tidies values written by hand and keeps good ones', () => {
+    const migrated = addAudiobookshelfAuthorMatchSettings({
+      audiobookshelf: { adminApiKey: ' admin ', authorMatchRegion: 'UK' },
+    });
+
+    assert.deepStrictEqual(migrated.audiobookshelf, {
+      adminApiKey: 'admin',
+      authorMatchRegion: 'uk',
+    });
+
+    const reset = addAudiobookshelfAuthorMatchSettings({
+      audiobookshelf: { adminApiKey: 'admin', authorMatchRegion: 'mars' },
+    });
+    assert.strictEqual(reset.audiobookshelf.authorMatchRegion, 'us');
+
+    const settings = {
+      audiobookshelf: { adminApiKey: 'admin', authorMatchRegion: 'de' },
+    };
+    assert.deepStrictEqual(
+      addAudiobookshelfAuthorMatchSettings(structuredClone(settings)),
+      settings
+    );
   });
 });
 
@@ -123,7 +172,14 @@ describe('/settings/audiobookshelf', () => {
     versionImpl = async () => '2.17.0';
     librariesImpl = async () => [{ id: ABS_LIBRARY, name: 'Audiobooks' }];
     getSettings().lazylibrarian = {};
-    getSettings().audiobookshelf = { url: '', libraryId: '', apiKey: '' };
+    getSettings().audiobookshelf = {
+      url: '',
+      libraryId: '',
+      ebookLibraryId: '',
+      apiKey: '',
+      adminApiKey: '',
+      authorMatchRegion: 'us',
+    };
   });
 
   it('saves the link and clears the old LazyLibrarian fields', async () => {
@@ -143,6 +199,52 @@ describe('/settings/audiobookshelf', () => {
 
     const saved = await request(app).get('/settings/audiobookshelf');
     assert.strictEqual(saved.body.url, ABS_URL);
+  });
+
+  it('never returns the admin API key, only whether one is saved', async () => {
+    const saved = await request(app).post('/settings/audiobookshelf').send({
+      url: ABS_URL,
+      adminApiKey: ' admin-key ',
+      authorMatchRegion: 'uk',
+    });
+
+    assert.strictEqual(saved.status, 200);
+    assert.strictEqual(saved.body.adminApiKeySet, true);
+    assert.strictEqual(saved.body.adminApiKey, undefined);
+    assert.strictEqual(saved.body.authorMatchRegion, 'uk');
+    assert.strictEqual(getSettings().audiobookshelf.adminApiKey, 'admin-key');
+
+    const read = await request(app).get('/settings/audiobookshelf');
+    assert.strictEqual(read.body.adminApiKeySet, true);
+    assert.strictEqual(read.body.adminApiKey, undefined);
+
+    // Left out keeps the saved key, empty removes it
+    await request(app).post('/settings/audiobookshelf').send({ url: ABS_URL });
+    assert.strictEqual(getSettings().audiobookshelf.adminApiKey, 'admin-key');
+
+    const removed = await request(app)
+      .post('/settings/audiobookshelf')
+      .send({ adminApiKey: '' });
+    assert.strictEqual(removed.body.adminApiKeySet, false);
+    assert.strictEqual(getSettings().audiobookshelf.adminApiKey, '');
+  });
+
+  it('refuses a region Audnexus does not know', async () => {
+    const res = await request(app)
+      .post('/settings/audiobookshelf')
+      .send({ authorMatchRegion: 'mars' });
+
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('refuses to match authors without an admin API key', async () => {
+    getSettings().audiobookshelf = { url: ABS_URL, libraryId: ABS_LIBRARY };
+
+    const res = await request(app).post(
+      '/settings/audiobookshelf/match-authors'
+    );
+
+    assert.strictEqual(res.status, 400);
   });
 
   it('refuses an address that is not a web URL', async () => {

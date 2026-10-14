@@ -6,7 +6,14 @@ import defineMessages from '@app/utils/defineMessages';
 import { isValidURL } from '@app/utils/urlValidationHelper';
 import { Transition } from '@headlessui/react';
 import type { AudiobookshelfLibrary } from '@server/api/audiobookshelf';
-import type { AudiobookshelfSettings } from '@server/lib/settings';
+import {
+  AUDIOBOOKSHELF_MATCH_REGIONS,
+  DEFAULT_AUDIOBOOKSHELF_MATCH_REGION,
+} from '@server/constants/audiobookshelf';
+import type {
+  AudiobookshelfAuthorMatchResponse,
+  AudiobookshelfSettingsResponse,
+} from '@server/interfaces/api/settingsInterfaces';
 import axios from 'axios';
 import { Field, Formik } from 'formik';
 import { useState } from 'react';
@@ -37,6 +44,20 @@ const messages = defineMessages('components.Settings.AudiobookshelfModal', {
   showNoBookEnds: 'Show Open in NoBookEnds',
   showNoBookEndsHelp:
     'Available books offer to open in the NoBookEnds app, which reads and listens through Audiobookshelf. Needs an API key to find the book.',
+  adminApiKey: 'Admin API Key',
+  adminApiKeyHelp:
+    'Optional. Only used to match authors, so Audiobookshelf fetches their photos and bios when AllSeerr finds their books. Needs the API token of an Audiobookshelf user allowed to update (an admin), as a read only key cannot match. Never sent to users. Without it, authors are not matched.',
+  adminApiKeySaved: 'A key is saved. Leave this empty to keep it.',
+  authorMatchRegion: 'Author Match Region',
+  authorMatchRegionHelp:
+    'The Audible region authors are looked up in when they are matched.',
+  matchAuthors: 'Match Authors Now',
+  matchingAuthors: 'Matching...',
+  toastMatchAuthors:
+    '{matched, plural, =0 {No author} one {# author} other {# authors}} got a photo ({total} in the libraries){noPhoto, plural, =0 {} other {, # without a photo on Audnexus}}{failed, plural, =0 {} other {, # failed}}.',
+  toastMatchAuthorsRunning:
+    'Matched {matched, plural, one {# author} other {# authors}} so far out of {total}. The rest are matched in the background.',
+  toastMatchAuthorsFailure: 'Failed to match the Audiobookshelf authors.',
   validationUrlRequired: 'You must provide a valid URL',
   validationUrlTrailingSlash: 'URL must not end in a trailing slash',
   toastTestSuccess: 'Audiobookshelf connection established successfully!',
@@ -48,7 +69,7 @@ const messages = defineMessages('components.Settings.AudiobookshelfModal', {
 });
 
 interface AudiobookshelfModalProps {
-  audiobookshelf: AudiobookshelfSettings;
+  audiobookshelf: AudiobookshelfSettingsResponse;
   onClose: () => void;
   onSave: () => void;
 }
@@ -62,7 +83,10 @@ const AudiobookshelfModal = ({
   const { addToast } = useToasts();
   const [isTesting, setIsTesting] = useState(false);
   const [libraries, setLibraries] = useState<AudiobookshelfLibrary[]>();
+  const [isMatching, setIsMatching] = useState(false);
   const isConfigured = !!audiobookshelf.url;
+  // Matching uses the saved settings, not what the form holds
+  const canMatchAuthors = isConfigured && audiobookshelf.adminApiKeySet;
 
   const AudiobookshelfSettingsSchema = Yup.object().shape({
     url: Yup.string()
@@ -79,7 +103,36 @@ const AudiobookshelfModal = ({
       ),
   });
 
-  const testConnection = async (values: AudiobookshelfSettings) => {
+  const matchAuthors = async () => {
+    setIsMatching(true);
+
+    try {
+      const response = await axios.post<AudiobookshelfAuthorMatchResponse>(
+        '/api/v1/settings/audiobookshelf/match-authors'
+      );
+      const { total, matched, noPhoto, failed, done } = response.data;
+
+      addToast(
+        intl.formatMessage(
+          done ? messages.toastMatchAuthors : messages.toastMatchAuthorsRunning,
+          { total, matched, noPhoto, failed }
+        ),
+        {
+          autoDismiss: true,
+          appearance: failed ? 'warning' : 'success',
+        }
+      );
+    } catch {
+      addToast(intl.formatMessage(messages.toastMatchAuthorsFailure), {
+        autoDismiss: true,
+        appearance: 'error',
+      });
+    } finally {
+      setIsMatching(false);
+    }
+  };
+
+  const testConnection = async (values: { url: string; apiKey: string }) => {
     setIsTesting(true);
 
     try {
@@ -134,11 +187,19 @@ const AudiobookshelfModal = ({
           libraryId: audiobookshelf.libraryId ?? '',
           ebookLibraryId: audiobookshelf.ebookLibraryId ?? '',
           showNoBookEnds: audiobookshelf.showNoBookEnds !== false,
+          adminApiKey: '',
+          authorMatchRegion:
+            audiobookshelf.authorMatchRegion ||
+            DEFAULT_AUDIOBOOKSHELF_MATCH_REGION,
         }}
         validationSchema={AudiobookshelfSettingsSchema}
-        onSubmit={async (values) => {
+        onSubmit={async ({ adminApiKey, ...values }) => {
           try {
-            await axios.post('/api/v1/settings/audiobookshelf', values);
+            await axios.post('/api/v1/settings/audiobookshelf', {
+              ...values,
+              // An empty field keeps the saved key
+              ...(adminApiKey ? { adminApiKey } : {}),
+            });
 
             onSave();
           } catch {
@@ -236,6 +297,18 @@ const AudiobookshelfModal = ({
               secondaryDisabled={
                 !values.url || !!errors.url || isTesting || isSubmitting
               }
+              tertiaryButtonType="default"
+              tertiaryText={
+                canMatchAuthors
+                  ? intl.formatMessage(
+                      isMatching
+                        ? messages.matchingAuthors
+                        : messages.matchAuthors
+                    )
+                  : undefined
+              }
+              onTertiary={canMatchAuthors ? () => matchAuthors() : undefined}
+              tertiaryDisabled={isMatching || isSubmitting}
               okDisabled={isSubmitting || isTesting || !isValid}
               onOk={() => handleSubmit()}
               title={intl.formatMessage(
@@ -304,6 +377,52 @@ const AudiobookshelfModal = ({
                   help: messages.ebookLibraryHelp,
                   empty: messages.sameLibrary,
                 })}
+                <div className="form-row">
+                  <label htmlFor="adminApiKey" className="text-label">
+                    {intl.formatMessage(messages.adminApiKey)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.adminApiKeyHelp)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field">
+                      <SensitiveInput
+                        as="field"
+                        id="adminApiKey"
+                        name="adminApiKey"
+                        autoComplete="one-time-code"
+                      />
+                    </div>
+                    {audiobookshelf.adminApiKeySet && (
+                      <p className="mt-1 text-xs text-gray-400">
+                        {intl.formatMessage(messages.adminApiKeySaved)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label htmlFor="authorMatchRegion" className="text-label">
+                    {intl.formatMessage(messages.authorMatchRegion)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.authorMatchRegionHelp)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field">
+                      <Field
+                        as="select"
+                        id="authorMatchRegion"
+                        name="authorMatchRegion"
+                      >
+                        {AUDIOBOOKSHELF_MATCH_REGIONS.map((region) => (
+                          <option key={region} value={region}>
+                            {region.toUpperCase()}
+                          </option>
+                        ))}
+                      </Field>
+                    </div>
+                  </div>
+                </div>
                 <div className="form-row">
                   <label htmlFor="showNoBookEnds" className="checkbox-label">
                     {intl.formatMessage(messages.showNoBookEnds)}

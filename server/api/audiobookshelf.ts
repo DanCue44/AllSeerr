@@ -1,7 +1,7 @@
 import { proxyRequestInterceptor } from '@server/utils/customProxyAgent';
 import { userAgentRequestInterceptor } from '@server/utils/userAgent';
 import type { AxiosInstance } from 'axios';
-import axios from 'axios';
+import axios, { isAxiosError } from 'axios';
 
 export interface AudiobookshelfLibrary {
   id: string;
@@ -79,6 +79,34 @@ export const mapSearchBooks = (
     ];
   });
 
+/**
+ * An author as Audiobookshelf keeps it. Without an imagePath the author has
+ * no photo, which Audiobookshelf only fetches when the author is matched.
+ */
+export interface AudiobookshelfAuthor {
+  id: string;
+  name: string;
+  asin?: string | null;
+  imagePath?: string | null;
+}
+
+export interface AudiobookshelfAuthorMatchQuery {
+  // Searched for by name, or looked up by Audible ASIN when known
+  q?: string;
+  asin?: string;
+  region: string;
+}
+
+const mapAuthor = (author: Partial<AudiobookshelfAuthor> | undefined) =>
+  author?.id
+    ? {
+        id: author.id,
+        name: author.name ?? '',
+        asin: author.asin || null,
+        imagePath: author.imagePath || null,
+      }
+    : undefined;
+
 interface AudiobookshelfStatus {
   isInit?: boolean;
   serverVersion?: string;
@@ -86,7 +114,8 @@ interface AudiobookshelfStatus {
 
 /**
  * Talks to an Audiobookshelf server: checks that it answers, lists its
- * libraries for the settings and searches a library for a book
+ * libraries for the settings, searches a library for a book and matches
+ * authors so they get a photo
  */
 class AudiobookshelfAPI {
   private axios: AxiosInstance;
@@ -176,6 +205,105 @@ class AudiobookshelfAPI {
     } catch (e) {
       throw new Error(
         `[Audiobookshelf] Failed to search library: ${e.message}`,
+        {
+          cause: e,
+        }
+      );
+    }
+  }
+
+  /**
+   * The authors of a library item, without their photos
+   */
+  public async getItemAuthors(
+    itemId: string
+  ): Promise<{ id: string; name: string }[]> {
+    try {
+      const response = await this.axios.get<{
+        media?: {
+          metadata?: { authors?: { id?: string; name?: string }[] };
+        };
+      }>(`/api/items/${encodeURIComponent(itemId)}`, {
+        params: { expanded: 1 },
+      });
+
+      return (response.data?.media?.metadata?.authors ?? []).flatMap(
+        (author) =>
+          author.id ? [{ id: author.id, name: author.name ?? '' }] : []
+      );
+    } catch (e) {
+      throw new Error(
+        `[Audiobookshelf] Failed to read a library item: ${e.message}`,
+        { cause: e }
+      );
+    }
+  }
+
+  public async getAuthor(authorId: string): Promise<AudiobookshelfAuthor> {
+    try {
+      const response = await this.axios.get<Partial<AudiobookshelfAuthor>>(
+        `/api/authors/${encodeURIComponent(authorId)}`
+      );
+      const author = mapAuthor(response.data);
+
+      if (!author) {
+        throw new Error('Unexpected answer');
+      }
+
+      return author;
+    } catch (e) {
+      throw new Error(
+        `[Audiobookshelf] Failed to read an author: ${e.message}`,
+        {
+          cause: e,
+        }
+      );
+    }
+  }
+
+  public async getLibraryAuthors(
+    libraryId: string
+  ): Promise<AudiobookshelfAuthor[]> {
+    try {
+      const response = await this.axios.get<{
+        authors?: Partial<AudiobookshelfAuthor>[];
+      }>(`/api/libraries/${encodeURIComponent(libraryId)}/authors`);
+
+      return (response.data?.authors ?? []).flatMap((author) => {
+        const mapped = mapAuthor(author);
+        return mapped ? [mapped] : [];
+      });
+    } catch (e) {
+      throw new Error(
+        `[Audiobookshelf] Failed to list the authors of a library: ${e.message}`,
+        { cause: e }
+      );
+    }
+  }
+
+  /**
+   * Has Audiobookshelf look the author up on Audnexus, which fills in the
+   * photo and description it finds. Needs a user allowed to update. Resolves
+   * undefined when Audnexus does not know the author.
+   */
+  public async matchAuthor(
+    authorId: string,
+    query: AudiobookshelfAuthorMatchQuery
+  ): Promise<AudiobookshelfAuthor | undefined> {
+    try {
+      const response = await this.axios.post<{
+        updated?: boolean;
+        author?: Partial<AudiobookshelfAuthor>;
+      }>(`/api/authors/${encodeURIComponent(authorId)}/match`, query);
+
+      return mapAuthor(response.data?.author);
+    } catch (e) {
+      if (isAxiosError(e) && e.response?.status === 404) {
+        return undefined;
+      }
+
+      throw new Error(
+        `[Audiobookshelf] Failed to match an author: ${e.message}`,
         {
           cause: e,
         }

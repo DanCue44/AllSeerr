@@ -1,5 +1,14 @@
 import type { AudiobookshelfLibrary } from '@server/api/audiobookshelf';
 import AudiobookshelfAPI from '@server/api/audiobookshelf';
+import { isAudiobookshelfMatchRegion } from '@server/constants/audiobookshelf';
+import type {
+  AudiobookshelfAuthorMatchResponse,
+  AudiobookshelfSettingsResponse,
+} from '@server/interfaces/api/settingsInterfaces';
+import {
+  AuthorMatchUnavailableError,
+  matchAllAudiobookshelfAuthors,
+} from '@server/lib/audiobookshelfAuthors';
 import type { AudiobookshelfSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -19,17 +28,31 @@ const isHttpUrl = (value: string): boolean => {
 const trimmed = (value: unknown): string | undefined =>
   typeof value === 'string' ? value.trim() : undefined;
 
+/**
+ * The settings without the admin API key, only whether one is saved
+ */
+export const maskAudiobookshelfSettings = ({
+  adminApiKey,
+  ...settings
+}: AudiobookshelfSettings): AudiobookshelfSettingsResponse => ({
+  ...settings,
+  adminApiKeySet: !!adminApiKey?.trim(),
+});
+
 audiobookshelfRoutes.get('/', (_req, res) => {
-  res.status(200).json(getSettings().audiobookshelf);
+  res
+    .status(200)
+    .json(maskAudiobookshelfSettings(getSettings().audiobookshelf));
 });
 
 /**
  * Saves the Audiobookshelf link. The address is the public one users open,
- * which the server may not reach itself, so saving does not test it.
+ * which the server may not reach itself, so saving does not test it. A
+ * missing admin API key keeps the saved one, an empty one removes it.
  */
 audiobookshelfRoutes.post<
   never,
-  AudiobookshelfSettings,
+  AudiobookshelfSettingsResponse,
   AudiobookshelfSettings
 >('/', async (req, res, next) => {
   const settings = getSettings();
@@ -37,6 +60,13 @@ audiobookshelfRoutes.post<
 
   if (url && !isHttpUrl(url)) {
     return next({ status: 400, message: 'Invalid Audiobookshelf URL.' });
+  }
+
+  if (
+    req.body.authorMatchRegion !== undefined &&
+    !isAudiobookshelfMatchRegion(req.body.authorMatchRegion)
+  ) {
+    return next({ status: 400, message: 'Invalid author match region.' });
   }
 
   settings.audiobookshelf = {
@@ -53,11 +83,19 @@ audiobookshelfRoutes.post<
     ...(typeof req.body.showNoBookEnds === 'boolean'
       ? { showNoBookEnds: req.body.showNoBookEnds }
       : {}),
+    ...(req.body.adminApiKey !== undefined
+      ? { adminApiKey: trimmed(req.body.adminApiKey) ?? '' }
+      : {}),
+    ...(req.body.authorMatchRegion !== undefined
+      ? { authorMatchRegion: req.body.authorMatchRegion }
+      : {}),
   };
 
   await settings.save();
 
-  return res.status(200).json(settings.audiobookshelf);
+  return res
+    .status(200)
+    .json(maskAudiobookshelfSettings(settings.audiobookshelf));
 });
 
 /**
@@ -97,5 +135,34 @@ audiobookshelfRoutes.post<
     });
   }
 });
+
+/**
+ * Matches every author without a photo in the audiobook and ebook
+ * libraries, with the saved admin API key. Answers with the counts once
+ * done, or after a while with the counts so far while the rest goes on in
+ * the background.
+ */
+audiobookshelfRoutes.post<never, AudiobookshelfAuthorMatchResponse>(
+  '/match-authors',
+  async (_req, res, next) => {
+    try {
+      return res.status(200).json(await matchAllAudiobookshelfAuthors());
+    } catch (e) {
+      if (e instanceof AuthorMatchUnavailableError) {
+        return next({ status: 400, message: e.message });
+      }
+
+      logger.error('Failed to match Audiobookshelf authors', {
+        label: 'Audiobookshelf',
+        errorMessage: e.message,
+      });
+
+      return next({
+        status: 500,
+        message: 'Failed to list or match the Audiobookshelf authors.',
+      });
+    }
+  }
+);
 
 export default audiobookshelfRoutes;

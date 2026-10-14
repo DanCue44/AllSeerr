@@ -4,7 +4,7 @@ import type {
 } from '@server/api/nobookendsSync';
 import type { BookLanguage } from '@server/constants/bookLanguages';
 import type { BookFormatChoice } from '@server/constants/media';
-import type { BookService } from '@server/lib/settings';
+import type { AudiobookshelfSettings, BookService } from '@server/lib/settings';
 import type { DnsEntries, DnsStats } from 'dns-caching';
 import type { PaginatedResponse } from './common';
 
@@ -136,4 +136,28 @@ export interface NoBookEndsSyncBackfillResponse {
   failed: number;
   // When background alignments run, when the Sync server reports it
   window?: NoBookEndsSyncStatus['window'];
+}
+
+/**
+ * The Audiobookshelf settings as the settings page gets them: the admin API
+ * key is never returned, only whether one is saved
+ */
+export type AudiobookshelfSettingsResponse = Omit<
+  AudiobookshelfSettings,
+  'adminApiKey'
+> & {
+  adminApiKeySet: boolean;
+};
+
+export interface AudiobookshelfAuthorMatchResponse {
+  // Authors in the libraries
+  total: number;
+  // Authors without a photo that got one
+  matched: number;
+  // Authors without a photo that Audnexus has none for
+  noPhoto: number;
+  // Authors that could not be matched this time
+  failed: number;
+  // False while matching still runs in the background
+  done: boolean;
 }

@@ -104,6 +104,12 @@ export interface AudiobookshelfSettings {
   // Offers to open available books in the NoBookEnds app. On unless turned
   // off, so only false hides it.
   showNoBookEnds?: boolean;
+  // Key of an Audiobookshelf user allowed to update, only used to match
+  // authors so they get a photo. Matching is skipped without it. Never sent
+  // to users or back to the settings page.
+  adminApiKey?: string;
+  // Audible region authors are matched in, us when unset
+  authorMatchRegion?: string;
 }
 
 /**

@@ -907,6 +907,19 @@ components:
           type: boolean
           description: Offer to open available books in the NoBookEnds app. Needs the API key, which finds the book in the library. On unless set to false.
           example: true
+        adminApiKeySet:
+          type: boolean
+          readOnly: true
+          description: Whether an admin API key is saved. The key itself is never returned.
+        adminApiKey:
+          type: string
+          writeOnly: true
+          description: Optional. API token of an Audiobookshelf user allowed to update, only used to match authors so Audiobookshelf fetches their photos. Left out keeps the saved key, empty removes it. Without it, authors are not matched.
+        authorMatchRegion:
+          type: string
+          enum: [us, ca, uk, au, fr, de, jp, it, in, es]
+          description: Audible region authors are matched in. us when unset.
+          example: us
     NoBookEndsSyncSettings:
       type: object
       properties:
@@ -4828,6 +4841,42 @@ paths:
                     description: Only returned when an API key was given
                     items:
                       $ref: '#/components/schemas/AudiobookshelfLibrary'
+  /settings/audiobookshelf/match-authors:
+    post:
+      summary: Match Audiobookshelf authors
+      description: Lists the authors of the audiobook and ebook libraries (`GET /api/libraries/{id}/authors`) with the saved admin API key and matches each one without a photo (`POST /api/authors/{id}/match`), one at a time, so Audiobookshelf fetches its photo and bio from Audnexus. Answers once done, or after about 45 seconds with the counts so far and `done` false while the rest is matched in the background. Asking again while a run is under way answers with its progress.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Authors matched, or still being matched
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: number
+                    description: Authors in the libraries
+                    example: 120
+                  matched:
+                    type: number
+                    description: Authors without a photo that got one
+                    example: 30
+                  noPhoto:
+                    type: number
+                    description: Authors without a photo that Audnexus has none for
+                    example: 4
+                  failed:
+                    type: number
+                    description: Authors that could not be matched this time
+                    example: 0
+                  done:
+                    type: boolean
+                    description: False while the rest is still matched in the background
+                    example: true
+        '400':
+          description: Audiobookshelf has no URL, no admin API key or no library
   /settings/nobookends-sync:
     get:
       summary: Get NoBookEnds Sync settings

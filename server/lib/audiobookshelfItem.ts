@@ -5,6 +5,7 @@ import OpenLibrary from '@server/api/openlibrary';
 import { MediaStatus } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
+import { queueAuthorMatchForItems } from '@server/lib/audiobookshelfAuthors';
 import cacheManager from '@server/lib/cache';
 import type { NoBookEndsFormat } from '@server/lib/nobookends';
 import {
@@ -349,6 +350,8 @@ export const rememberAudiobookshelfItemIds = async (
       .execute();
     Object.assign(media, changes);
     onAudiobookshelfItemIdsChanged(media);
+    // New items may be by authors Audiobookshelf has no photo for yet
+    queueAuthorMatchForItems(Object.values(changes));
   } catch (e) {
     logger.debug('Failed to remember the Audiobookshelf items of a book', {
       label: 'Audiobookshelf',

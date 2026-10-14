@@ -31,9 +31,11 @@ import {
 } from '@heroicons/react/24/solid';
 import type OverrideRule from '@server/entity/OverrideRule';
 import type { OverrideRuleResultsResponse } from '@server/interfaces/api/overrideRuleInterfaces';
-import type { NoBookEndsSyncSettingsResponse } from '@server/interfaces/api/settingsInterfaces';
 import type {
-  AudiobookshelfSettings,
+  AudiobookshelfSettingsResponse,
+  NoBookEndsSyncSettingsResponse,
+} from '@server/interfaces/api/settingsInterfaces';
+import type {
   BazarrSettings,
   BookService,
   ChaptarrSettings,
@@ -369,7 +371,7 @@ const SettingsServices = () => {
     data: audiobookshelfData,
     error: audiobookshelfError,
     mutate: revalidateAudiobookshelf,
-  } = useSWR<AudiobookshelfSettings>('/api/v1/settings/audiobookshelf');
+  } = useSWR<AudiobookshelfSettingsResponse>('/api/v1/settings/audiobookshelf');
   const [editAudiobookshelfModal, setEditAudiobookshelfModal] = useState(false);
   const [deleteAudiobookshelfModal, setDeleteAudiobookshelfModal] =
     useState(false);
@@ -483,6 +485,7 @@ const SettingsServices = () => {
       url: '',
       libraryId: '',
       apiKey: '',
+      adminApiKey: '',
     });
     setDeleteAudiobookshelfModal(false);
     revalidateAudiobookshelf();
