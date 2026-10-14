@@ -2429,6 +2429,7 @@
   "components.Settings.noDefaultNon4kServer": "If you only have a single {serverType} server for both non-4K and 4K content (or if you only download 4K content), your {serverType} server should <strong>NOT</strong> be designated as a 4K server.",
   "components.Settings.noDefaultServer": "At least one {serverType} server must be marked as default in order for {mediaType} requests to be processed.",
   "components.Settings.noSpecialCharacters": "Configuration must be a comma delimited list of TMDB keyword ids, and must not start or end with a comma.",
+  "components.Settings.nobookendsSyncRecommended": "Recommended for the full NoBookEnds experience. <SyncLink>How to set it up</SyncLink>",
   "components.Settings.nobookendsSyncSettingsDescription": "Connect a NoBookEnds Sync server, which aligns audiobooks to their EPUBs so the NoBookEnds app can highlight the words as they are read. Books are queued there once both formats are in Audiobookshelf.",
   "components.Settings.nobookendssyncsettings": "NoBookEnds Sync Settings",
   "components.Settings.nooptions": "No results.",

@@ -67,6 +67,8 @@ const messages = defineMessages('components.Settings', {
   nobookendssyncsettings: 'NoBookEnds Sync Settings',
   nobookendsSyncSettingsDescription:
     'Connect a NoBookEnds Sync server, which aligns audiobooks to their EPUBs so the NoBookEnds app can highlight the words as they are read. Books are queued there once both formats are in Audiobookshelf.',
+  nobookendsSyncRecommended:
+    'Recommended for the full NoBookEnds experience. <SyncLink>How to set it up</SyncLink>',
   configurenobookendssync: 'Configure NoBookEnds Sync',
   deletenobookendssync: 'Remove NoBookEnds Sync',
   deletenobookendssyncconfirm:
@@ -1033,6 +1035,20 @@ const SettingsServices = () => {
         </h3>
         <p className="description">
           {intl.formatMessage(messages.nobookendsSyncSettingsDescription)}
+        </p>
+        <p className="description">
+          {intl.formatMessage(messages.nobookendsSyncRecommended, {
+            SyncLink: (msg: React.ReactNode) => (
+              <a
+                href="https://nobookends.com/sync"
+                className="text-white transition duration-300 hover:underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {msg}
+              </a>
+            ),
+          })}
         </p>
       </div>
       {editNoBookEndsSyncModal && nobookendsSyncData && (
