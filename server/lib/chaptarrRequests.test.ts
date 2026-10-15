@@ -437,6 +437,67 @@ describe('sendBookToChaptarr', () => {
     assert.strictEqual(result.bookId, 60);
   });
 
+  it('picks the duplicate of the same work, not a book sharing the main title', async () => {
+    const author = {
+      id: 15,
+      authorName: 'Jack Rosewood',
+      foreignAuthorId: 'gr:9',
+    };
+    const wanted = 'True Crime Stories: 12 Shocking True Crime Murder Cases';
+    chaptarr.lookupResults['hc:1348108'] = [
+      book({ title: wanted, foreignBookId: 'hc:1348108', author }),
+    ];
+    chaptarr.library = [
+      // Older, shares "True Crime Stories" but is another book
+      book({
+        id: 7323,
+        authorId: 15,
+        mediaType: 'audiobook',
+        title: 'True Crime Stories: A Prequel',
+        foreignBookId: 'hc:999',
+        author,
+      }),
+      book({
+        id: 7325,
+        authorId: 15,
+        mediaType: 'audiobook',
+        title: wanted,
+        foreignBookId: 'hc:1348108',
+        author,
+      }),
+      book({
+        id: 7408,
+        authorId: 15,
+        mediaType: 'audiobook',
+        title: wanted,
+        foreignBookId: 'hc:1348108',
+        author,
+      }),
+    ];
+    chaptarr.addResult = () => {
+      throw Object.assign(new Error('[Chaptarr] Failed to add book'), {
+        cause: {
+          response: {
+            status: 500,
+            data: {
+              message:
+                'Requested work hc:1348108 resolves to multiple local Audiobook books.',
+            },
+          },
+        },
+      });
+    };
+
+    const result = await sendBookToChaptarr(asApi(chaptarr), {
+      olId: WORK_ID,
+      foreignBookId: 'hc:1348108',
+      mediaType: 'audiobook',
+      add,
+    });
+
+    assert.strictEqual(result.bookId, 7325);
+  });
+
   it('still fails on other add errors', async () => {
     chaptarr.lookupResults['Pride and Prejudice'] = [book({})];
     chaptarr.addResult = () => {

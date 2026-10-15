@@ -395,7 +395,10 @@ const waitForLibraryBook = async (
  * Chaptarr sometimes imports an author's catalog twice when both formats of
  * a book are requested at once, and then refuses to add the book because
  * the work matches more than one of its own entries. Picks one of those
- * entries: one with files first, then the oldest.
+ * entries: the same work id first, then the same full title, and only then
+ * a book that shares the main title (so "True Crime Stories: A Prequel" is
+ * never picked for "True Crime Stories: 12 Shocking Cases"); among equals,
+ * one with files, then the oldest.
  */
 export const findDuplicateLibraryBook = async (
   chaptarr: ChaptarrAPI,
@@ -425,9 +428,19 @@ export const findDuplicateLibraryBook = async (
       titleKeys(book.title).some((key) => wantedKeys.includes(key))
   );
   const files = (book: ChaptarrBook) => (getBookFileCount(book) ? 1 : 0);
+  const fullTitle = normalizeBookTitle(match.title);
+  const closeness = (book: ChaptarrBook) =>
+    book.foreignBookId && book.foreignBookId === match.foreignBookId
+      ? 2
+      : normalizeBookTitle(book.title) === fullTitle
+        ? 1
+        : 0;
 
   return candidates.sort(
-    (a, b) => files(b) - files(a) || (a.id ?? 0) - (b.id ?? 0)
+    (a, b) =>
+      closeness(b) - closeness(a) ||
+      files(b) - files(a) ||
+      (a.id ?? 0) - (b.id ?? 0)
   )[0];
 };
 
