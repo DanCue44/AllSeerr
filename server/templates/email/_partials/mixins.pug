@@ -32,6 +32,13 @@
     inkFaint: '#6b6e73',
     accentSoft: '#a84a22',
   };
+  //- Request status pills, dark first and the light mode pair after
+  var P = {
+    blue: { bg: '#1d3553', ink: '#a9cbff', lightBg: '#dce8fb', lightInk: '#1d4f91' },
+    green: { bg: '#1c3a29', ink: '#93dcae', lightBg: '#dbf0e2', lightInk: '#1d6b3a' },
+    red: { bg: '#472326', ink: '#ffaba6', lightBg: '#fbe1df', lightInk: '#a2302a' },
+    amber: { bg: '#443519', ink: '#f4cf7c', lightBg: '#fbeed3', lightInk: '#7f5300' },
+  };
   var F = {
     heading: "'Unbounded', 'Segoe UI', Helvetica, Arial, sans-serif",
     body: "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
@@ -118,3 +125,63 @@ mixin logo
     <!--<![endif]-->
   else
     img.as-c-ink(src=logoUrl alt=applicationTitle width='168' style=logoStyle)
+
+//- Small colored pill for a request status such as Processing or Available.
+mixin statusPill(status)
+  - var tone = P[status.tone] || P.blue
+  span(class=`as-pill-${status.tone}` style=`display:inline-block;padding:3px 10px;border-radius:999px;background-color:${tone.bg};font-family:${F.body};font-size:12px;line-height:18px;font-weight:700;letter-spacing:0.02em;color:${tone.ink};white-space:nowrap;`)
+    | #{status.label}
+
+//- Label and value side by side, like the lines under a Pushover message.
+//- Values that are a status show as a pill.
+mixin detailList(rows)
+  if rows && rows.length
+    table(width='100%' style='width:100%;')&attributes(TABLE)
+      each row, i in rows
+        tr
+          td.as-dl-label.as-c-faint.as-b-line(valign='top' width='132' style=`width:132px;padding:9px 12px 9px 0;border-top:1px solid ${C.line};font-family:${F.body};font-size:13px;line-height:20px;color:${C.inkFaint};`)
+            | #{row.name}
+          td.as-c-ink.as-b-line(valign='top' style=`padding:9px 0;border-top:1px solid ${C.line};font-family:${F.body};font-size:14px;line-height:20px;font-weight:600;color:${C.ink};word-break:break-word;`)
+            if row.status
+              +statusPill(row.status)
+            else
+              | #{row.value}
+
+//- The request card in the spirit of the Pushover message: a large poster,
+//- the title in bold, the full overview, the details and a button.
+mixin requestCard(card)
+  tr
+    td(style='padding:4px 0 20px;')
+      table.as-bg-surface.as-b-line(width='100%' bgcolor=C.surface style=`width:100%;background-color:${C.surface};border:1px solid ${C.line};border-radius:18px;border-collapse:separate;`)&attributes(TABLE)
+        if card.imageUrl
+          tr
+            td.as-poster-cell(style='padding:12px 12px 0;')
+              - var posterStyle = `display:block;width:100%;max-width:534px;height:auto;border:0;border-radius:12px;background-color:${C.tile};font-family:${F.body};font-size:14px;line-height:20px;color:${C.inkMuted};`
+              if card.url
+                a.as-img-link(href=card.url target='_blank' style='display:block;text-decoration:none;')
+                  img.as-poster.as-bg-tile(src=card.imageUrl alt=card.imageAlt width='534' style=posterStyle)
+              else
+                img.as-poster.as-bg-tile(src=card.imageUrl alt=card.imageAlt width='534' style=posterStyle)
+        tr
+          td.as-card-body(style='padding:20px 24px 24px;')
+            div.as-h1.as-c-ink(style=`font-family:${F.heading};font-size:22px;line-height:29px;font-weight:700;color:${C.ink};word-break:break-word;`)
+              if card.url
+                a.as-title.as-c-ink(href=card.url target='_blank' style=`color:${C.ink};text-decoration:none;`)
+                  | #{card.title}
+              else
+                | #{card.title}
+            if card.byline
+              div.as-c-muted(style=`padding-top:4px;font-family:${F.body};font-size:15px;line-height:22px;font-weight:600;color:${C.inkMuted};`)
+                | #{card.byline}
+            if card.overview
+              div.as-c-soft(style=`padding-top:14px;font-family:${F.body};font-size:15px;line-height:24px;color:${C.inkSoft};word-break:break-word;`)
+                | #{card.overview}
+            if card.rows && card.rows.length
+              div(style='padding-top:18px;')
+                +detailList(card.rows)
+            if card.url
+              table.as-btn(style='margin-top:22px;')&attributes(TABLE)
+                tr
+                  td(align='center' bgcolor=C.accent style=`border-radius:999px;background-color:${C.accent};`)
+                    a.as-btn-link(href=card.url target='_blank' style=`display:inline-block;padding:13px 30px;font-family:${F.body};font-size:15px;line-height:20px;font-weight:700;color:${C.ground};text-decoration:none;border-radius:999px;`)
+                      | #{card.actionLabel}

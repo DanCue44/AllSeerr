@@ -181,6 +181,68 @@ describe('email templates', () => {
     assert.doesNotMatch(html, /\u2014/);
   });
 
+  it('renders a request like the Pushover message, poster and all', async () => {
+    const locals = {
+      ...layout,
+      applicationTitle: 'AllSeerr',
+      applicationUrl: 'https://requests.example.com',
+      event: 'Movie Request Approved',
+      body: 'Your request for the following movie has been approved:',
+      mediaName: 'Dangerous Minds (1995)',
+      mediaTitle: 'Dangerous Minds (1995)',
+      overview: 'Former Marine Louanne Johnson lands a gig teaching.',
+      mediaExtra: [],
+      imageUrl: 'https://image.tmdb.org/t/p/w780/poster.jpg',
+      timestamp,
+      requestedBy: 'jsmith',
+      status: { label: 'Processing', tone: 'blue' },
+      actionUrl: 'https://requests.example.com/movie/9909',
+    };
+    const html = await email.render(
+      path.join(templates, 'media-request/html'),
+      locals
+    );
+    const text = await email.render(
+      path.join(templates, 'media-request/text'),
+      locals
+    );
+
+    assert.match(html, /Movie Request Approved/);
+    assert.match(html, /Former Marine Louanne Johnson/);
+    assert.match(html, /class="as-poster[^"]*" src="[^"]*w780\/poster\.jpg"/);
+    assert.match(html, /alt="Dangerous Minds \(1995\)"/);
+    assert.match(html, /class="as-pill-blue"[^>]*>Processing</);
+    assert.match(html, /\.as-pill-blue \{ background-color: #dce8fb/);
+    assert.match(text, /^Movie Request Approved\n/);
+    assert.match(text, /Requested By: jsmith\nRequest Status: Processing/);
+    assert.match(
+      text,
+      /View in AllSeerr: https:\/\/requests\.example\.com\/movie\/9909/
+    );
+    assert.doesNotMatch(html + text, /\u2014/);
+  });
+
+  it('shows the requester once when the details already name them', async () => {
+    const html = await email.render(
+      path.join(templates, 'media-request/html'),
+      {
+        ...layout,
+        applicationTitle: 'AllSeerr',
+        applicationUrl: '',
+        body: 'Your request to remove the following book was approved:',
+        mediaName: 'Dune by Frank Herbert (1965)',
+        mediaTitle: 'Dune (1965)',
+        mediaByline: 'by Frank Herbert',
+        mediaExtra: [{ name: 'Requested By', value: 'Robin' }],
+        requestedBy: 'Robin',
+      }
+    );
+
+    assert.equal(html.match(/Requested By/g)?.length, 1);
+    assert.match(html, /by Frank Herbert/);
+    assert.doesNotMatch(html, /View in AllSeerr/);
+  });
+
   it('keeps the light mode media query and swaps the wordmark', async () => {
     const html = await email.render(path.join(templates, 'test-email/html'), {
       ...layout,

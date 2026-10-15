@@ -72,6 +72,7 @@
   "notifications.common.viewIssue": "View Issue in {applicationTitle}",
   "notifications.common.viewMedia": "View Media in {applicationTitle}",
   "notifications.email.accountCreated": "An account has been created for you at {applicationTitle}.",
+  "notifications.email.byline": "by {name}",
   "notifications.email.greeting": "Hi {name},",
   "notifications.email.greetingNoName": "Hi there,",
   "notifications.email.manageNotifications": "Manage notifications",

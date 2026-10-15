@@ -1,14 +1,37 @@
 extends ../_partials/layout.pug
 
+//- The event (such as "Movie Request Approved") and when it happened lead,
+//- then the greeting and the sentence that says what changed
+block intro
+  if event
+    tr
+      td(style='padding:0 4px 18px;')
+        div.as-event.as-c-ink(style=`font-family:${F.heading};font-size:24px;line-height:31px;font-weight:700;color:${C.ink};word-break:break-word;`)
+          | #{event}
+        if timestamp
+          div.as-c-faint(style=`padding-top:4px;font-family:${F.body};font-size:13px;line-height:18px;color:${C.inkFaint};`)
+            | #{timestamp}
+  if greeting
+    tr
+      td.as-c-ink(style=`padding:0 4px 4px;font-family:${F.body};font-size:16px;line-height:24px;font-weight:700;color:${C.ink};`)
+        div #{greeting}
+
 block content
-  +text
-    | #{body}
+  if body
+    +text(true)
+      | #{body}
   -
     var rows = [];
-    if (requestedBy) {
-      rows.push({ name: labels.requestedBy, value: requestedBy.replace(/\.|@/g, function (x) { return x + '\ufeff'; }) });
+    var hasRequester = (mediaExtra || []).some(function (row) { return row.name === labels.requestedBy; });
+    if (requestedBy && !hasRequester) {
+      rows.push({ name: labels.requestedBy, value: requestedBy.replace(/\.|@/g, function (x) { return x + '﻿'; }) });
+    }
+    if (status) {
+      rows.push({ name: labels.requestStatus, status: status });
     }
     rows = rows.concat(mediaExtra || []);
-  +mediaCard({ title: mediaName, url: actionUrl, imageUrl: imageUrl, rows: rows, timestamp: timestamp })
-  if actionUrl
-    +button(actionUrl, actionLabel || labels.viewInApp)
+    var title = mediaTitle || mediaName;
+  +requestCard({ title: title, byline: mediaByline, overview: overview, url: actionUrl, actionLabel: actionLabel || labels.viewInApp, imageUrl: imageUrl, imageAlt: title, rows: rows })
+  if !event && timestamp
+    +text(true)
+      | #{timestamp}

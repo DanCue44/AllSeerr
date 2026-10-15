@@ -1,0 +1,25 @@
+//- Plain text part with the same details as the HTML one, built as lines
+//- so mail apps show clean paragraphs instead of converted table cells
+-
+  var lines = [];
+  var blank = function () { if (lines.length && lines[lines.length - 1] !== '') { lines.push(''); } };
+  var hasRequester = (mediaExtra || []).some(function (row) { return row.name === labels.requestedBy; });
+
+  if (event) { lines.push(event); }
+  if (timestamp) { lines.push(timestamp); }
+  blank();
+  if (greeting) { lines.push(greeting); }
+  if (body) { lines.push(body); }
+  blank();
+  lines.push(mediaTitle || mediaName);
+  if (mediaByline) { lines.push(mediaByline); }
+  if (overview) { blank(); lines.push(overview); }
+  blank();
+  if (requestedBy && !hasRequester) { lines.push(labels.requestedBy + ': ' + requestedBy); }
+  if (status) { lines.push(labels.requestStatus + ': ' + status.label); }
+  (mediaExtra || []).forEach(function (row) { lines.push(row.name + ': ' + row.value); });
+  blank();
+  if (actionUrl) { lines.push((actionLabel || labels.viewInApp) + ': ' + actionUrl); blank(); }
+  lines.push(labels.sentBy);
+  if (manageNotificationsUrl) { lines.push(labels.manageNotifications + ': ' + manageNotificationsUrl); }
+!= lines.join('\n')

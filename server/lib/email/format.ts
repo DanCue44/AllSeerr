@@ -7,6 +7,7 @@ const messages = defineMessages('notifications.email', {
   greetingNoName: 'Hi there,',
   timestamp: '{date} at {time}',
   viewInApp: 'View in {applicationTitle}',
+  byline: 'by {name}',
   openApp: 'Open {applicationTitle}',
   sentBy: 'Sent by {applicationTitle}',
   manageNotifications: 'Manage notifications',
@@ -80,6 +81,10 @@ export const formatEmailTimestamp = (
   });
 };
 
+/** The author or artist line under a book or album title, "by Name". */
+export const formatEmailByline = (intl: EmailIntl, name: string): string =>
+  intl.formatMessage(messages.byline, { name });
+
 interface EmailLayoutOptions {
   intl: EmailIntl;
   applicationTitle: string;
@@ -112,6 +117,7 @@ export const getEmailLayoutLocals = ({
         : undefined,
     labels: {
       requestedBy: intl.formatMessage(globalMessages.requestedBy),
+      requestStatus: intl.formatMessage(globalMessages.requestStatus),
       viewInApp: intl.formatMessage(messages.viewInApp, { applicationTitle }),
       viewIssue: intl.formatMessage(globalMessages.viewIssue, {
         applicationTitle,

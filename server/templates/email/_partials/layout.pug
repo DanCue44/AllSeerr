@@ -25,6 +25,11 @@ html.as-bg-ground(lang=locale || 'en' style=`background-color:${C.ground};`)
         .as-thumb-cell { padding: 14px 14px 14px 0 !important; }
         .as-card-foot { padding: 12px 16px 14px !important; }
         .as-h2 { font-size: 16px !important; line-height: 22px !important; }
+        .as-poster-cell { padding: 8px 8px 0 !important; }
+        .as-card-body { padding: 18px 18px 20px !important; }
+        .as-h1 { font-size: 20px !important; line-height: 27px !important; }
+        .as-event { font-size: 20px !important; line-height: 27px !important; }
+        .as-dl-label { width: 112px !important; }
         .as-btn { width: 100% !important; }
         .as-btn a { display: block !important; }
       }
@@ -41,6 +46,10 @@ html.as-bg-ground(lang=locale || 'en' style=`background-color:${C.ground};`)
         .as-c-muted { color: #{L.inkMuted} !important; }
         .as-c-faint { color: #{L.inkFaint} !important; }
         .as-c-accent-soft { color: #{L.accentSoft} !important; }
+        .as-pill-blue { background-color: #{P.blue.lightBg} !important; color: #{P.blue.lightInk} !important; }
+        .as-pill-green { background-color: #{P.green.lightBg} !important; color: #{P.green.lightInk} !important; }
+        .as-pill-red { background-color: #{P.red.lightBg} !important; color: #{P.red.lightInk} !important; }
+        .as-pill-amber { background-color: #{P.amber.lightBg} !important; color: #{P.amber.lightInk} !important; }
         .as-logo-dark { display: none !important; }
         .as-logo-light { display: block !important; max-height: none !important; overflow: visible !important; }
       }
@@ -68,10 +77,11 @@ html.as-bg-ground(lang=locale || 'en' style=`background-color:${C.ground};`)
                           img(src=logoIconUrl alt='' width='40' height='40' style='display:block;width:40px;height:40px;border:0;border-radius:10px;')
                       td.as-c-ink(valign='middle' style=`font-family:${F.heading};font-size:20px;line-height:26px;font-weight:700;color:${C.ink};`)
                         div #{applicationTitle}
-            if greeting
-              tr
-                td.as-c-ink(style=`padding:0 4px 8px;font-family:${F.heading};font-size:20px;line-height:28px;font-weight:600;color:${C.ink};`)
-                  div #{greeting}
+            block intro
+              if greeting
+                tr
+                  td.as-c-ink(style=`padding:0 4px 8px;font-family:${F.heading};font-size:20px;line-height:28px;font-weight:600;color:${C.ink};`)
+                    div #{greeting}
             block content
             //- Footer
             tr

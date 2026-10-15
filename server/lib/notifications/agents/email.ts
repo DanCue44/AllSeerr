@@ -1,14 +1,22 @@
 import { IssueType, getIssueTypeName } from '@server/constants/issue';
-import { MediaType } from '@server/constants/media';
+import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import { defineMessages, getIntl } from '@server/i18n';
+import globalMessages from '@server/i18n/globalMessages';
 import { getEmailLogo } from '@server/lib/branding';
 import PreparedEmail from '@server/lib/email';
 import {
+  formatEmailByline,
   formatEmailTimestamp,
   getEmailLayoutLocals,
 } from '@server/lib/email/format';
+import type { EmailStatus } from '@server/lib/email/media';
+import {
+  capEmailOverview,
+  getEmailPosterUrl,
+  splitEmailMediaTitle,
+} from '@server/lib/email/media';
 import { getPayloadMediaTypeName } from '@server/lib/notifications/mediaTypeName';
 import type { NotificationAgentEmail } from '@server/lib/settings';
 import { NotificationAgentKey, getSettings } from '@server/lib/settings';
@@ -70,6 +78,73 @@ const messages = defineMessages('notifications.agents.email', {
   removalDeclined:
     'Your request to remove the following {mediaType} was declined:',
 });
+
+type EmailIntl = ReturnType<typeof getIntl>;
+
+/** The request status shown as a colored pill, as Pushover words it. */
+const getRequestStatus = (
+  type: Notification,
+  payload: NotificationPayload,
+  intl: EmailIntl
+): EmailStatus | undefined => {
+  switch (type) {
+    case Notification.MEDIA_AUTO_REQUESTED:
+      return payload.media?.status === MediaStatus.PENDING
+        ? {
+            label: intl.formatMessage(globalMessages.pendingApproval),
+            tone: 'amber',
+          }
+        : {
+            label: intl.formatMessage(globalMessages.processing),
+            tone: 'blue',
+          };
+    case Notification.MEDIA_PENDING:
+      return {
+        label: intl.formatMessage(globalMessages.pendingApproval),
+        tone: 'amber',
+      };
+    case Notification.MEDIA_APPROVED:
+    case Notification.MEDIA_AUTO_APPROVED:
+      return {
+        label: intl.formatMessage(globalMessages.processing),
+        tone: 'blue',
+      };
+    case Notification.MEDIA_AVAILABLE:
+    case Notification.MEDIA_EPISODES_AVAILABLE:
+      return {
+        label: intl.formatMessage(globalMessages.available),
+        tone: 'green',
+      };
+    case Notification.MEDIA_DECLINED:
+      return {
+        label: intl.formatMessage(globalMessages.declined),
+        tone: 'red',
+      };
+    case Notification.MEDIA_FAILED:
+      return { label: intl.formatMessage(globalMessages.failed), tone: 'red' };
+    default:
+      return undefined;
+  }
+};
+
+/** Title, byline, overview and poster of a media email. */
+const getMediaLocals = (
+  payload: NotificationPayload,
+  intl: EmailIntl,
+  embedPoster: boolean
+) => {
+  const { title, byline } = splitEmailMediaTitle(
+    payload.subject,
+    payload.media?.mediaType
+  );
+
+  return {
+    mediaTitle: title,
+    mediaByline: byline ? formatEmailByline(intl, byline) : undefined,
+    overview: capEmailOverview(payload.message),
+    imageUrl: embedPoster ? getEmailPosterUrl(payload.image) : undefined,
+  };
+};
 
 class EmailAgent
   extends BaseAgent<NotificationAgentEmail>
@@ -270,9 +345,10 @@ class EmailAgent
           body,
           mediaName: payload.subject,
           mediaExtra: payload.extra ?? [],
-          imageUrl: embedPoster ? payload.image : undefined,
+          ...getMediaLocals(payload, intl, embedPoster),
           timestamp,
           requestedBy: payload.request.requestedBy.displayName,
+          status: getRequestStatus(type, payload, intl),
           actionUrl: applicationUrl
             ? `${applicationUrl}${getPayloadPath(payload)}`
             : undefined,
@@ -317,7 +393,7 @@ class EmailAgent
           body,
           mediaName: payload.subject,
           mediaExtra: payload.extra ?? [],
-          imageUrl: embedPoster ? payload.image : undefined,
+          ...getMediaLocals(payload, intl, embedPoster),
           timestamp,
           requestedBy: payload.removal.requestedBy.displayName,
           actionUrl: applicationUrl
@@ -347,7 +423,7 @@ class EmailAgent
           body: payload.message,
           mediaName: payload.subject,
           mediaExtra: payload.extra ?? [],
-          imageUrl: embedPoster ? payload.image : undefined,
+          imageUrl: embedPoster ? getEmailPosterUrl(payload.image) : undefined,
           timestamp,
           actionUrl: applicationUrl
             ? `${applicationUrl}${getPayloadPath(payload)}`
