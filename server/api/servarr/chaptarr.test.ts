@@ -8,7 +8,10 @@ import ChaptarrAPI, {
   chaptarrRetryDelays,
   isAuthorBusyError,
   isMonitoredFor,
+  parseTalearrAddRecording,
   parseTalearrGrabPolicy,
+  parseTalearrRecording,
+  parseTalearrRecordings,
 } from '@server/api/servarr/chaptarr';
 
 type Call = {
@@ -661,5 +664,128 @@ describe('parseTalearrGrabPolicy', () => {
       parseTalearrGrabPolicy({ message: 'NotFound' }),
       undefined
     );
+  });
+});
+
+describe('TaleArr recordings', () => {
+  const primary = {
+    bookId: 3401,
+    role: 'primary',
+    editionId: 28701,
+    narrators: ['Scott Brick'],
+    abridged: 'Unabridged',
+    runtimeMinutes: 1030,
+    asin: 'B002V5BSLC',
+    monitored: true,
+    hasFiles: true,
+    files: { count: 1, quality: 'M4B' },
+  };
+
+  it('reads the recordings and candidates of a book', () => {
+    const view = parseTalearrRecordings({
+      baseBookId: 'hc:149559',
+      marketplace: 'us',
+      recordings: [primary],
+      candidates: [
+        {
+          editionId: 28705,
+          editionIds: [28705, 28709],
+          narrators: ['D.W. Moffett', ''],
+          abridged: 'abridged',
+          runtimeMinutes: null,
+        },
+      ],
+    });
+
+    assert.ok(view);
+    assert.strictEqual(view.recordings[0].role, 'primary');
+    assert.strictEqual(view.recordings[0].abridged, 'unabridged');
+    assert.strictEqual(view.recordings[0].hasFiles, true);
+    assert.deepStrictEqual(view.candidates[0].narrators, ['D.W. Moffett']);
+    assert.deepStrictEqual(view.candidates[0].editionIds, [28705, 28709]);
+    assert.strictEqual(view.candidates[0].runtimeMinutes, null);
+  });
+
+  it('does not read a page that is not a recordings answer', () => {
+    assert.strictEqual(parseTalearrRecordings('<html></html>'), undefined);
+    assert.strictEqual(parseTalearrRecordings({ message: 'x' }), undefined);
+    assert.strictEqual(parseTalearrRecordings([]), undefined);
+  });
+
+  it('reads the answer to a new recording by its status code', () => {
+    assert.deepStrictEqual(
+      parseTalearrAddRecording(201, {
+        action: 'created',
+        searchQueued: true,
+        recording: { ...primary, role: 'additional', bookId: 4100 },
+      }),
+      {
+        status: 'created',
+        searchQueued: true,
+        recording: parseTalearrRecording({
+          ...primary,
+          role: 'additional',
+          bookId: 4100,
+        }),
+      }
+    );
+    assert.strictEqual(
+      parseTalearrAddRecording(201, { action: 'pinned' }).status,
+      'pinned'
+    );
+    assert.strictEqual(
+      parseTalearrAddRecording(200, { action: 'existing' }).status,
+      'existing'
+    );
+
+    const ambiguous = parseTalearrAddRecording(409, {
+      message: 'Several editions fit equally well',
+      candidates: [{ editionId: 31, narrators: ['A'], abridged: 'unabridged' }],
+    });
+    assert.strictEqual(ambiguous.status, 'ambiguous');
+    assert.ok('candidates' in ambiguous);
+    assert.strictEqual(ambiguous.candidates[0].editionId, 31);
+
+    assert.strictEqual(parseTalearrAddRecording(404, {}).status, 'nomatch');
+    assert.strictEqual(parseTalearrAddRecording(400, null).status, 'invalid');
+  });
+
+  it('posts a recording and answers refusals without throwing', async () => {
+    const api = new ChaptarrAPI({
+      url: 'http://talearr:8789/api/v1',
+      apiKey: 'key',
+    });
+    const calls: { url?: string; data?: unknown }[] = [];
+    (
+      api as unknown as {
+        axios: { post: (...args: unknown[]) => Promise<unknown> };
+      }
+    ).axios.post = async (url: unknown, data: unknown) => {
+      calls.push({ url: url as string, data });
+      return {
+        status: 404,
+        data: { message: 'No unabridged edition', candidates: [] },
+      };
+    };
+
+    const result = await api.addTalearrRecording({
+      bookId: 3401,
+      kind: 'unabridged',
+      requestedBy: 'allseerr',
+      externalRef: '12',
+    });
+
+    assert.strictEqual(result.status, 'nomatch');
+    assert.deepStrictEqual(calls, [
+      {
+        url: '/talearr/recordings',
+        data: {
+          bookId: 3401,
+          kind: 'unabridged',
+          requestedBy: 'allseerr',
+          externalRef: '12',
+        },
+      },
+    ]);
   });
 });

@@ -25,6 +25,7 @@ import { syncChaptarrAvailability } from '@server/lib/scanners/chaptarr/availabi
 import { applyLazyLibrarianState } from '@server/lib/scanners/lazylibrarian';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { syncRecordingRequests } from '@server/lib/talearrRecordings';
 import { requestErrorLogFields } from '@server/utils/requestError';
 import { uniqWith } from 'lodash';
 
@@ -190,6 +191,7 @@ class ChaptarrScanner
           this.items,
           isCurrent
         );
+        await this.syncRecordings(serverIds);
         await this.backfillAudiobookshelfItems(serverIds, isCurrent);
 
         if (server.isDefault) {
@@ -203,6 +205,24 @@ class ChaptarrScanner
       this.scanFailed(e);
     } finally {
       this.endRun(sessionId);
+    }
+  }
+
+  /**
+   * Completes the requests for other recordings of audiobooks whose
+   * recordings TaleArr has files for now
+   */
+  private async syncRecordings(serverIds: number[]): Promise<void> {
+    try {
+      const completed = await syncRecordingRequests(serverIds, this.items);
+
+      if (completed) {
+        this.log(`Completed ${completed} recording requests`, 'info');
+      }
+    } catch (e) {
+      this.log('Failed to check the recording requests', 'error', {
+        ...requestErrorLogFields(e),
+      });
     }
   }
 

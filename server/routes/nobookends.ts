@@ -4,7 +4,10 @@ import {
   dismissAttentionItem,
   getAttentionItems,
 } from '@server/lib/nobookendsAttention';
-import { findNoBookEndsItem } from '@server/lib/nobookendsItem';
+import {
+  findNoBookEndsItem,
+  withNoBookEndsRecordings,
+} from '@server/lib/nobookendsItem';
 import { Permission } from '@server/lib/permissions';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -125,7 +128,9 @@ nobookendsRoutes.get<{ absItemId: string }>(
         return next({ status: 404, message: 'Book not found.' });
       }
 
-      return res.status(200).json(item);
+      return res
+        .status(200)
+        .json(await withNoBookEndsRecordings(item, req.user));
     } catch (e) {
       logger.debug('Failed to find the book of an Audiobookshelf item', {
         label: 'NoBookEnds',

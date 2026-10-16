@@ -316,11 +316,14 @@ describe('GET /nobookends/status', () => {
     assert.strictEqual(res.body.user.id, userId);
     assert.deepStrictEqual(res.body.books, {
       enabled: true,
+      service: 'lazylibrarian',
       // The demo user has the REQUEST permission only
       canRequest: true,
       autoApprove: false,
       defaultFormat: 'both',
       quota: null,
+      // Only TaleArr keeps other recordings of an audiobook
+      recordings: false,
     });
     assert.deepStrictEqual(res.body.issues, { canCreate: false });
     assert.deepStrictEqual(res.body.requests, { canManage: false });

@@ -5,6 +5,7 @@ import type { AudiobookshelfBookItem } from '@server/api/audiobookshelf';
 import AudiobookshelfAPI from '@server/api/audiobookshelf';
 import OpenLibrary from '@server/api/openlibrary';
 import type { OlSearchDoc } from '@server/api/openlibrary/interfaces';
+import ChaptarrAPI from '@server/api/servarr/chaptarr';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
@@ -229,6 +230,78 @@ describe('GET /nobookends/item/:absItemId', () => {
 
     // Known items never reach Audiobookshelf
     assert.strictEqual(searchCalls, 0);
+  });
+
+  it('adds the recordings of the audiobook with TaleArr', async () => {
+    const settings = getSettings();
+    settings.chaptarr = [
+      {
+        id: 0,
+        name: 'TaleArr',
+        hostname: 'talearr',
+        port: 8789,
+        apiKey: 'key',
+        useSsl: false,
+        activeProfileId: 1,
+        activeProfileName: 'E-Book',
+        activeDirectory: '/ebooks',
+        activeMetadataProfileId: 2,
+        activeMetadataProfileName: 'Ebook',
+        tags: [],
+        is4k: false,
+        isDefault: true,
+        syncEnabled: true,
+        preventSearch: false,
+        tagRequests: false,
+        overrideRule: [],
+      },
+    ];
+    settings.main.bookService = 'talearr';
+    const recordings = mock.method(
+      ChaptarrAPI.prototype,
+      'getTalearrRecordings',
+      async () => ({
+        recordings: [
+          {
+            bookId: 3401,
+            role: 'primary' as const,
+            editionId: 1,
+            narrators: ['D.W. Moffett'],
+            abridged: 'abridged' as const,
+            monitored: true,
+            hasFiles: true,
+          },
+        ],
+        candidates: [
+          {
+            editionId: 2,
+            narrators: ['Scott Brick'],
+            abridged: 'unabridged' as const,
+          },
+        ],
+      })
+    );
+
+    try {
+      await saveBook({
+        absAudiobookItemId: AUDIOBOOK_ITEM,
+        serviceId: 0,
+        externalServiceIdAudio: 3401,
+      });
+      const agent = await login();
+
+      const res = await agent.get(`/nobookends/item/${AUDIOBOOK_ITEM}`);
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.canRequestRecording, true);
+      assert.strictEqual(res.body.canRequestUnabridged, true);
+      assert.deepStrictEqual(res.body.recordingRequests, []);
+      assert.strictEqual(res.body.recordings[0].abridged, 'abridged');
+      assert.strictEqual(res.body.recordings[0].status, MediaStatus.AVAILABLE);
+    } finally {
+      recordings.mock.restore();
+      settings.chaptarr = [];
+      settings.main.bookService = undefined;
+    }
   });
 
   it('answers without a title when OpenLibrary is down', async () => {

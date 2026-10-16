@@ -17,6 +17,7 @@ import {
   getEffectiveBookLanguage,
   isBookLanguage,
 } from '@server/constants/bookLanguages';
+import { describeBookRecording } from '@server/constants/bookRecording';
 import { usesChaptarr } from '@server/constants/bookService';
 import {
   MediaRequestMonitorMode,
@@ -47,6 +48,7 @@ import { addBookToLazyLibrarian } from '@server/lib/lazyLibrarianRequests';
 import { getMusicNotificationDetails } from '@server/lib/musicNotifications';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { getDefaultChaptarr, getSettings } from '@server/lib/settings';
+import { sendRecordingToTalearr } from '@server/lib/talearrRecordings';
 import { notifyWatchlistUsers } from '@server/lib/watchlistNotifications';
 import logger from '@server/logger';
 import { runInBackground } from '@server/utils/backgroundTasks';
@@ -355,6 +357,10 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       return;
     }
 
+    if (entity.recording) {
+      return this.notifyAvailableRecording(entity, latestMedia);
+    }
+
     try {
       const book = await getBookNotificationDetails(latestMedia.olId);
 
@@ -383,6 +389,41 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         image: book.image,
         extra: [
           { name: 'Format', value: getBookFormatName(entity.isAudiobook) },
+        ],
+      });
+    } catch (e) {
+      logger.error('Something went wrong sending media notification(s)', {
+        label: 'Notifications',
+        errorMessage: e.message,
+        mediaId: entity.id,
+      });
+    }
+  }
+
+  /**
+   * Tells the requester another recording of an audiobook has arrived.
+   * Watchlist users heard about the audiobook when it first arrived.
+   */
+  private async notifyAvailableRecording(entity: MediaRequest, media: Media) {
+    try {
+      const book = await getBookNotificationDetails(media.olId as string);
+
+      notificationManager.sendNotification(Notification.MEDIA_AVAILABLE, {
+        event: `${getBookFormatName(true, entity.recording)} Request Now Available`,
+        notifyAdmin: false,
+        notifySystem: true,
+        notifyUser: entity.requestedBy,
+        subject: book.subject,
+        message: book.message,
+        media,
+        image: book.image,
+        request: entity,
+        extra: [
+          { name: 'Format', value: getBookFormatName(true) },
+          {
+            name: 'Recording',
+            value: describeBookRecording(entity) as string,
+          },
         ],
       });
     } catch (e) {
@@ -1389,7 +1430,9 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
   ): Promise<void> {
     if (
       entity.status !== MediaRequestStatus.APPROVED ||
-      entity.type !== MediaType.BOOK
+      entity.type !== MediaType.BOOK ||
+      // Only TaleArr keeps other recordings of a book
+      entity.recording
     ) {
       return;
     }
@@ -1561,6 +1604,11 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       entity.type !== MediaType.BOOK
     ) {
       return;
+    }
+
+    // Another recording of an audiobook goes to TaleArr's recordings route
+    if (entity.recording) {
+      return sendRecordingToTalearr(entity, manager);
     }
 
     try {
@@ -1784,6 +1832,12 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     manager: EntityManager,
     entity: MediaRequest
   ): Promise<void> {
+    // A recording request is for an audiobook that is available already,
+    // approving or declining it leaves the book's status alone
+    if (entity.recording) {
+      return;
+    }
+
     const mediaRepository = manager.getRepository(Media);
     const media = await mediaRepository.findOne({
       where: { id: entity.media.id },
@@ -1960,6 +2014,10 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     manager: EntityManager,
     entity: MediaRequest
   ): Promise<void> {
+    if (entity.recording) {
+      return;
+    }
+
     if (entity.type === MediaType.BOOK) {
       return this.handleRemoveBookParentUpdate(manager, entity);
     }
