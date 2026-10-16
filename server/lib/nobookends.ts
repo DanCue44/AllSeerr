@@ -1,4 +1,5 @@
-import { usesChaptarr } from '@server/constants/bookService';
+import type { BookService } from '@server/constants/bookService';
+import { isTalearrService, usesChaptarr } from '@server/constants/bookService';
 import type { User } from '@server/entity/User';
 import { getNoBookEndsSyncPublicUrl } from '@server/lib/nobookendsSync';
 import { Permission } from '@server/lib/permissions';
@@ -196,10 +197,15 @@ export interface NoBookEndsStatus {
   user: { id: number; displayName: string };
   books: {
     enabled: boolean;
+    // Where book requests go, null while books are off
+    service: BookService | null;
     canRequest: boolean;
     autoApprove: boolean;
     defaultFormat: 'ebook' | 'audiobook' | 'both';
     quota: NoBookEndsQuota | null;
+    // Whether other recordings of an audiobook can be requested, which
+    // only TaleArr offers
+    recordings: boolean;
   };
   issues: { canCreate: boolean };
   // Whether the user may approve, decline and edit everyone's requests
@@ -237,6 +243,7 @@ export const getNoBookEndsStatus = async (
     user: { id: user.id, displayName: user.displayName },
     books: {
       enabled: booksEnabled,
+      service: settings.bookService ?? null,
       canRequest:
         booksEnabled &&
         user.hasPermission([Permission.REQUEST, Permission.REQUEST_BOOK], {
@@ -252,6 +259,7 @@ export const getNoBookEndsStatus = async (
         ),
       defaultFormat: settings.main.defaultBookFormat ?? 'both',
       quota: booksEnabled ? await getNoBookEndsQuota(user) : null,
+      recordings: isTalearrService(settings.bookService),
     },
     issues: {
       canCreate: user.hasPermission(

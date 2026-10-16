@@ -52,6 +52,7 @@ import { getMediaServiceSettings } from '@server/lib/mediaFiles';
 import { Permission } from '@server/lib/permissions';
 import { getDefaultChaptarr, getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { IsNull } from 'typeorm';
 
 /**
  * An action that cannot be done, with the status the API answers with
@@ -551,7 +552,11 @@ const getMediaBookLanguage = async (
   format: BookFormat
 ): Promise<BookLanguage> => {
   const latest = await getRepository(MediaRequest).findOne({
-    where: { media: { id: media.id }, isAudiobook: format === 'audiobook' },
+    where: {
+      media: { id: media.id },
+      isAudiobook: format === 'audiobook',
+      recording: IsNull(),
+    },
     order: { createdAt: 'DESC' },
   });
 

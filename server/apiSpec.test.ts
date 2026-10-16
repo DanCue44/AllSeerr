@@ -126,6 +126,12 @@ describe('seerr-api.yml', () => {
     app.post('/api/v1/settings/nobookends-sync/backfill', (_req, res) => {
       res.status(200).json({ total: 0, accepted: 0, rejected: 0, failed: 0 });
     });
+    app.get('/api/v1/book/:bookId/recordings', (_req, res) => {
+      res.status(200).json({ supported: false, reason: 'service' });
+    });
+    app.post('/api/v1/request', (_req, res) => {
+      res.status(201).json({});
+    });
     app.get('/api/v1/nobookends/status', (_req, res) => {
       res.status(200).json({});
     });
@@ -178,6 +184,39 @@ describe('seerr-api.yml', () => {
 
     const invalid = await request(app).post('/api/v1/removal').send({});
     assert.strictEqual(invalid.status, 400);
+
+    const recordings = await request(app).get(
+      '/api/v1/book/OL45804W/recordings'
+    );
+    assert.strictEqual(recordings.status, 200, recordings.body.message);
+
+    // Another recording of an audiobook is asked for on the request route
+    const recordingRequest = await request(app).post('/api/v1/request').send({
+      mediaType: 'book',
+      mediaId: 'OL45804W',
+      isAudiobook: true,
+      recording: 'narrator',
+      recordingNarrator: 'Scott Brick',
+    });
+    assert.strictEqual(
+      recordingRequest.status,
+      201,
+      recordingRequest.body.message
+    );
+
+    const editionRequest = await request(app).post('/api/v1/request').send({
+      mediaType: 'book',
+      mediaId: 'OL45804W',
+      isAudiobook: true,
+      recording: 'edition',
+      recordingEditionId: 28705,
+    });
+    assert.strictEqual(editionRequest.status, 201, editionRequest.body.message);
+
+    const unknownRecording = await request(app)
+      .post('/api/v1/request')
+      .send({ mediaType: 'book', mediaId: 'OL45804W', recording: 'radio' });
+    assert.strictEqual(unknownRecording.status, 400);
 
     const availability = await request(app)
       .post('/api/v1/book/audiobook-availability')

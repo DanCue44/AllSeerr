@@ -2,6 +2,7 @@ import OpenLibrary, { getOlId } from '@server/api/openlibrary';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
+import type { User } from '@server/entity/User';
 import {
   ITEM_ID_KEYS,
   getAudiobookshelfItemId,
@@ -10,6 +11,11 @@ import {
 } from '@server/lib/audiobookshelfItem';
 import type { NoBookEndsFormat } from '@server/lib/nobookends';
 import { getSettings } from '@server/lib/settings';
+import type {
+  BookRecordingSummary,
+  RecordingRequestSummary,
+} from '@server/lib/talearrRecordings';
+import { getBookRecordings } from '@server/lib/talearrRecordings';
 import logger from '@server/logger';
 
 // Books from the title search that are checked against the library
@@ -22,7 +28,47 @@ export interface NoBookEndsItem {
   title: string | null;
   status: MediaStatus;
   statusAudio: MediaStatus;
+  // TaleArr only, once the audiobook is available there: its recordings,
+  // whether the user may ask for another one, the unabridged one in
+  // particular, and the recording requests made for the book
+  recordings?: BookRecordingSummary[];
+  canRequestRecording?: boolean;
+  canRequestUnabridged?: boolean;
+  recordingRequests?: RecordingRequestSummary[];
 }
+
+// The app waits for the item, TaleArr gets a short look only
+const RECORDINGS_TIMEOUT_MS = 5_000;
+
+/**
+ * Adds TaleArr's recordings of the book to an item, when TaleArr is the
+ * book service and answers. An item without them is answered as before.
+ */
+export const withNoBookEndsRecordings = async (
+  item: NoBookEndsItem,
+  user: User
+): Promise<NoBookEndsItem> => {
+  const media = await getRepository(Media).findOne({
+    where: { id: item.mediaId },
+  });
+  const info = await getBookRecordings(media, user, {
+    timeoutMs: RECORDINGS_TIMEOUT_MS,
+  });
+
+  if (!info.supported) {
+    return info.requests.length
+      ? { ...item, recordingRequests: info.requests }
+      : item;
+  }
+
+  return {
+    ...item,
+    recordings: info.recordings,
+    canRequestRecording: info.canRequest,
+    canRequestUnabridged: info.canRequest && info.options.unabridged.available,
+    recordingRequests: info.requests,
+  };
+};
 
 export interface NoBookEndsItemHints {
   title?: string;

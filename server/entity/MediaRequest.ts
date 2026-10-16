@@ -10,6 +10,13 @@ import {
   isBookLanguage,
   resolveRequestBookLanguage,
 } from '@server/constants/bookLanguages';
+import type { BookRecordingKind } from '@server/constants/bookRecording';
+import {
+  MAX_RECORDING_NARRATOR_LENGTH,
+  describeBookRecording,
+  isBookRecordingKind,
+} from '@server/constants/bookRecording';
+import { isTalearrService } from '@server/constants/bookService';
 import {
   MediaRequestMonitorMode,
   MediaRequestStatus,
@@ -47,6 +54,11 @@ import overrideRules, {
 import { Permission } from '@server/lib/permissions';
 import { getAvailableSeasonNumbers } from '@server/lib/seasonRollover';
 import { getSettings } from '@server/lib/settings';
+import {
+  getRecordingTarget,
+  isActiveRecordingRequest,
+  isSameRecording,
+} from '@server/lib/talearrRecordings';
 import { getBlockingProviders } from '@server/lib/watchProviderBlock';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
@@ -82,6 +94,7 @@ export class BlocklistedMediaError extends Error {}
 export class WatchProviderBlockedError extends Error {}
 export class ContentRatingRestrictedError extends Error {}
 export class InvalidBookLanguageError extends Error {}
+export class InvalidRecordingRequestError extends Error {}
 
 type MediaRequestOptions = {
   isAutoRequest?: boolean;
@@ -159,6 +172,19 @@ export class MediaRequest {
 
     if (requestBody.mediaType === MediaType.MUSIC) {
       return MediaRequest.createMusicRequest(
+        requestBody,
+        user,
+        requestUser,
+        options
+      );
+    }
+
+    if (
+      requestBody.mediaType === MediaType.BOOK &&
+      requestBody.recording !== undefined &&
+      requestBody.recording !== null
+    ) {
+      return MediaRequest.createRecordingRequest(
         requestBody,
         user,
         requestUser,
@@ -945,10 +971,12 @@ export class MediaRequest {
       }
     }
 
-    // Each format is requested as a whole, like a movie
+    // Each format is requested as a whole, like a movie. Requests for
+    // another recording of the audiobook are apart.
     const existing = (media.requests ?? []).find(
       (request) =>
         request.isAudiobook === isAudiobook &&
+        !request.recording &&
         request.status !== MediaRequestStatus.DECLINED &&
         request.status !== MediaRequestStatus.COMPLETED
     );
@@ -986,6 +1014,152 @@ export class MediaRequest {
       is4k: false,
       isAudiobook,
       language,
+      isAutoRequest: options.isAutoRequest ?? false,
+      ignoreQuota,
+      skipNotification: options.skipNotification,
+    });
+
+    await requestRepository.save(request);
+    return request;
+  }
+
+  /**
+   * Another recording of an audiobook that is already available, such as
+   * the unabridged reading of a book the library has abridged. Only TaleArr
+   * keeps more than one recording of a book. The request needs approval
+   * the way a book request does, counts against the book quota and leaves
+   * the book's own audiobook status alone.
+   */
+  private static async createRecordingRequest(
+    requestBody: MediaRequestBody,
+    user: User,
+    requestUser: User,
+    options: MediaRequestOptions
+  ): Promise<MediaRequest> {
+    const mediaRepository = getRepository(Media);
+    const requestRepository = getRepository(MediaRequest);
+    const recording = requestBody.recording;
+
+    if (
+      !requestUser.hasPermission(
+        [Permission.REQUEST, Permission.REQUEST_BOOK],
+        { type: 'or' }
+      )
+    ) {
+      throw new RequestPermissionError(
+        'You do not have permission to make book requests.'
+      );
+    }
+
+    if (!isTalearrService(getSettings().bookService)) {
+      throw new InvalidRecordingRequestError(
+        'Other recordings can only be requested from TaleArr.'
+      );
+    }
+
+    if (!isBookRecordingKind(recording)) {
+      throw new InvalidRecordingRequestError('Unknown recording.');
+    }
+
+    if (requestBody.is4k || requestBody.isAudiobook === false) {
+      throw new InvalidRecordingRequestError(
+        'Recordings can only be requested for audiobooks.'
+      );
+    }
+
+    const narrator =
+      typeof requestBody.recordingNarrator === 'string'
+        ? requestBody.recordingNarrator
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, MAX_RECORDING_NARRATOR_LENGTH) || null
+        : null;
+    const editionId =
+      typeof requestBody.recordingEditionId === 'number' &&
+      Number.isInteger(requestBody.recordingEditionId) &&
+      requestBody.recordingEditionId > 0
+        ? requestBody.recordingEditionId
+        : null;
+
+    if (recording === 'narrator' && !narrator) {
+      throw new InvalidRecordingRequestError(
+        'A narrator recording needs a narrator.'
+      );
+    }
+
+    if (recording === 'edition' && !editionId) {
+      throw new InvalidRecordingRequestError(
+        'An edition recording needs an edition.'
+      );
+    }
+
+    const olId = String(requestBody.mediaId);
+    const media = await mediaRepository.findOne({
+      where: { olId, mediaType: MediaType.BOOK },
+      relations: ['requests'],
+    });
+
+    if (media?.status === MediaStatus.BLOCKLISTED) {
+      throw new BlocklistedMediaError('This media is blocklisted.');
+    }
+
+    const target = getRecordingTarget(media);
+
+    if (!media || !target) {
+      throw new InvalidRecordingRequestError(
+        'The audiobook has to be available in TaleArr before another recording can be requested.'
+      );
+    }
+
+    const ignoreQuota = await MediaRequest.checkQuota(
+      requestBody,
+      user,
+      requestUser,
+      MediaType.BOOK
+    );
+
+    const wanted = {
+      recording,
+      recordingNarrator: narrator,
+      recordingEditionId: editionId,
+    };
+    const existing = (media.requests ?? []).find(
+      (request) =>
+        isActiveRecordingRequest(request) && isSameRecording(request, wanted)
+    );
+
+    if (existing) {
+      logger.warn('Duplicate recording request blocked', {
+        olId,
+        recording,
+        label: 'Media Request',
+      });
+
+      throw new DuplicateMediaRequestError(
+        'This recording has been requested already.'
+      );
+    }
+
+    // Approved the way book requests are
+    const hasAutoApprovePermission = user.hasPermission(
+      [Permission.AUTO_APPROVE, Permission.MANAGE_REQUESTS],
+      { type: 'or' }
+    );
+
+    const request = new MediaRequest({
+      type: MediaType.BOOK,
+      media,
+      requestedBy: requestUser,
+      status: hasAutoApprovePermission
+        ? MediaRequestStatus.APPROVED
+        : MediaRequestStatus.PENDING,
+      modifiedBy: hasAutoApprovePermission ? user : undefined,
+      is4k: false,
+      isAudiobook: true,
+      serverId: target.server.id,
+      recording,
+      recordingNarrator: narrator,
+      recordingEditionId: recording === 'edition' ? editionId : null,
       isAutoRequest: options.isAutoRequest ?? false,
       ignoreQuota,
       skipNotification: options.skipNotification,
@@ -1156,6 +1330,26 @@ export class MediaRequest {
   @Column({ type: 'text', nullable: true })
   public declineReason?: string | null;
 
+  // Audiobooks on TaleArr only: the request is for another recording of an
+  // audiobook that is already available, such as the unabridged reading.
+  // Null for every other request. A recording request is sent to TaleArr's
+  // recordings route instead of the usual book request and is completed by
+  // the files of its own recording, not by the book's audiobook status.
+  @Column({ type: 'varchar', nullable: true })
+  public recording?: BookRecordingKind | null;
+
+  // The narrator asked for, or the narrator of the recording TaleArr picked
+  @Column({ type: 'varchar', nullable: true })
+  public recordingNarrator?: string | null;
+
+  // TaleArr's id of the edition picked for an edition request
+  @Column({ type: 'integer', nullable: true })
+  public recordingEditionId?: number | null;
+
+  // TaleArr's book id of the recording once TaleArr has added it
+  @Column({ type: 'integer', nullable: true })
+  public recordingBookId?: number | null;
+
   // Not stored. Set on a request made as part of a bulk request, which
   // sends one summary notification instead of one per request.
   public skipNotification?: boolean;
@@ -1221,8 +1415,11 @@ export class MediaRequest {
         return;
       }
 
+      // A recording request is made for an audiobook that is available
+      // already, its own recording is what it waits for
       if (
         this.status === MediaRequestStatus.APPROVED &&
+        !this.recording &&
         media[getRequestStatusKey(this)] === MediaStatus.AVAILABLE
       ) {
         logger.info(
@@ -1289,7 +1486,7 @@ export class MediaRequest {
           : entity.type === MediaType.MUSIC
             ? 'Album'
             : entity.type === MediaType.BOOK
-              ? getBookFormatName(entity.isAudiobook)
+              ? getBookFormatName(entity.isAudiobook, entity.recording)
               : 'Series';
       let event: string | undefined;
       let notifyAdmin = true;
@@ -1412,6 +1609,14 @@ export class MediaRequest {
           image: book.image,
           extra: [
             { name: 'Format', value: getBookFormatName(entity.isAudiobook) },
+            ...(entity.recording
+              ? [
+                  {
+                    name: 'Recording',
+                    value: describeBookRecording(entity) as string,
+                  },
+                ]
+              : []),
             ...(isBookLanguage(entity.language)
               ? [
                   {

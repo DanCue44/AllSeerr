@@ -12,6 +12,10 @@ import useDeepLinks from '@app/hooks/useDeepLinks';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
+import {
+  getRequestDownloads,
+  getRequestMediaStatus,
+} from '@app/utils/bookRecordings';
 import defineMessages from '@app/utils/defineMessages';
 import {
   getRequestDownloadStatus,
@@ -28,10 +32,7 @@ import {
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
-import {
-  getRequestDownloadKey,
-  getRequestStatusKey,
-} from '@server/lib/bookRequests';
+import {} from '@server/lib/bookRequests';
 import type { BookDetails } from '@server/models/Book';
 import type { MovieDetails } from '@server/models/Movie';
 import type { MusicDetails } from '@server/models/Music';
@@ -121,9 +122,7 @@ const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
   });
 
   const requestDownloadStatus = getRequestDownloadStatus(
-    requestData
-      ? requestData.media?.[getRequestDownloadKey(requestData)]
-      : undefined,
+    requestData ? getRequestDownloads(requestData) : undefined,
     requestData?.type === 'tv'
       ? (requestData?.seasons ?? []).map((season) => season.seasonNumber)
       : []
@@ -202,9 +201,7 @@ const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
                     </Badge>
                   ) : (
                     <StatusBadge
-                      status={
-                        requestData.media[getRequestStatusKey(requestData)]
-                      }
+                      status={getRequestMediaStatus(requestData)}
                       downloadItem={requestDownloadStatus}
                       title={intl.formatMessage(messages.unknowntitle)}
                       inProgress={requestDownloadStatus.length > 0}
@@ -383,7 +380,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
   }
 
   const requestDownloadStatus = getRequestDownloadStatus(
-    requestData.media[getRequestDownloadKey(requestData)],
+    getRequestDownloads(requestData),
     requestData.type === 'tv'
       ? requestData.seasons.map((season) => season.seasonNumber)
       : []
@@ -465,7 +462,9 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
               <Badge badgeType="primary">
                 {intl.formatMessage(
                   requestData.isAudiobook
-                    ? globalMessages.audiobook
+                    ? requestData.recording
+                      ? globalMessages.audiobookrecording
+                      : globalMessages.audiobook
                     : globalMessages.ebook
                 )}
               </Badge>
@@ -550,8 +549,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                 {intl.formatMessage(globalMessages.failed)}
               </Badge>
             ) : requestData.status === MediaRequestStatus.PENDING &&
-              requestData.media[getRequestStatusKey(requestData)] ===
-                MediaStatus.DELETED ? (
+              getRequestMediaStatus(requestData) === MediaStatus.DELETED ? (
               <Badge
                 badgeType="warning"
                 href={`${getMediaPath(requestData)}?manage=1`}
@@ -560,7 +558,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
               </Badge>
             ) : (
               <StatusBadge
-                status={requestData.media[getRequestStatusKey(requestData)]}
+                status={getRequestMediaStatus(requestData)}
                 downloadItem={requestDownloadStatus}
                 title={getTitleName(title)}
                 inProgress={requestDownloadStatus.length > 0}

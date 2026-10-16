@@ -23,6 +23,7 @@ import {
   softChip,
 } from '@app/components/AllSeerr/Title/styles';
 import BlocklistButton from '@app/components/BlocklistButton';
+import BookRecordings from '@app/components/BookRecordings';
 import BookFormatIndicators from '@app/components/Common/BookFormatIndicators';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
@@ -170,6 +171,8 @@ const BookDetails = ({ book }: BookDetailsProps) => {
     .filter(
       (request) =>
         request.status === MediaRequestStatus.PENDING &&
+        // Requests for other recordings are shown with the recordings
+        !request.recording &&
         (request.requestedBy.id === user?.id ||
           hasPermission(Permission.MANAGE_REQUESTS))
     )
@@ -584,6 +587,13 @@ const BookDetails = ({ book }: BookDetailsProps) => {
       <div className="px-4 lg:px-10">
         <section className="grid items-start gap-6 pt-7 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex min-w-0 flex-col gap-6">
+            <BookRecordings
+              olId={data.olId}
+              title={data.title}
+              statusAudio={data.mediaInfo?.statusAudio}
+              ambient
+              onRequested={() => revalidate()}
+            />
             {subjectGroups.length > 0 && (
               <Card title={intl.formatMessage(messages.subjects)}>
                 {subjectGroups.map((group) => (

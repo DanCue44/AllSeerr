@@ -16,6 +16,7 @@ import {
   ContentRatingRestrictedError,
   DuplicateMediaRequestError,
   InvalidBookLanguageError,
+  InvalidRecordingRequestError,
   MediaRequest,
   NoSeasonsAvailableError,
   QuotaRestrictedError,
@@ -417,6 +418,7 @@ requestRoutes.post<never, MediaRequest, MediaRequestBody>(
         case DuplicateMediaRequestError:
           return next({ status: 409, message: error.message });
         case InvalidBookLanguageError:
+        case InvalidRecordingRequestError:
           return next({ status: 400, message: error.message });
         case NoSeasonsAvailableError:
           return next({ status: 202, message: error.message });

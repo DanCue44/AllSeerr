@@ -41,6 +41,7 @@ tags:
       - `GET /nobookends/item/{absItemId}` for the book of an Audiobookshelf library item
       - `GET /book/{bookId}` for a book, its status per format (`mediaInfo.status` for the ebook, `mediaInfo.statusAudio` for the audiobook) and its Audiobookshelf item per format
       - `POST /request` with `mediaType: book` and `isAudiobook` to request a format
+      - With TaleArr (`books.recordings` in the status), `recordings`, `canRequestUnabridged` and `recordingRequests` on the item, and `POST /request` with `recording: unabridged` to ask for the unabridged recording of an abridged audiobook
       - `GET /request?mediaType=book&requestedBy={userId}` for the user's requests, with download progress in `media.downloadStatus` (ebook) and `media.downloadStatusAudio` (audiobook)
       - `POST /issue` with `bookFormat` to report a problem with a format
       - `GET /discover/books` and `GET /discover/books/upcoming` for discovery
@@ -1520,6 +1521,153 @@ components:
             oneOf:
               - $ref: '#/components/schemas/MovieResult'
               - $ref: '#/components/schemas/TvResult'
+    BookRecording:
+      type: object
+      description: A recording TaleArr keeps of an audiobook
+      properties:
+        bookId:
+          type: number
+          description: TaleArr's book id of the recording
+        role:
+          type: string
+          enum: [primary, additional]
+        narrators:
+          type: array
+          items:
+            type: string
+          example: [Scott Brick]
+        abridged:
+          type: string
+          enum: [abridged, unabridged, unknown]
+        runtimeMinutes:
+          type: number
+          nullable: true
+        publisher:
+          type: string
+          nullable: true
+        releaseDate:
+          type: string
+          nullable: true
+        asin:
+          type: string
+          nullable: true
+        hasFiles:
+          type: boolean
+        monitored:
+          type: boolean
+        status:
+          type: number
+          description: 5 = `AVAILABLE` with files, 3 = `PROCESSING` while TaleArr looks for them, 1 = `UNKNOWN`
+    BookRecordingCandidate:
+      type: object
+      description: An audiobook edition that is not a recording yet
+      properties:
+        editionId:
+          type: number
+          description: TaleArr's id of the edition, for `recordingEditionId`
+        narrators:
+          type: array
+          items:
+            type: string
+        abridged:
+          type: string
+          enum: [abridged, unabridged, unknown]
+        runtimeMinutes:
+          type: number
+          nullable: true
+        publisher:
+          type: string
+          nullable: true
+        releaseDate:
+          type: string
+          nullable: true
+        asin:
+          type: string
+          nullable: true
+    RecordingRequestSummary:
+      type: object
+      properties:
+        id:
+          type: number
+        status:
+          type: number
+          description: 1 = `PENDING`, 2 = `APPROVED`, 3 = `DECLINED`, 4 = `FAILED`, 5 = `COMPLETED`
+        recording:
+          type: string
+          enum: [unabridged, abridged, narrator, edition]
+        narrator:
+          type: string
+          nullable: true
+        editionId:
+          type: number
+          nullable: true
+        requestedBy:
+          type: object
+          properties:
+            id:
+              type: number
+            displayName:
+              type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        declineReason:
+          type: string
+          nullable: true
+    RecordingOption:
+      type: object
+      properties:
+        available:
+          type: boolean
+        reason:
+          type: string
+          enum: [have, none, requested]
+          description: Why the option is closed, the recording is there already, TaleArr knows no such edition or it was requested already
+    BookRecordings:
+      type: object
+      properties:
+        supported:
+          type: boolean
+          description: Whether TaleArr is the book service, the audiobook is available there and TaleArr answers the recordings route
+        reason:
+          type: string
+          enum: [service, unavailable, unreachable, unsupported]
+          description: Why recordings are not supported
+        recordings:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookRecording'
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookRecordingCandidate'
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordingRequestSummary'
+        canRequest:
+          type: boolean
+          description: Whether the user may request at least one recording now
+        options:
+          type: object
+          properties:
+            unabridged:
+              $ref: '#/components/schemas/RecordingOption'
+            abridged:
+              $ref: '#/components/schemas/RecordingOption'
+            narrator:
+              allOf:
+                - $ref: '#/components/schemas/RecordingOption'
+                - type: object
+                  properties:
+                    narrators:
+                      type: array
+                      description: Narrators of candidate editions that are neither a recording nor requested yet
+                      items:
+                        type: string
+            edition:
+              $ref: '#/components/schemas/RecordingOption'
     BulkRequestItem:
       type: object
       properties:
@@ -2569,6 +2717,24 @@ components:
           type: string
           nullable: true
           example: 'Already streaming on Netflix'
+        recording:
+          type: string
+          nullable: true
+          enum: [unabridged, abridged, narrator, edition, null]
+          description: Audiobooks on TaleArr only. Set when the request is for another recording of an audiobook that is already available, such as the unabridged reading. The request is sent to TaleArr's recordings route and is completed once that recording has files, not by the book's audiobook status.
+        recordingNarrator:
+          type: string
+          nullable: true
+          description: Recording requests only. The narrator asked for, or the narrator of the recording TaleArr picked.
+          example: Scott Brick
+        recordingEditionId:
+          type: number
+          nullable: true
+          description: Recording requests of kind `edition` only. TaleArr's id of the edition.
+        recordingBookId:
+          type: number
+          nullable: true
+          description: Recording requests only. TaleArr's book id of the recording once TaleArr has added it.
         monitorMode:
           type: string
           nullable: true
@@ -10279,6 +10445,19 @@ paths:
                     ]
                   example: en
                   description: Books only. ISO 639-1 code of the language to request the book in, or `any`. Only honored for users with the `MANAGE_REQUESTS` permission. Everyone else requests in their own language and a different value is ignored.
+                recording:
+                  type: string
+                  enum: [unabridged, abridged, narrator, edition]
+                  description: Audiobooks on TaleArr only. Requests another recording of an audiobook that is already available in TaleArr instead of the audiobook itself, such as the unabridged reading of a book the library has abridged. `GET /book/{bookId}/recordings` lists what can be asked for. The request needs approval like a book request unless the user may auto-approve, counts against the book quota, and is refused with 400 when TaleArr is not the book service or the audiobook is not available there, and with 409 when the same recording was requested already.
+                recordingNarrator:
+                  type: string
+                  maxLength: 200
+                  description: Required for `recording` `narrator`. The narrator to ask TaleArr for.
+                  example: Scott Brick
+                recordingEditionId:
+                  type: number
+                  minimum: 1
+                  description: Required for `recording` `edition`. TaleArr's id of the edition, from the candidates of `GET /book/{bookId}/recordings`.
                 serverId:
                   type: number
                 profileId:
@@ -10731,6 +10910,14 @@ paths:
                       enabled:
                         type: boolean
                         description: Whether Chaptarr or LazyLibrarian is set up
+                      service:
+                        type: string
+                        nullable: true
+                        enum: [chaptarr, talearr, lazylibrarian, null]
+                        description: Where book requests go, null while books are off
+                      recordings:
+                        type: boolean
+                        description: Whether other recordings of an audiobook can be requested (`recording` on `POST /request`), which only TaleArr offers
                       canRequest:
                         type: boolean
                         description: Whether the user may request books
@@ -10994,6 +11181,22 @@ paths:
                     type: number
                     description: Availability of the audiobook, with the same values as `status`
                     example: 1
+                  recordings:
+                    type: array
+                    description: TaleArr only, once the audiobook is available there and TaleArr answered. The recordings TaleArr keeps of the audiobook, the primary one first.
+                    items:
+                      $ref: '#/components/schemas/BookRecording'
+                  canRequestRecording:
+                    type: boolean
+                    description: TaleArr only. Whether the user may request another recording now (`recording` on `POST /request`).
+                  canRequestUnabridged:
+                    type: boolean
+                    description: TaleArr only. Whether the user may request the unabridged recording now. False when the library has it, TaleArr knows no unabridged edition or it was requested already.
+                  recordingRequests:
+                    type: array
+                    description: The recording requests made for the book, newest first
+                    items:
+                      $ref: '#/components/schemas/RecordingRequestSummary'
         '400':
           description: Invalid item ID
         '403':
@@ -11021,6 +11224,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BookDetails'
+  /book/{bookId}/recordings:
+    get:
+      summary: Get the recordings of a book's audiobook
+      description: |
+        Returns the recordings TaleArr keeps of the book's audiobook (the abridged and unabridged readings, other narrators), the audiobook editions that could become one, the recording requests made for the book and what the user may still ask for. TaleArr is asked each time. With another book service, or before the audiobook is available in TaleArr, `supported` is false and `reason` says why.
+      tags:
+        - books
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          description: OpenLibrary work ID
+          schema:
+            type: string
+            example: OL45804W
+      responses:
+        '200':
+          description: The recordings of the book
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookRecordings'
+        '403':
+          description: Not signed in
+        '404':
+          description: Invalid work ID
   /book/{bookId}/audiobook:
     get:
       summary: Get audiobook availability of a book

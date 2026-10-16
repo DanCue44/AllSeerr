@@ -13,7 +13,7 @@ import Media from '@server/entity/Media';
 import MediaRequest from '@server/entity/MediaRequest';
 import logger from '@server/logger';
 import { requestErrorLogFields } from '@server/utils/requestError';
-import { In } from 'typeorm';
+import { In, IsNull } from 'typeorm';
 
 const STATUS_KEYS = {
   ebook: 'status',
@@ -145,6 +145,7 @@ export const resetChaptarrFormat = async (
       media: { id: media.id },
       status: MediaRequestStatus.APPROVED,
       isAudiobook: format === 'audiobook',
+      recording: IsNull(),
     },
   });
   const bookId = media[BOOK_ID_KEYS[format]];

@@ -10,6 +10,7 @@ import Media from '@server/entity/Media';
 import MetadataBookAudio from '@server/entity/MetadataBookAudio';
 import { getAudiobookshelfLinks } from '@server/lib/audiobookshelfItem';
 import { getSettings } from '@server/lib/settings';
+import { getBookRecordings } from '@server/lib/talearrRecordings';
 import { isOnUserWatchlist } from '@server/lib/watchlistStatus';
 import logger from '@server/logger';
 import type { AudiobookEdition } from '@server/models/Book';
@@ -195,6 +196,37 @@ bookRoutes.get<{ id: string }>('/:id/ebook', async (req, res, next) => {
       olId: req.params.id,
     });
     return next({ status: 404, message: 'Book not found.' });
+  }
+});
+
+/**
+ * The recordings TaleArr keeps of the book's audiobook, the editions that
+ * could become one and the recording requests made for it. Answers with
+ * supported false, and why, when the book service is not TaleArr or the
+ * audiobook is not available there.
+ */
+bookRoutes.get<{ id: string }>('/:id/recordings', async (req, res, next) => {
+  if (!req.user) {
+    return next({ status: 403, message: 'Not signed in.' });
+  }
+
+  if (!WORK_ID_REGEX.test(req.params.id)) {
+    return next({ status: 404, message: 'Book not found.' });
+  }
+
+  try {
+    const media = await getRepository(Media).findOne({
+      where: { olId: req.params.id, mediaType: MediaType.BOOK },
+    });
+
+    return res.status(200).json(await getBookRecordings(media, req.user));
+  } catch (e) {
+    logger.debug('Something went wrong retrieving book recordings', {
+      label: 'API',
+      errorMessage: e.message,
+      olId: req.params.id,
+    });
+    return next({ status: 500, message: 'Unable to retrieve recordings.' });
   }
 });
 

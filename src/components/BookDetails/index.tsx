@@ -1,4 +1,5 @@
 import BlocklistButton from '@app/components/BlocklistButton';
+import BookRecordings from '@app/components/BookRecordings';
 import BookFormatIndicators from '@app/components/Common/BookFormatIndicators';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
@@ -183,6 +184,8 @@ const BookDetails = ({ book }: BookDetailsProps) => {
     .filter(
       (request) =>
         request.status === MediaRequestStatus.PENDING &&
+        // Requests for other recordings are shown with the recordings
+        !request.recording &&
         (request.requestedBy.id === user?.id ||
           hasPermission(Permission.MANAGE_REQUESTS))
     )
@@ -481,6 +484,12 @@ const BookDetails = ({ book }: BookDetailsProps) => {
               ))}
             </div>
           ))}
+          <BookRecordings
+            olId={data.olId}
+            title={data.title}
+            statusAudio={data.mediaInfo?.statusAudio}
+            onRequested={() => revalidate()}
+          />
         </div>
         <div className="media-overview-right">
           <div className="media-facts">

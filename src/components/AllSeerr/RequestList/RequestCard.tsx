@@ -13,6 +13,10 @@ import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
+import {
+  getRequestDownloads,
+  getRequestMediaStatus,
+} from '@app/utils/bookRecordings';
 import defineMessages from '@app/utils/defineMessages';
 import {
   getRequestDownloadStatus,
@@ -36,10 +40,7 @@ import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { RequestResultsResponse } from '@server/interfaces/api/requestInterfaces';
 import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
-import {
-  getRequestDownloadKey,
-  getRequestStatusKey,
-} from '@server/lib/bookRequests';
+import {} from '@server/lib/bookRequests';
 import type { DownloadingItem } from '@server/lib/downloadtracker';
 import type { BookDetails } from '@server/models/Book';
 import type { MovieDetails } from '@server/models/Movie';
@@ -61,6 +62,7 @@ const messages = defineMessages('components.AllSeerr.RequestList', {
   typeAlbum: 'Album',
   typeBook: 'Book',
   typeAudiobook: 'Audiobook',
+  typeAudiobookRecording: 'Audiobook Recording',
   typeDate: '{type} · {date}',
   waitingApproval: 'Waiting for approval',
   downloadingProgress: 'Downloading {progress}%',
@@ -354,7 +356,7 @@ const RequestStatus = ({
   titleName: string;
 }) => {
   const intl = useIntl();
-  const mediaStatus = requestData.media[getRequestStatusKey(requestData)];
+  const mediaStatus = getRequestMediaStatus(requestData);
   const managePath = `${getMediaPath(requestData)}?manage=1`;
 
   if (requestData.status === MediaRequestStatus.DECLINED) {
@@ -502,7 +504,9 @@ const typeMessage = (request: NonFunctionProperties<MediaRequest>) =>
       : request.type === 'music'
         ? messages.typeAlbum
         : request.isAudiobook
-          ? messages.typeAudiobook
+          ? request.recording
+            ? messages.typeAudiobookRecording
+            : messages.typeAudiobook
           : messages.typeBook;
 
 /** First line of the card: "{Type} · {short date}". */
@@ -553,9 +557,7 @@ const RequestCardError = ({
   };
 
   const downloads = getRequestDownloadStatus(
-    requestData
-      ? requestData.media?.[getRequestDownloadKey(requestData)]
-      : undefined,
+    requestData ? getRequestDownloads(requestData) : undefined,
     requestData?.type === 'tv'
       ? (requestData?.seasons ?? []).map((season) => season.seasonNumber)
       : []
@@ -780,12 +782,12 @@ const RequestCard = ({
   const titleName = getTitleName(title);
   const mediaPath = getMediaPath(requestData);
   const downloads = getRequestDownloadStatus(
-    requestData.media[getRequestDownloadKey(requestData)],
+    getRequestDownloads(requestData),
     requestData.type === 'tv'
       ? requestData.seasons.map((season) => season.seasonNumber)
       : []
   );
-  const mediaStatus = requestData.media[getRequestStatusKey(requestData)];
+  const mediaStatus = getRequestMediaStatus(requestData);
   const isPending = requestData.status === MediaRequestStatus.PENDING;
   const isOwn = requestData.requestedBy.id === user?.id;
 
@@ -889,7 +891,9 @@ const RequestCard = ({
       ? [
           intl.formatMessage(
             requestData.isAudiobook
-              ? globalMessages.audiobook
+              ? requestData.recording
+                ? globalMessages.audiobookrecording
+                : globalMessages.audiobook
               : globalMessages.ebook
           ),
           title.authors.map((author) => author.name).join(', '),

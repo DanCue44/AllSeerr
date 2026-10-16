@@ -1,3 +1,7 @@
+import type {
+  BookRecordingAbridged,
+  BookRecordingKind,
+} from '@server/constants/bookRecording';
 import logger from '@server/logger';
 import type {
   RootFolder,
@@ -216,6 +220,76 @@ export interface TalearrIdentity {
   metadataProblem?: string;
 }
 
+/**
+ * One edition of an audiobook as TaleArr's recordings route describes it
+ */
+export interface TalearrRecordingEdition {
+  editionId: number;
+  foreignEditionId?: string | null;
+  title?: string | null;
+  narrators: string[];
+  abridged: BookRecordingAbridged;
+  abridgedSource?: string | null;
+  runtimeMinutes?: number | null;
+  publisher?: string | null;
+  releaseDate?: string | null;
+  language?: string | null;
+  asin?: string | null;
+  audibleUrl?: string | null;
+}
+
+/**
+ * A recording TaleArr keeps of an audiobook: the primary one is the book
+ * itself, every additional one is its own Chaptarr book entry
+ */
+export interface TalearrRecording extends TalearrRecordingEdition {
+  bookId: number;
+  role: 'primary' | 'additional';
+  monitored: boolean;
+  hasFiles: boolean;
+}
+
+/**
+ * An audiobook edition that is not a recording yet
+ */
+export interface TalearrRecordingCandidate extends TalearrRecordingEdition {
+  editionIds?: number[];
+}
+
+export interface TalearrRecordings {
+  baseBookId?: string | null;
+  marketplace?: string | null;
+  recordings: TalearrRecording[];
+  candidates: TalearrRecordingCandidate[];
+}
+
+export interface TalearrAddRecordingBody {
+  bookId: number;
+  kind: BookRecordingKind;
+  narrator?: string;
+  editionId?: number;
+  search?: boolean;
+  requestedBy: string;
+  externalRef?: string;
+}
+
+/**
+ * TaleArr's answer to a new recording: created or pinned (201) and existing
+ * (200) carry the recording, no match (404) and ambiguous (409) the
+ * candidates, invalid (400) only a message
+ */
+export type TalearrAddRecordingResult =
+  | {
+      status: 'created' | 'pinned' | 'existing';
+      searchQueued: boolean;
+      recording?: TalearrRecording;
+    }
+  | {
+      status: 'nomatch' | 'ambiguous' | 'invalid';
+      message?: string;
+      candidates: TalearrRecordingCandidate[];
+    };
+
 export interface ChaptarrAddBookOptions {
   mediaType: ChaptarrMediaType;
   qualityProfileId: number;
@@ -250,6 +324,8 @@ const REMOVE_AUTHOR_TIMEOUT_MS = 300_000;
 const LOOKUP_TIMEOUT_MS = 30_000;
 // Telling TaleArr apart is a few small reads, a missing one is not an error
 const IDENTITY_TIMEOUT_MS = 10_000;
+// TaleArr's recordings route reads its own cache of Audible facts
+const RECORDINGS_TIMEOUT_MS = 15_000;
 // The health check TaleArr reports metadata server problems with
 const TALEARR_METADATA_CHECK = 'TalearrMetadataServerProbeCheck';
 
@@ -296,6 +372,134 @@ export const parseTalearrGrabPolicy = (
     allowBundles: raw.allowBundles,
     failRejectedImports: raw.failRejectedImports !== false,
     maxAutomaticRetries: raw.maxAutomaticRetries,
+  };
+};
+
+const ABRIDGED_VALUES: BookRecordingAbridged[] = [
+  'abridged',
+  'unabridged',
+  'unknown',
+];
+
+const asText = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim() ? value.trim() : null;
+
+const asNumber = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+const parseRecordingEdition = (
+  raw: Record<string, unknown>
+): TalearrRecordingEdition => ({
+  editionId: asNumber(raw.editionId) ?? 0,
+  foreignEditionId: asText(raw.foreignEditionId),
+  title: asText(raw.title),
+  narrators: Array.isArray(raw.narrators)
+    ? raw.narrators.filter(
+        (narrator): narrator is string =>
+          typeof narrator === 'string' && !!narrator.trim()
+      )
+    : [],
+  abridged:
+    ABRIDGED_VALUES.find(
+      (value) => value === String(raw.abridged ?? '').toLowerCase()
+    ) ?? 'unknown',
+  abridgedSource: asText(raw.abridgedSource),
+  runtimeMinutes: asNumber(raw.runtimeMinutes),
+  publisher: asText(raw.publisher),
+  releaseDate: asText(raw.releaseDate),
+  language: asText(raw.language),
+  asin: asText(raw.asin),
+  audibleUrl: asText(raw.audibleUrl),
+});
+
+const asRecords = (value: unknown): Record<string, unknown>[] =>
+  Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> =>
+          !!item && typeof item === 'object'
+      )
+    : [];
+
+export const parseTalearrRecording = (
+  raw: Record<string, unknown>
+): TalearrRecording => ({
+  ...parseRecordingEdition(raw),
+  bookId: asNumber(raw.bookId) ?? 0,
+  role: raw.role === 'primary' ? 'primary' : 'additional',
+  monitored: raw.monitored === true,
+  hasFiles: raw.hasFiles === true,
+});
+
+const parseTalearrCandidate = (
+  raw: Record<string, unknown>
+): TalearrRecordingCandidate => ({
+  ...parseRecordingEdition(raw),
+  editionIds: Array.isArray(raw.editionIds)
+    ? raw.editionIds.filter((id): id is number => typeof id === 'number')
+    : undefined,
+});
+
+/**
+ * Reads TaleArr's recordings of a book, or undefined when the answer is not
+ * one, such as the page stock Chaptarr sends for a route it does not have
+ */
+export const parseTalearrRecordings = (
+  data: unknown
+): TalearrRecordings | undefined => {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return undefined;
+  }
+
+  const raw = data as Record<string, unknown>;
+
+  if (!Array.isArray(raw.recordings)) {
+    return undefined;
+  }
+
+  return {
+    baseBookId: asText(raw.baseBookId),
+    marketplace: asText(raw.marketplace),
+    recordings: asRecords(raw.recordings).map(parseTalearrRecording),
+    candidates: asRecords(raw.candidates).map(parseTalearrCandidate),
+  };
+};
+
+/**
+ * Reads TaleArr's answer to a new recording by its status code
+ */
+export const parseTalearrAddRecording = (
+  status: number,
+  data: unknown
+): TalearrAddRecordingResult => {
+  const raw =
+    data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : {};
+
+  if (status === 200 || status === 201) {
+    const action = String(raw.action ?? '').toLowerCase();
+    const recording =
+      raw.recording && typeof raw.recording === 'object'
+        ? parseTalearrRecording(raw.recording as Record<string, unknown>)
+        : undefined;
+
+    return {
+      status:
+        action === 'pinned'
+          ? 'pinned'
+          : status === 201
+            ? 'created'
+            : 'existing',
+      searchQueued: raw.searchQueued === true,
+      recording,
+    };
+  }
+
+  return {
+    status:
+      status === 404 ? 'nomatch' : status === 409 ? 'ambiguous' : 'invalid',
+    message: asText(raw.message) ?? undefined,
+    candidates: asRecords(raw.candidates).map(parseTalearrCandidate),
   };
 };
 
@@ -511,6 +715,58 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
           ? metadataCheck.message
           : undefined,
     };
+  }
+
+  /**
+   * TaleArr's recordings of the work a book belongs to, and the audiobook
+   * editions that could become one. Undefined when the server has no such
+   * route, as stock Chaptarr and TaleArr before recordings do not.
+   */
+  public async getTalearrRecordings(
+    bookId: number,
+    { timeoutMs = RECORDINGS_TIMEOUT_MS }: { timeoutMs?: number } = {}
+  ): Promise<TalearrRecordings | undefined> {
+    const response = await this.axios.get<unknown>('/talearr/recordings', {
+      params: { bookId },
+      timeout: timeoutMs,
+      validateStatus: (status) => status < 500,
+    });
+
+    return response.status === 200
+      ? parseTalearrRecordings(response.data)
+      : undefined;
+  }
+
+  /**
+   * Asks TaleArr for another recording of a book. Refusals are answered,
+   * not thrown, so the caller can tell a missing edition from a server that
+   * could not be reached.
+   */
+  public async addTalearrRecording(
+    body: TalearrAddRecordingBody
+  ): Promise<TalearrAddRecordingResult> {
+    const response = await this.axios.post<unknown>(
+      '/talearr/recordings',
+      body,
+      {
+        timeout: UPDATE_TIMEOUT_MS,
+        validateStatus: (status) => status < 500 && status !== 401,
+      }
+    );
+
+    if (
+      response.status !== 200 &&
+      response.status !== 201 &&
+      response.status !== 400 &&
+      response.status !== 404 &&
+      response.status !== 409
+    ) {
+      throw new Error(
+        `TaleArr answered the recording request with status ${response.status}`
+      );
+    }
+
+    return parseTalearrAddRecording(response.status, response.data);
   }
 
   public async getChaptarrRootFolders(): Promise<ChaptarrRootFolder[]> {

@@ -237,7 +237,9 @@ const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
                   <Badge badgeType="primary">
                     {intl.formatMessage(
                       request.isAudiobook
-                        ? globalMessages.audiobook
+                        ? request.recording
+                          ? globalMessages.audiobookrecording
+                          : globalMessages.audiobook
                         : globalMessages.ebook
                     )}
                   </Badge>

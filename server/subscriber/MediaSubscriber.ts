@@ -22,7 +22,7 @@ import type {
   InsertEvent,
   UpdateEvent,
 } from 'typeorm';
-import { EventSubscriber, In } from 'typeorm';
+import { EventSubscriber, In, IsNull } from 'typeorm';
 
 @EventSubscriber()
 export class MediaSubscriber implements EntitySubscriberInterface<Media> {
@@ -42,6 +42,8 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
       if (
         request.is4k === is4k &&
         request.isAudiobook === isAudiobook &&
+        // Another recording waits for its own files, not the book's
+        !request.recording &&
         request.status === MediaRequestStatus.PENDING
       ) {
         request.status = MediaRequestStatus.APPROVED;
@@ -69,6 +71,8 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
         status: In([MediaRequestStatus.APPROVED, MediaRequestStatus.FAILED]),
         is4k,
         isAudiobook,
+        // Recording requests are completed by their own recording's files
+        recording: IsNull(),
       },
     });
 
