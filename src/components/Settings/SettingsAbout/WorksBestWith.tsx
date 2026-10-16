@@ -53,16 +53,20 @@ const WorksBestWith = () => {
       host: 'talearr.com',
       description: intl.formatMessage(messages.talearrdescription),
       logo: (
-        <span className="flex h-12 w-12 items-center justify-center rounded-[22%] bg-[#1b1b1f] ring-1 ring-white/10">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/companions/talearr.svg"
-            alt=""
-            width={34}
-            height={34}
-            className="h-[34px] w-[34px]"
+        <picture>
+          <source
+            type="image/webp"
+            srcSet="/companions/talearr.webp 1x, /companions/talearr@2x.webp 2x"
           />
-        </span>
+          <img
+            src="/companions/talearr.png"
+            srcSet="/companions/talearr.png 1x, /companions/talearr@2x.png 2x"
+            alt=""
+            width={48}
+            height={48}
+            className="h-12 w-12"
+          />
+        </picture>
       ),
     },
   ];
