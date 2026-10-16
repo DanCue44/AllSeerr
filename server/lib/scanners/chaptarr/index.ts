@@ -25,7 +25,10 @@ import { syncChaptarrAvailability } from '@server/lib/scanners/chaptarr/availabi
 import { applyLazyLibrarianState } from '@server/lib/scanners/lazylibrarian';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
-import { syncRecordingRequests } from '@server/lib/talearrRecordings';
+import {
+  checkAbridgedRecordingsAwaitingScan,
+  syncRecordingRequests,
+} from '@server/lib/talearrRecordings';
 import { requestErrorLogFields } from '@server/utils/requestError';
 import { uniqWith } from 'lodash';
 
@@ -210,7 +213,8 @@ class ChaptarrScanner
 
   /**
    * Completes the requests for other recordings of audiobooks whose
-   * recordings TaleArr has files for now
+   * recordings TaleArr has files for now, and asks for the abridged
+   * recordings that waited for TaleArr to resolve their books
    */
   private async syncRecordings(serverIds: number[]): Promise<void> {
     try {
@@ -224,6 +228,9 @@ class ChaptarrScanner
         ...requestErrorLogFields(e),
       });
     }
+
+    // The abridged recordings that waited for TaleArr to resolve a book
+    await checkAbridgedRecordingsAwaitingScan(serverIds);
   }
 
   /**

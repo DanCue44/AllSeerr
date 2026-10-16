@@ -748,6 +748,29 @@ describe('TaleArr recordings', () => {
     assert.strictEqual(view.candidates[0].runtimeMinutes, null);
   });
 
+  it('reads whether TaleArr is still resolving the facts of a book', () => {
+    assert.strictEqual(
+      parseTalearrRecordings({
+        recordings: [],
+        candidates: [],
+        factsPending: true,
+      })?.factsPending,
+      true
+    );
+
+    // Older servers leave it out, and anything but true is not pending
+    for (const factsPending of [undefined, false, 'true']) {
+      const view = parseTalearrRecordings({
+        recordings: [],
+        candidates: [],
+        ...(factsPending === undefined ? {} : { factsPending }),
+      });
+
+      assert.ok(view);
+      assert.ok(!('factsPending' in view));
+    }
+  });
+
   it('does not read a page that is not a recordings answer', () => {
     assert.strictEqual(parseTalearrRecordings('<html></html>'), undefined);
     assert.strictEqual(parseTalearrRecordings({ message: 'x' }), undefined);

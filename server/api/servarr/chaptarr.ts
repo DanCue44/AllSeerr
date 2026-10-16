@@ -275,6 +275,10 @@ export interface TalearrRecordings {
   marketplace?: string | null;
   recordings: TalearrRecording[];
   candidates: TalearrRecordingCandidate[];
+  // TaleArr 0.15.0 and later: the book's editions or Audible facts are not
+  // resolved yet, so the candidates may still change. Older servers leave
+  // it out.
+  factsPending?: boolean;
 }
 
 export interface TalearrAddRecordingBody {
@@ -516,6 +520,7 @@ export const parseTalearrRecordings = (
     marketplace: asText(raw.marketplace),
     recordings: asRecords(raw.recordings).map(parseTalearrRecording),
     candidates: asRecords(raw.candidates).map(parseTalearrCandidate),
+    ...(raw.factsPending === true ? { factsPending: true } : {}),
   };
 };
 

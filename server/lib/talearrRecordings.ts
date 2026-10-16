@@ -708,18 +708,30 @@ export const syncRecordingRequests = async (
   return completed;
 };
 
+// How long to wait before each new look at a book whose editions TaleArr
+// is still resolving
+const DEFAULT_FACTS_PENDING_DELAYS_MS = [5_000, 15_000, 45_000];
+let factsPendingDelaysMs = DEFAULT_FACTS_PENDING_DELAYS_MS;
+
+// Audiobook requests whose abridged recording still waits for TaleArr's
+// facts after the retries, by request id. Each gets one more look on the
+// next scan of its server, then is dropped.
+const awaitingScan = new Map<number, RecordingTarget>();
+
+const FACTS_PENDING = 'factsPending';
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 /**
- * Asks TaleArr for the abridged recording of an audiobook it was just sent,
- * as a recording request of its own linked to the audiobook request: same
- * requester, approved with it and not counted against the quota again. It
- * then reads, completes and notifies like any abridged recording request.
- * Nothing is asked for when TaleArr knows no abridged edition, keeps one
- * already, or one was requested already.
+ * One look at the editions TaleArr knows of a book, asking for the abridged
+ * recording when one fits. Answers FACTS_PENDING, asking for nothing, when
+ * TaleArr has not resolved the book's editions yet.
  */
-export const requestAbridgedRecording = async (
+const attemptAbridgedRecording = async (
   parent: MediaRequest,
   target: RecordingTarget
-): Promise<MediaRequest | undefined> => {
+): Promise<MediaRequest | undefined | typeof FACTS_PENDING> => {
   const requestRepository = getRepository(MediaRequest);
   const media = await getRepository(Media).findOne({
     where: { id: parent.media.id },
@@ -729,9 +741,6 @@ export const requestAbridgedRecording = async (
     return undefined;
   }
 
-  const requests = await requestRepository.find({
-    where: { media: { id: media.id }, recording: Not(IsNull()) },
-  });
   let view: TalearrRecordings | undefined;
 
   try {
@@ -748,6 +757,14 @@ export const requestAbridgedRecording = async (
     return undefined;
   }
 
+  if (view?.factsPending) {
+    return FACTS_PENDING;
+  }
+
+  // Read after TaleArr answers, so a request made meanwhile counts
+  const requests = await requestRepository.find({
+    where: { media: { id: media.id }, recording: Not(IsNull()) },
+  });
   const option = view
     ? getRecordingOptions(view, requests).abridged
     : { available: false, reason: 'none' as const };
@@ -793,3 +810,141 @@ export const requestAbridgedRecording = async (
 
   return linked;
 };
+
+/**
+ * The audiobook request a later look is for, while it still stands
+ */
+const findStandingParent = async (
+  parentId: number
+): Promise<MediaRequest | undefined> => {
+  const parent = await getRepository(MediaRequest).findOne({
+    where: { id: parentId },
+  });
+
+  return parent &&
+    parent.status !== MediaRequestStatus.DECLINED &&
+    parent.status !== MediaRequestStatus.FAILED
+    ? parent
+    : undefined;
+};
+
+/**
+ * Looks at the book again a few times, with growing waits, while TaleArr
+ * resolves its editions. Still pending after that, the book gets one more
+ * look on the next scan of its server.
+ */
+const retryAbridgedRecording = async (
+  parentId: number,
+  target: RecordingTarget
+): Promise<void> => {
+  for (const delay of factsPendingDelaysMs) {
+    await sleep(delay);
+
+    try {
+      const parent = await findStandingParent(parentId);
+
+      if (
+        !parent ||
+        (await attemptAbridgedRecording(parent, target)) !== FACTS_PENDING
+      ) {
+        return;
+      }
+    } catch (e) {
+      logger.warn('Could not ask TaleArr for the abridged recording', {
+        label: LABEL,
+        requestId: parentId,
+        errorMessage: e instanceof Error ? e.message : String(e),
+      });
+      return;
+    }
+  }
+
+  awaitingScan.set(parentId, target);
+  logger.info(
+    'TaleArr is still resolving the editions of the book, looking again on the next scan',
+    { label: LABEL, requestId: parentId, bookId: target.bookId }
+  );
+};
+
+/**
+ * Asks TaleArr for the abridged recording of an audiobook it was just sent,
+ * as a recording request of its own linked to the audiobook request: same
+ * requester, approved with it and not counted against the quota again. It
+ * then reads, completes and notifies like any abridged recording request.
+ * Nothing is asked for when TaleArr knows no abridged edition, keeps one
+ * already, or one was requested already. While TaleArr is still resolving
+ * the book's editions, it looks again in the background and answers
+ * undefined for now.
+ */
+export const requestAbridgedRecording = async (
+  parent: MediaRequest,
+  target: RecordingTarget
+): Promise<MediaRequest | undefined> => {
+  const result = await attemptAbridgedRecording(parent, target);
+
+  if (result !== FACTS_PENDING) {
+    return result;
+  }
+
+  logger.debug(
+    'TaleArr is still resolving the editions of the book, looking again shortly',
+    { label: LABEL, requestId: parent.id, bookId: target.bookId }
+  );
+  runInBackground(retryAbridgedRecording(parent.id, target));
+
+  return undefined;
+};
+
+/**
+ * The last look at the books whose editions TaleArr was still resolving
+ * after the retries, on a scan of their server. Each book is looked at once
+ * more and then dropped, asked for or not.
+ */
+export const checkAbridgedRecordingsAwaitingScan = async (
+  serverIds: number[]
+): Promise<void> => {
+  for (const [parentId, target] of [...awaitingScan]) {
+    if (!serverIds.includes(target.server.id)) {
+      continue;
+    }
+
+    awaitingScan.delete(parentId);
+    // The server's settings may have changed since
+    const server = getSettings().chaptarr.find(
+      (chaptarr) => chaptarr.id === target.server.id
+    );
+
+    if (!server) {
+      continue;
+    }
+
+    try {
+      const parent = await findStandingParent(parentId);
+
+      if (
+        parent &&
+        (await attemptAbridgedRecording(parent, { ...target, server })) ===
+          FACTS_PENDING
+      ) {
+        logger.info(
+          'TaleArr has still not resolved the editions of the book, not asking for the abridged recording',
+          { label: LABEL, requestId: parentId, bookId: target.bookId }
+        );
+      }
+    } catch (e) {
+      logger.warn('Could not ask TaleArr for the abridged recording', {
+        label: LABEL,
+        requestId: parentId,
+        errorMessage: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+};
+
+// For tests: shorter waits, and a clean slate between tests
+export const setFactsPendingDelays = (delaysMs?: number[]): void => {
+  factsPendingDelaysMs = delaysMs ?? DEFAULT_FACTS_PENDING_DELAYS_MS;
+};
+
+export const resetAbridgedRecordingsAwaitingScan = (): void =>
+  awaitingScan.clear();
