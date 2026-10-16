@@ -58,5 +58,8 @@ export const getBookNotificationDetails = async (
   };
 };
 
-export const getBookFormatName = (isAudiobook?: boolean): string =>
-  isAudiobook ? 'Audiobook' : 'Ebook';
+export const getBookFormatName = (
+  isAudiobook?: boolean,
+  recording?: string | null
+): string =>
+  isAudiobook ? (recording ? 'Audiobook Recording' : 'Audiobook') : 'Ebook';

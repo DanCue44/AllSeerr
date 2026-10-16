@@ -1,3 +1,4 @@
+import type { BookRecordingKind } from '@server/constants/bookRecording';
 import type {
   BookFormatChoice,
   MediaRequestMonitorMode,
@@ -35,6 +36,13 @@ export type MediaRequestBody = {
   // Books only, an ISO 639-1 code or 'any'. Only honored for users who
   // manage requests, everyone else requests in their own language.
   language?: string;
+  // Audiobooks on TaleArr only: asks for another recording of an audiobook
+  // that is already available instead of the audiobook itself
+  recording?: BookRecordingKind;
+  // The narrator a narrator recording is asked for
+  recordingNarrator?: string;
+  // TaleArr's id of the edition an edition recording is asked for
+  recordingEditionId?: number;
   serverId?: number;
   profileId?: number;
   profileName?: string;
