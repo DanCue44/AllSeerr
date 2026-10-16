@@ -1,3 +1,4 @@
+import { usesChaptarr } from '@server/constants/bookService';
 import type { User } from '@server/entity/User';
 import { getNoBookEndsSyncPublicUrl } from '@server/lib/nobookendsSync';
 import { Permission } from '@server/lib/permissions';
@@ -262,8 +263,8 @@ export const getNoBookEndsStatus = async (
       canManage: canManageRequests,
     },
     downloads: {
-      // Only Chaptarr's queue can be read for stuck downloads
-      canManage: canManageRequests && settings.bookService === 'chaptarr',
+      // Only a Chaptarr or TaleArr queue can be read for stuck downloads
+      canManage: canManageRequests && usesChaptarr(settings.bookService),
     },
     audiobookshelf: {
       configured: !!audiobookshelfUrl,

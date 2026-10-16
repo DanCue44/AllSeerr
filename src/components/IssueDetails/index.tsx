@@ -37,6 +37,7 @@ import {
   ServerIcon,
 } from '@heroicons/react/24/outline';
 import { ArrowPathIcon } from '@heroicons/react/24/solid';
+import { bookServiceName, usesChaptarr } from '@server/constants/bookService';
 import { IssueStatus } from '@server/constants/issue';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
@@ -202,8 +203,8 @@ const IssueDetails = () => {
   const backdrop = getMediaTitleBackdrop(data);
   const arr =
     issueData.media.mediaType === MediaType.BOOK &&
-    settings.currentSettings.bookService === 'chaptarr'
-      ? 'Chaptarr'
+    usesChaptarr(settings.currentSettings.bookService)
+      ? bookServiceName(settings.currentSettings.bookService)
       : (serviceNames[issueData.media.mediaType] ?? 'Sonarr');
 
   // The affected track of an album, from the album's track list

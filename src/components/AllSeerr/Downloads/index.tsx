@@ -1,16 +1,16 @@
 import DownloadCard from '@app/components/AllSeerr/Downloads/DownloadCard';
+import RemoveDownloadModal from '@app/components/AllSeerr/Downloads/RemoveDownloadModal';
 import type {
   DownloadStatusFilter,
   DownloadTab,
 } from '@app/components/AllSeerr/Downloads/downloadFilters';
 import {
   DOWNLOAD_TABS,
+  STATUS_FILTERS,
   filterDownloads,
   matchesStatus,
   matchesTab,
-  STATUS_FILTERS,
 } from '@app/components/AllSeerr/Downloads/downloadFilters';
-import RemoveDownloadModal from '@app/components/AllSeerr/Downloads/RemoveDownloadModal';
 import ReleasePicker from '@app/components/ArrActions/ReleasePicker';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -23,6 +23,7 @@ import {
   ArrowDownTrayIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
+import { isTalearrService } from '@server/constants/bookService';
 import type {
   DownloadItem,
   DownloadRemoveBody,
@@ -37,7 +38,7 @@ import useSWR from 'swr';
 
 const messages = defineMessages('components.AllSeerr.Downloads', {
   downloads: 'Downloads',
-  subtitle: 'Every download from Radarr, Sonarr, Lidarr and Chaptarr',
+  subtitle: 'Every download from Radarr, Sonarr, Lidarr and {bookService}',
   downloading: 'Downloading',
   queued: 'Queued',
   attention: 'Need attention',
@@ -49,7 +50,7 @@ const messages = defineMessages('components.AllSeerr.Downloads', {
   filterAttention: 'Needs attention',
   emptyTitle: 'Nothing is downloading',
   emptyText:
-    'Downloads from Radarr, Sonarr, Lidarr and Chaptarr show up here while they are on their way.',
+    'Downloads from Radarr, Sonarr, Lidarr and {bookService} show up here while they are on their way.',
   noMatches: 'No downloads match these filters',
   showAll: 'Show all downloads',
   unableToConnect: 'Unable to reach {servers}. Their downloads are not shown.',
@@ -137,6 +138,10 @@ const Downloads = () => {
   const intl = useIntl();
   const { addToast } = useToasts();
   const { currentSettings } = useSettings();
+  // Book downloads come from Chaptarr, or TaleArr when it is the book service
+  const bookService = isTalearrService(currentSettings.bookService)
+    ? 'TaleArr'
+    : 'Chaptarr';
   const [tab, setTab] = useState<DownloadTab>('all');
   const [statusFilter, setStatusFilter] = useState<DownloadStatusFilter>('all');
   const [removing, setRemoving] = useState<DownloadItem | null>(null);
@@ -291,7 +296,7 @@ const Downloads = () => {
           {intl.formatMessage(messages.downloads)}
         </h2>
         <p className="text-sm text-as-ink-muted">
-          {intl.formatMessage(messages.subtitle)}
+          {intl.formatMessage(messages.subtitle, { bookService })}
         </p>
       </div>
 
@@ -399,7 +404,7 @@ const Downloads = () => {
       ) : results.length === 0 ? (
         <EmptyState
           title={intl.formatMessage(messages.emptyTitle)}
-          text={intl.formatMessage(messages.emptyText)}
+          text={intl.formatMessage(messages.emptyText, { bookService })}
         />
       ) : visible.length === 0 ? (
         <EmptyState

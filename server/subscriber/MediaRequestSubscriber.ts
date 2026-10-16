@@ -17,6 +17,7 @@ import {
   getEffectiveBookLanguage,
   isBookLanguage,
 } from '@server/constants/bookLanguages';
+import { usesChaptarr } from '@server/constants/bookService';
 import {
   MediaRequestMonitorMode,
   MediaRequestStatus,
@@ -1564,7 +1565,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
 
     try {
       const settings = getSettings();
-      if (settings.bookService !== 'chaptarr') {
+      if (!usesChaptarr(settings.bookService)) {
         return;
       }
 

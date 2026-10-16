@@ -6,6 +6,7 @@ import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
+import { usesChaptarr } from '@server/constants/bookService';
 import type { BookFormatChoice } from '@server/constants/media';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
@@ -147,7 +148,7 @@ export const removeMediaFromService = async (
   }
 
   if (media.mediaType === MediaType.BOOK) {
-    if (settings.bookService === 'chaptarr') {
+    if (usesChaptarr(settings.bookService)) {
       await removeBookFromChaptarrServer(media, bookFormat);
     } else {
       await removeBookFromLazyLibrarian(media, bookFormat);

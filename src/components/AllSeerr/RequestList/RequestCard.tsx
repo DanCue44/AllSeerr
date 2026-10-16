@@ -29,6 +29,7 @@ import {
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid';
+import { bookArrName } from '@server/constants/bookService';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import type { MediaRequest } from '@server/entity/MediaRequest';
@@ -134,9 +135,7 @@ const arrName = (type: MediaRequest['type'], bookService?: string) =>
     : type === 'music'
       ? 'Lidarr'
       : type === 'book'
-        ? bookService === 'chaptarr'
-          ? 'Chaptarr'
-          : 'LazyLibrarian'
+        ? bookArrName(bookService)
         : 'Sonarr';
 
 const serviceName = (type: MediaRequest['type']) =>

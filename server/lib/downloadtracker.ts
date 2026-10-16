@@ -6,6 +6,7 @@ import ChaptarrAPI from '@server/api/servarr/chaptarr';
 import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
+import { usesChaptarr } from '@server/constants/bookService';
 import { MediaType } from '@server/constants/media';
 import { getSettings } from '@server/lib/settings';
 import { checkStuckBookDownloads } from '@server/lib/stuckBookDownloads';
@@ -377,7 +378,7 @@ class DownloadTracker {
     const settings = getSettings();
 
     // Only the service books are sent to has downloads worth showing
-    if (settings.bookService !== 'chaptarr') {
+    if (!usesChaptarr(settings.bookService)) {
       this.chaptarrServers = {};
       return;
     }

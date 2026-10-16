@@ -7,6 +7,7 @@ import PlexAPI, { plexStatusProbe } from '@server/api/plexapi';
 import PlexTvAPI from '@server/api/plextv';
 import TautulliAPI from '@server/api/tautulli';
 import { isBookLanguage } from '@server/constants/bookLanguages';
+import { isBookService } from '@server/constants/bookService';
 import { ApiErrorCode } from '@server/constants/error';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
@@ -128,6 +129,10 @@ settingsRoutes.post('/main', async (req, res, next) => {
 
   if (body.bookLanguage !== undefined && !isBookLanguage(body.bookLanguage)) {
     return next({ status: 400, message: 'Unknown book language.' });
+  }
+
+  if (body.bookService !== undefined && !isBookService(body.bookService)) {
+    return next({ status: 400, message: 'Unknown book service.' });
   }
 
   settings.main = merge(settings.main, body);

@@ -14,6 +14,7 @@ import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { ServerIcon } from '@heroicons/react/24/outline';
 import { CheckCircleIcon, DocumentMinusIcon } from '@heroicons/react/24/solid';
+import { bookArrName } from '@server/constants/bookService';
 import { IssueStatus } from '@server/constants/issue';
 import {
   MediaRequestStatus,
@@ -63,8 +64,7 @@ const BookManageSlideOver = ({
   const intl = useIntl();
   const { addToast } = useToasts();
   const { currentSettings } = useSettings();
-  const service =
-    currentSettings.bookService === 'chaptarr' ? 'Chaptarr' : 'LazyLibrarian';
+  const service = bookArrName(currentSettings.bookService);
 
   const deleteMedia = async () => {
     if (data.mediaInfo) {

@@ -1,3 +1,4 @@
+import { bookServiceName, usesChaptarr } from '@server/constants/bookService';
 import { IssueType, getIssueTypeName } from '@server/constants/issue';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
@@ -323,8 +324,8 @@ class EmailAgent
                   : payload.media?.mediaType === MediaType.MUSIC
                     ? 'Lidarr'
                     : payload.media?.mediaType === MediaType.BOOK
-                      ? getSettings().bookService === 'chaptarr'
-                        ? 'Chaptarr'
+                      ? usesChaptarr(getSettings().bookService)
+                        ? bookServiceName(getSettings().bookService)
                         : 'LazyLibrarian'
                       : 'Sonarr',
             }

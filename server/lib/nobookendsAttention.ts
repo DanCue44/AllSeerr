@@ -3,6 +3,7 @@ import type {
   ChaptarrQueueItem,
 } from '@server/api/servarr/chaptarr';
 import ChaptarrAPI from '@server/api/servarr/chaptarr';
+import { usesChaptarr } from '@server/constants/bookService';
 import type { User } from '@server/entity/User';
 import { ArrActionError, searchAgain } from '@server/lib/arrActions';
 import type { ChaptarrSettings } from '@server/lib/settings';
@@ -62,7 +63,7 @@ interface ChaptarrServerGroup {
 const getChaptarrServers = (): ChaptarrServerGroup[] => {
   const settings = getSettings();
 
-  if (settings.bookService !== 'chaptarr') {
+  if (!usesChaptarr(settings.bookService)) {
     return [];
   }
 

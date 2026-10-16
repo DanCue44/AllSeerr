@@ -1,5 +1,7 @@
 import type { BookLanguage } from '@server/constants/bookLanguages';
 import { getEffectiveBookLanguage } from '@server/constants/bookLanguages';
+import type { BookService } from '@server/constants/bookService';
+import { usesChaptarr } from '@server/constants/bookService';
 import type { BookFormatChoice } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import { Permission } from '@server/lib/permissions';
@@ -191,7 +193,7 @@ export interface ChaptarrSettings extends DVRSettings {
   activeAudiobookDirectory?: string;
 }
 
-export type BookService = 'chaptarr' | 'lazylibrarian';
+export type { BookService } from '@server/constants/bookService';
 
 export interface SonarrSettings extends DVRSettings {
   seriesType: 'standard' | 'daily' | 'anime';
@@ -327,8 +329,9 @@ export const resolveBookService = ({
   const hasChaptarr = !!getDefaultChaptarr(chaptarr);
   const hasLazyLibrarian = !!lazylibrarian?.hostname && !!lazylibrarian.apiKey;
 
-  if (main.bookService === 'chaptarr' && hasChaptarr) {
-    return 'chaptarr';
+  // TaleArr is a Chaptarr server too, so it uses the Chaptarr servers
+  if (usesChaptarr(main.bookService) && hasChaptarr) {
+    return main.bookService;
   }
 
   if (main.bookService === 'lazylibrarian' && hasLazyLibrarian) {

@@ -5,6 +5,7 @@ import ChaptarrAPI from '@server/api/servarr/chaptarr';
 import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
+import { usesChaptarr } from '@server/constants/bookService';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -478,7 +479,7 @@ class Media {
 
     if (
       this.mediaType === MediaType.BOOK &&
-      getSettings().bookService === 'chaptarr'
+      usesChaptarr(getSettings().bookService)
     ) {
       this.setChaptarrServiceUrl();
       return;

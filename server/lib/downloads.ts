@@ -3,6 +3,7 @@ import ChaptarrAPI from '@server/api/servarr/chaptarr';
 import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
+import { bookServiceName, usesChaptarr } from '@server/constants/bookService';
 import {
   MediaRequestStatus,
   MediaType,
@@ -151,6 +152,12 @@ const SERVICE_NAMES: Record<DownloadService, string> = {
   chaptarr: 'Chaptarr',
 };
 
+// Book downloads are named after the book service, Chaptarr or TaleArr
+const serviceName = (service: DownloadService) =>
+  service === 'chaptarr'
+    ? bookServiceName(getSettings().bookService)
+    : SERVICE_NAMES[service];
+
 const sameAddress = (a: DVRSettings, b: DVRSettings) =>
   a.hostname === b.hostname && a.port === b.port && a.baseUrl === b.baseUrl;
 
@@ -177,7 +184,7 @@ export const getDownloadServers = (): DownloadServerGroup[] => {
     ...groupServers('radarr', settings.radarr),
     ...groupServers('sonarr', settings.sonarr),
     ...groupServers('lidarr', settings.lidarr),
-    ...(settings.bookService === 'chaptarr'
+    ...(usesChaptarr(settings.bookService)
       ? groupServers('chaptarr', settings.chaptarr)
       : []),
   ];
@@ -459,7 +466,7 @@ const mapRecord = (
       id: `${group.service}:${group.server.id}:${record.id}`,
       service: group.service,
       serverId: group.server.id,
-      serverName: group.server.name || SERVICE_NAMES[group.service],
+      serverName: group.server.name || serviceName(group.service),
       is4k: !!group.server.is4k,
       ...described,
       releaseTitle: record.title ?? '',
@@ -884,7 +891,7 @@ export const collectDownloads = async (
         serverErrors.push({
           service: group.service,
           serverId: group.server.id,
-          serverName: group.server.name || SERVICE_NAMES[group.service],
+          serverName: group.server.name || serviceName(group.service),
           message: e.message,
         });
         return [];

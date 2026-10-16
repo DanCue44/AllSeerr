@@ -3,6 +3,7 @@ import { targetQuery } from '@app/components/ArrActions/releaseList';
 import Button from '@app/components/Common/Button';
 import Modal from '@app/components/Common/Modal';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
+import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -13,6 +14,7 @@ import {
   ListBulletIcon,
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
+import { isTalearrService } from '@server/constants/bookService';
 import type { BookFormat } from '@server/constants/media';
 import type {
   ArrActionAvailability,
@@ -108,6 +110,7 @@ const ArrActions = ({
   const intl = useIntl();
   const { addToast } = useToasts();
   const { hasPermission } = useUser();
+  const { currentSettings } = useSettings();
   const [interfaceStyle] = useInterfaceStyle();
   const ambient = interfaceStyle === 'ambient';
   const [is4k, setIs4k] = useState(!!initialTarget?.is4k);
@@ -160,7 +163,9 @@ const ArrActions = ({
         ? 'Sonarr'
         : mediaType === 'music'
           ? 'Lidarr'
-          : 'Chaptarr');
+          : isTalearrService(currentSettings.bookService)
+            ? 'TaleArr'
+            : 'Chaptarr');
 
   const targetName = (() => {
     if (mediaType === 'tv') {
