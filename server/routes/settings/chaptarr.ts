@@ -1,3 +1,4 @@
+import type { TalearrIdentity } from '@server/api/servarr/chaptarr';
 import ChaptarrAPI from '@server/api/servarr/chaptarr';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -41,16 +42,29 @@ chaptarrRoutes.post('/test', async (req, res, next) => {
 
     const status = await chaptarr.getSystemStatus();
     const { appName, isChaptarr } = await chaptarr.getCapabilities();
-    const [profiles, metadataProfiles, folders, tags] = await Promise.all([
-      chaptarr.getChaptarrProfiles(),
-      chaptarr.getMetadataProfiles(),
-      chaptarr.getChaptarrRootFolders(),
-      chaptarr.getTags(),
-    ]);
+    const [profiles, metadataProfiles, folders, tags, talearr] =
+      await Promise.all([
+        chaptarr.getChaptarrProfiles(),
+        chaptarr.getMetadataProfiles(),
+        chaptarr.getChaptarrRootFolders(),
+        chaptarr.getTags(),
+        // TaleArr is a Chaptarr fork, so the server may be either one
+        isChaptarr
+          ? chaptarr.getTalearrIdentity()
+          : Promise.resolve<TalearrIdentity>({ isTalearr: false }),
+      ]);
 
     return res.status(200).json({
       appName,
       isChaptarr,
+      isTalearr: talearr.isTalearr,
+      ...(talearr.isTalearr && {
+        talearr: {
+          version: talearr.version,
+          grabPolicy: talearr.grabPolicy,
+          metadataProblem: talearr.metadataProblem,
+        },
+      }),
       profiles: profiles.map((profile) => ({
         id: profile.id,
         name: profile.name,

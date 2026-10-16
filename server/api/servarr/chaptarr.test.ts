@@ -8,6 +8,7 @@ import ChaptarrAPI, {
   chaptarrRetryDelays,
   isAuthorBusyError,
   isMonitoredFor,
+  parseTalearrGrabPolicy,
 } from '@server/api/servarr/chaptarr';
 
 type Call = {
@@ -499,6 +500,166 @@ describe('ChaptarrAPI when Chaptarr is busy', () => {
     assert.strictEqual(
       isAuthorBusyError({ response: { status: 500, data: 'root folder' } }),
       false
+    );
+  });
+});
+
+/**
+ * A client answering GETs by URL, failing with a 404 for anything else
+ */
+const createIdentityApi = (answers: Record<string, unknown>) => {
+  const chaptarr = new ChaptarrAPI({
+    url: 'http://localhost:8789/api/v1',
+    apiKey: 'test-key',
+  });
+  const urls: string[] = [];
+  const http = (chaptarr as unknown as { axios: Record<string, unknown> })
+    .axios;
+
+  http.get = async (url: string) => {
+    urls.push(url);
+    if (url in answers) {
+      return { status: 200, data: answers[url] };
+    }
+    throw Object.assign(new Error('Request failed with status code 404'), {
+      response: { status: 404 },
+    });
+  };
+
+  return { chaptarr, urls };
+};
+
+const grabPolicy = {
+  id: 1,
+  abridgedPolicy: 'preferUnabridged',
+  allowBundles: false,
+  failRejectedImports: true,
+  maxAutomaticRetries: 3,
+};
+
+describe('ChaptarrAPI.getTalearrIdentity', () => {
+  it('recognizes TaleArr with its version, grab policy and metadata health', async () => {
+    const { chaptarr, urls } = createIdentityApi({
+      '/system/status': {
+        appName: 'Chaptarr',
+        instanceName: 'TaleArr',
+        version: '0.4.2.1',
+      },
+      'http://localhost:8789/initialize.json': {
+        productName: 'TaleArr',
+        talearrVersion: '0.11.0',
+        instanceName: 'TaleArr',
+      },
+      '/config/talearrgrabpolicy': grabPolicy,
+      '/health': [
+        { source: 'IndexerStatusCheck', message: 'Indexers unavailable' },
+        {
+          source: 'TalearrMetadataServerProbeCheck',
+          type: 'warning',
+          message: 'Metadata server api2.chaptarr.com is responding slowly',
+        },
+      ],
+    });
+
+    assert.deepStrictEqual(await chaptarr.getTalearrIdentity(), {
+      isTalearr: true,
+      version: '0.11.0',
+      instanceName: 'TaleArr',
+      grabPolicy: {
+        abridgedPolicy: 'preferUnabridged',
+        allowBundles: false,
+        failRejectedImports: true,
+        maxAutomaticRetries: 3,
+      },
+      metadataProblem: 'Metadata server api2.chaptarr.com is responding slowly',
+    });
+    // initialize.json lives next to the API, not under it
+    assert.ok(urls.includes('http://localhost:8789/initialize.json'));
+  });
+
+  it('reports stock Chaptarr as not TaleArr', async () => {
+    const { chaptarr, urls } = createIdentityApi({
+      '/system/status': {
+        appName: 'Chaptarr',
+        instanceName: 'Chaptarr',
+        version: '0.4.2.1',
+      },
+      'http://localhost:8789/initialize.json': {
+        apiRoot: '/api/v1',
+        version: '0.4.2.1',
+        instanceName: 'Chaptarr',
+      },
+    });
+
+    assert.deepStrictEqual(await chaptarr.getTalearrIdentity(), {
+      isTalearr: false,
+      instanceName: 'Chaptarr',
+    });
+    // Health is only read from TaleArr
+    assert.ok(!urls.includes('/health'));
+  });
+
+  it('recognizes TaleArr by its grab policy when nothing else says so', async () => {
+    // A renamed instance, and an initialize.json the API key cannot read
+    const { chaptarr } = createIdentityApi({
+      '/system/status': { appName: 'Chaptarr', instanceName: 'Chaptarr Home' },
+      'http://localhost:8789/initialize.json': '<html>login</html>',
+      '/config/talearrgrabpolicy': grabPolicy,
+      '/health': [],
+    });
+
+    const identity = await chaptarr.getTalearrIdentity();
+
+    assert.strictEqual(identity.isTalearr, true);
+    assert.strictEqual(identity.version, undefined);
+    assert.strictEqual(identity.metadataProblem, undefined);
+  });
+
+  it('recognizes TaleArr by its instance name alone', async () => {
+    const { chaptarr } = createIdentityApi({
+      '/system/status': { appName: 'Chaptarr', instanceName: 'TaleArr' },
+    });
+
+    assert.strictEqual((await chaptarr.getTalearrIdentity()).isTalearr, true);
+  });
+
+  it('is not TaleArr when the server cannot be read at all', async () => {
+    const { chaptarr } = createIdentityApi({});
+
+    assert.deepStrictEqual(await chaptarr.getTalearrIdentity(), {
+      isTalearr: false,
+      instanceName: undefined,
+    });
+  });
+});
+
+describe('parseTalearrGrabPolicy', () => {
+  it('reads named and numbered abridged policies', () => {
+    assert.strictEqual(
+      parseTalearrGrabPolicy({ ...grabPolicy, abridgedPolicy: 'any' })
+        ?.abridgedPolicy,
+      'any'
+    );
+    assert.strictEqual(
+      parseTalearrGrabPolicy({ ...grabPolicy, abridgedPolicy: 1 })
+        ?.abridgedPolicy,
+      'preferUnabridged'
+    );
+    assert.strictEqual(
+      parseTalearrGrabPolicy({
+        ...grabPolicy,
+        abridgedPolicy: 'UnabridgedOnly',
+      })?.abridgedPolicy,
+      'unabridgedOnly'
+    );
+  });
+
+  it('ignores answers that are not a grab policy', () => {
+    assert.strictEqual(parseTalearrGrabPolicy(undefined), undefined);
+    assert.strictEqual(parseTalearrGrabPolicy('<html></html>'), undefined);
+    assert.strictEqual(
+      parseTalearrGrabPolicy({ message: 'NotFound' }),
+      undefined
     );
   });
 });

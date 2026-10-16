@@ -1,3 +1,5 @@
+import Alert from '@app/components/Common/Alert';
+import Button from '@app/components/Common/Button';
 import Modal from '@app/components/Common/Modal';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
 import useToasts from '@app/hooks/useToasts';
@@ -5,6 +7,8 @@ import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { isValidURL } from '@app/utils/urlValidationHelper';
 import { Transition } from '@headlessui/react';
+import type { ChaptarrBookService } from '@server/constants/bookService';
+import { bookServiceName } from '@server/constants/bookService';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import axios from 'axios';
 import { Field, Formik } from 'formik';
@@ -28,6 +32,18 @@ const MIXED = 0;
 export interface ChaptarrTestResponse {
   appName?: string;
   isChaptarr?: boolean;
+  // TaleArr, the Chaptarr fork, reports itself as Chaptarr too
+  isTalearr?: boolean;
+  talearr?: {
+    version?: string;
+    grabPolicy?: {
+      abridgedPolicy: 'unabridgedOnly' | 'preferUnabridged' | 'any';
+      allowBundles: boolean;
+      failRejectedImports: boolean;
+      maxAutomaticRetries: number;
+    };
+    metadataProblem?: string;
+  };
   profiles: { id: number; name: string; profileType?: string }[];
   metadataProfiles: { id: number; name: string; profileType?: number }[];
   rootFolders: {
@@ -44,8 +60,8 @@ export interface ChaptarrTestResponse {
 }
 
 const messages = defineMessages('components.Settings.ChaptarrModal', {
-  createchaptarr: 'Add New Chaptarr Server',
-  editchaptarr: 'Edit Chaptarr Server',
+  createchaptarr: 'Add New {service} Server',
+  editchaptarr: 'Edit {service} Server',
   validationNameRequired: 'You must provide a server name',
   validationHostnameRequired: 'You must provide a valid hostname or IP address',
   validationPortRequired: 'You must provide a valid port number',
@@ -54,8 +70,8 @@ const messages = defineMessages('components.Settings.ChaptarrModal', {
     'Select a quality profile, metadata profile and root folder for ebooks, audiobooks or both',
   validationFormatIncomplete:
     'Select a quality profile, metadata profile and root folder, or leave all three empty',
-  toastChaptarrTestSuccess: 'Chaptarr connection established successfully!',
-  toastChaptarrTestFailure: 'Failed to connect to Chaptarr.',
+  toastChaptarrTestSuccess: '{service} connection established successfully!',
+  toastChaptarrTestFailure: 'Failed to connect to {service}.',
   add: 'Add Server',
   defaultserver: 'Default Server',
   servername: 'Server Name',
@@ -97,19 +113,46 @@ const messages = defineMessages('components.Settings.ChaptarrModal', {
   tags: 'Tags',
   notagoptions: 'No tags.',
   selecttags: 'Select tags',
-  apiKeyHelp: 'Find it in Chaptarr: Settings > General > Security > API Key',
+  apiKeyHelp: 'Find it in {service}: Settings > General > Security > API Key',
   baseUrlHelp:
-    'If you set a URL Base in Chaptarr (Settings > General > Host), enter it here (e.g. /chaptarr). Leave blank otherwise.',
+    'If you set a URL Base in {service} (Settings > General > Host), enter it here (e.g. {example}). Leave blank otherwise.',
   externalUrlHelp:
     'For clickable links on media pages when the hostname is not reachable from outside your network.',
   syncEnabledHelp:
-    'Scan Chaptarr for existing books and request status so users cannot request books already available.',
+    'Scan {service} for existing books and request status so users cannot request books already available.',
   enableSearchHelp:
-    'Automatically trigger a search in Chaptarr when a request is approved.',
+    'Automatically trigger a search in {service} when a request is approved.',
+  detectedTalearr: 'This server is TaleArr',
+  detectedTalearrVersion: 'This server is TaleArr {version}',
+  detectedTalearrWrongService:
+    'Book requests are set to Chaptarr. Switch them to TaleArr to turn on what TaleArr adds, such as short rejection labels in manual searches.',
+  detectedChaptarr: 'This server is not TaleArr',
+  detectedChaptarrWrongService:
+    'It reports itself as {appName}, but book requests are set to TaleArr. Switch them to Chaptarr, or point this server at a TaleArr instance.',
+  switchToTalearr: 'Switch to TaleArr',
+  switchToChaptarr: 'Switch to Chaptarr',
+  switchingService: 'Switching…',
+  serviceSwitched: 'Book requests are now sent to {service}.',
+  serviceSwitchFailed: 'Something went wrong while switching the book service.',
+  talearrGrabPolicy:
+    'Grab policy: {abridged}, bundles {bundles}, rejected imports {failRejected}, up to {retries, plural, one {# automatic retry} other {# automatic retries}}.',
+  abridgedUnabridgedOnly: 'unabridged audiobooks only',
+  abridgedPreferUnabridged: 'unabridged audiobooks preferred',
+  abridgedAny: 'abridged audiobooks allowed',
+  bundlesAllowed: 'allowed',
+  bundlesSkipped: 'skipped',
+  failRejectedOn: 'marked failed',
+  failRejectedOff: 'left in the queue',
+  talearrMetadataProblem: 'TaleArr reports a metadata server problem',
 });
 
 interface ChaptarrModalProps {
   chaptarr: ChaptarrSettings | null;
+  // The book service the server is set up for, Chaptarr or TaleArr
+  service?: ChaptarrBookService;
+  // Whether the test may offer to switch between Chaptarr and TaleArr
+  canSwitchService?: boolean;
+  onSwitchService?: (service: ChaptarrBookService) => Promise<void>;
   onClose: () => void;
   onSave: () => void;
 }
@@ -132,8 +175,17 @@ const formatEmpty = ({
   rootFolder,
 }: FormatValues): boolean => !profileId && !metadataProfileId && !rootFolder;
 
-const ChaptarrModal = ({ onClose, chaptarr, onSave }: ChaptarrModalProps) => {
+const ChaptarrModal = ({
+  onClose,
+  chaptarr,
+  onSave,
+  service = 'chaptarr',
+  canSwitchService = false,
+  onSwitchService,
+}: ChaptarrModalProps) => {
   const intl = useIntl();
+  const serviceName = bookServiceName(service);
+  const [isSwitching, setIsSwitching] = useState(false);
   const initialLoad = useRef(false);
   const { addToast } = useToasts();
   const [isValidated, setIsValidated] = useState(chaptarr ? true : false);
@@ -287,26 +339,159 @@ const ChaptarrModal = ({ onClose, chaptarr, onSave }: ChaptarrModalProps) => {
         setIsValidated(true);
         setTestResponse(response.data);
         if (initialLoad.current) {
-          addToast(intl.formatMessage(messages.toastChaptarrTestSuccess), {
-            appearance: 'success',
-            autoDismiss: true,
-          });
+          addToast(
+            intl.formatMessage(messages.toastChaptarrTestSuccess, {
+              service: response.data.isTalearr
+                ? 'TaleArr'
+                : response.data.isChaptarr === false
+                  ? (response.data.appName ?? 'Readarr')
+                  : 'Chaptarr',
+            }),
+            { appearance: 'success', autoDismiss: true }
+          );
         }
       } catch {
         setIsValidated(false);
         if (initialLoad.current) {
-          addToast(intl.formatMessage(messages.toastChaptarrTestFailure), {
-            appearance: 'error',
-            autoDismiss: true,
-          });
+          addToast(
+            intl.formatMessage(messages.toastChaptarrTestFailure, {
+              service: serviceName,
+            }),
+            { appearance: 'error', autoDismiss: true }
+          );
         }
       } finally {
         setIsTesting(false);
         initialLoad.current = true;
       }
     },
-    [addToast, intl]
+    [addToast, intl, serviceName]
   );
+
+  const switchService = async (next: ChaptarrBookService) => {
+    if (!onSwitchService) {
+      return;
+    }
+
+    setIsSwitching(true);
+    try {
+      await onSwitchService(next);
+      addToast(
+        intl.formatMessage(messages.serviceSwitched, {
+          service: bookServiceName(next),
+        }),
+        { appearance: 'success', autoDismiss: true }
+      );
+    } catch {
+      addToast(intl.formatMessage(messages.serviceSwitchFailed), {
+        appearance: 'error',
+        autoDismiss: true,
+      });
+    } finally {
+      setIsSwitching(false);
+    }
+  };
+
+  // What the last test found, against the service picked for book requests
+  const detection = (() => {
+    if (!isValidated || isTesting || testResponse.isChaptarr === undefined) {
+      return null;
+    }
+
+    const talearr = testResponse.talearr;
+    const policy = talearr?.grabPolicy;
+    const switchButton = (next: ChaptarrBookService) =>
+      canSwitchService &&
+      onSwitchService && (
+        <div className="mt-3">
+          <Button
+            buttonType="primary"
+            buttonSize="sm"
+            type="button"
+            disabled={isSwitching}
+            onClick={() => switchService(next)}
+          >
+            {intl.formatMessage(
+              isSwitching
+                ? messages.switchingService
+                : next === 'talearr'
+                  ? messages.switchToTalearr
+                  : messages.switchToChaptarr
+            )}
+          </Button>
+        </div>
+      );
+
+    if (testResponse.isTalearr) {
+      const title = talearr?.version
+        ? intl.formatMessage(messages.detectedTalearrVersion, {
+            version: talearr.version,
+          })
+        : intl.formatMessage(messages.detectedTalearr);
+
+      return (
+        <>
+          <Alert
+            type={service === 'talearr' ? 'info' : 'warning'}
+            title={title}
+          >
+            {service !== 'talearr' && (
+              <>
+                {intl.formatMessage(messages.detectedTalearrWrongService)}
+                {switchButton('talearr')}
+              </>
+            )}
+            {service === 'talearr' &&
+              policy &&
+              intl.formatMessage(messages.talearrGrabPolicy, {
+                abridged: intl.formatMessage(
+                  policy.abridgedPolicy === 'any'
+                    ? messages.abridgedAny
+                    : policy.abridgedPolicy === 'preferUnabridged'
+                      ? messages.abridgedPreferUnabridged
+                      : messages.abridgedUnabridgedOnly
+                ),
+                bundles: intl.formatMessage(
+                  policy.allowBundles
+                    ? messages.bundlesAllowed
+                    : messages.bundlesSkipped
+                ),
+                failRejected: intl.formatMessage(
+                  policy.failRejectedImports
+                    ? messages.failRejectedOn
+                    : messages.failRejectedOff
+                ),
+                retries: policy.maxAutomaticRetries,
+              })}
+          </Alert>
+          {service === 'talearr' && talearr?.metadataProblem && (
+            <Alert
+              type="warning"
+              title={intl.formatMessage(messages.talearrMetadataProblem)}
+            >
+              {talearr.metadataProblem}
+            </Alert>
+          )}
+        </>
+      );
+    }
+
+    if (service === 'talearr') {
+      return (
+        <Alert
+          type="warning"
+          title={intl.formatMessage(messages.detectedChaptarr)}
+        >
+          {intl.formatMessage(messages.detectedChaptarrWrongService, {
+            appName: testResponse.appName ?? 'Chaptarr',
+          })}
+          {switchButton('chaptarr')}
+        </Alert>
+      );
+    }
+
+    return null;
+  })();
 
   useEffect(() => {
     if (chaptarr) {
@@ -644,10 +829,15 @@ const ChaptarrModal = ({ onClose, chaptarr, onSave }: ChaptarrModalProps) => {
               onOk={() => handleSubmit()}
               title={
                 !chaptarr
-                  ? intl.formatMessage(messages.createchaptarr)
-                  : intl.formatMessage(messages.editchaptarr)
+                  ? intl.formatMessage(messages.createchaptarr, {
+                      service: serviceName,
+                    })
+                  : intl.formatMessage(messages.editchaptarr, {
+                      service: serviceName,
+                    })
               }
             >
+              {detection}
               <div className="mb-6">
                 <div className="form-row">
                   <label htmlFor="isDefault" className="checkbox-label">
@@ -748,7 +938,9 @@ const ChaptarrModal = ({ onClose, chaptarr, onSave }: ChaptarrModalProps) => {
                     {intl.formatMessage(messages.apiKey)}
                     <span className="label-required">*</span>
                     <span className="label-tip">
-                      {intl.formatMessage(messages.apiKeyHelp)}
+                      {intl.formatMessage(messages.apiKeyHelp, {
+                        service: serviceName,
+                      })}
                     </span>
                   </label>
                   <div className="form-input-area">
@@ -770,7 +962,10 @@ const ChaptarrModal = ({ onClose, chaptarr, onSave }: ChaptarrModalProps) => {
                   <label htmlFor="baseUrl" className="text-label">
                     {intl.formatMessage(messages.baseUrl)}
                     <span className="label-tip">
-                      {intl.formatMessage(messages.baseUrlHelp)}
+                      {intl.formatMessage(messages.baseUrlHelp, {
+                        service: serviceName,
+                        example: `/${service}`,
+                      })}
                     </span>
                   </label>
                   <div className="form-input-area">
@@ -886,7 +1081,9 @@ const ChaptarrModal = ({ onClose, chaptarr, onSave }: ChaptarrModalProps) => {
                   <label htmlFor="syncEnabled" className="checkbox-label">
                     {intl.formatMessage(messages.syncEnabled)}
                     <span className="label-tip">
-                      {intl.formatMessage(messages.syncEnabledHelp)}
+                      {intl.formatMessage(messages.syncEnabledHelp, {
+                        service: serviceName,
+                      })}
                     </span>
                   </label>
                   <div className="form-input-area">
@@ -901,7 +1098,9 @@ const ChaptarrModal = ({ onClose, chaptarr, onSave }: ChaptarrModalProps) => {
                   <label htmlFor="enableSearch" className="checkbox-label">
                     {intl.formatMessage(messages.enableSearch)}
                     <span className="label-tip">
-                      {intl.formatMessage(messages.enableSearchHelp)}
+                      {intl.formatMessage(messages.enableSearchHelp, {
+                        service: serviceName,
+                      })}
                     </span>
                   </label>
                   <div className="form-input-area">

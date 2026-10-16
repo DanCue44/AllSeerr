@@ -186,6 +186,36 @@ export interface ChaptarrCapabilities {
   isChaptarr: boolean;
 }
 
+export type TalearrAbridgedPolicy =
+  | 'unabridgedOnly'
+  | 'preferUnabridged'
+  | 'any';
+
+/**
+ * TaleArr's grab policy, from Settings > Indexers > Grab policy
+ */
+export interface TalearrGrabPolicy {
+  abridgedPolicy: TalearrAbridgedPolicy;
+  allowBundles: boolean;
+  failRejectedImports: boolean;
+  maxAutomaticRetries: number;
+}
+
+/**
+ * Whether a server is TaleArr, the Chaptarr fork, and what it reports.
+ * TaleArr keeps Chaptarr's app name, so it is told apart by its product
+ * name, its own version, its instance name and its grab policy route.
+ */
+export interface TalearrIdentity {
+  isTalearr: boolean;
+  // TaleArr's own version, apart from the Chaptarr version it is based on
+  version?: string;
+  instanceName?: string;
+  grabPolicy?: TalearrGrabPolicy;
+  // A problem with the metadata server that TaleArr's health check found
+  metadataProblem?: string;
+}
+
 export interface ChaptarrAddBookOptions {
   mediaType: ChaptarrMediaType;
   qualityProfileId: number;
@@ -218,6 +248,56 @@ const REMOVE_AUTHOR_TIMEOUT_MS = 300_000;
 // Lookups ask Chaptarr's metadata server, which slows down a lot while
 // Chaptarr is busy refreshing an author
 const LOOKUP_TIMEOUT_MS = 30_000;
+// Telling TaleArr apart is a few small reads, a missing one is not an error
+const IDENTITY_TIMEOUT_MS = 10_000;
+// The health check TaleArr reports metadata server problems with
+const TALEARR_METADATA_CHECK = 'TalearrMetadataServerProbeCheck';
+
+const ABRIDGED_POLICIES: TalearrAbridgedPolicy[] = [
+  'unabridgedOnly',
+  'preferUnabridged',
+  'any',
+];
+
+const mentionsTalearr = (value: unknown): boolean =>
+  typeof value === 'string' && value.toLowerCase().includes('talearr');
+
+/**
+ * Reads a grab policy as TaleArr sends it, or undefined when the answer is
+ * not one, such as a stock Chaptarr page for an unknown route
+ */
+export const parseTalearrGrabPolicy = (
+  data: unknown
+): TalearrGrabPolicy | undefined => {
+  if (!data || typeof data !== 'object') {
+    return undefined;
+  }
+
+  const raw = data as Record<string, unknown>;
+
+  if (
+    typeof raw.allowBundles !== 'boolean' ||
+    typeof raw.maxAutomaticRetries !== 'number'
+  ) {
+    return undefined;
+  }
+
+  // Enums come as camelCase names, or as numbers on some serializers
+  const abridgedPolicy =
+    typeof raw.abridgedPolicy === 'number'
+      ? ABRIDGED_POLICIES[raw.abridgedPolicy]
+      : ABRIDGED_POLICIES.find(
+          (policy) =>
+            policy.toLowerCase() === String(raw.abridgedPolicy).toLowerCase()
+        );
+
+  return {
+    abridgedPolicy: abridgedPolicy ?? 'unabridgedOnly',
+    allowBundles: raw.allowBundles,
+    failRejectedImports: raw.failRejectedImports !== false,
+    maxAutomaticRetries: raw.maxAutomaticRetries,
+  };
+};
 
 /**
  * Waits used when Chaptarr is briefly unable to answer. Exported so tests
@@ -350,6 +430,87 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
     }
 
     return this.capabilities;
+  }
+
+  /**
+   * Tells TaleArr apart from stock Chaptarr. Each sign is read on its own
+   * and one that cannot be read counts as missing, so stock Chaptarr and
+   * other Readarr compatible servers are reported as not TaleArr.
+   */
+  public async getTalearrIdentity(): Promise<TalearrIdentity> {
+    const baseUrl = (this.axios.defaults.baseURL ?? '').replace(
+      /\/api\/v1\/?$/,
+      ''
+    );
+    const optional = <T>(read: () => Promise<T>) =>
+      read().catch(() => undefined);
+
+    const [status, initialize, grabPolicy] = await Promise.all([
+      optional(() => this.getSystemStatus()),
+      optional(async () => {
+        const response = await this.axios.get<unknown>(
+          `${baseUrl}/initialize.json`,
+          { timeout: IDENTITY_TIMEOUT_MS }
+        );
+        return response.data && typeof response.data === 'object'
+          ? (response.data as Record<string, unknown>)
+          : undefined;
+      }),
+      optional(async () =>
+        parseTalearrGrabPolicy(
+          (
+            await this.axios.get<unknown>('/config/talearrgrabpolicy', {
+              timeout: IDENTITY_TIMEOUT_MS,
+            })
+          ).data
+        )
+      ),
+    ]);
+    const instanceName = (status as { instanceName?: unknown } | undefined)
+      ?.instanceName;
+    const version =
+      typeof initialize?.talearrVersion === 'string' &&
+      initialize.talearrVersion.trim()
+        ? initialize.talearrVersion.trim()
+        : undefined;
+    const isTalearr =
+      !!version ||
+      mentionsTalearr(initialize?.productName) ||
+      mentionsTalearr(instanceName) ||
+      !!grabPolicy;
+
+    if (!isTalearr) {
+      return {
+        isTalearr,
+        instanceName:
+          typeof instanceName === 'string' ? instanceName : undefined,
+      };
+    }
+
+    const health = await optional(
+      async () =>
+        (
+          await this.axios.get<unknown>('/health', {
+            timeout: IDENTITY_TIMEOUT_MS,
+          })
+        ).data
+    );
+    const metadataCheck = Array.isArray(health)
+      ? (health as { source?: unknown; message?: unknown }[]).find(
+          (check) => check?.source === TALEARR_METADATA_CHECK
+        )
+      : undefined;
+
+    return {
+      isTalearr,
+      version,
+      instanceName: typeof instanceName === 'string' ? instanceName : undefined,
+      grabPolicy,
+      metadataProblem:
+        typeof metadataCheck?.message === 'string' && metadataCheck.message
+          ? metadataCheck.message
+          : undefined,
+    };
   }
 
   public async getChaptarrRootFolders(): Promise<ChaptarrRootFolder[]> {

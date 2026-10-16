@@ -29,6 +29,8 @@ import {
   PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/solid';
+import type { ChaptarrBookService } from '@server/constants/bookService';
+import { bookServiceName, usesChaptarr } from '@server/constants/bookService';
 import type OverrideRule from '@server/entity/OverrideRule';
 import type { OverrideRuleResultsResponse } from '@server/interfaces/api/overrideRuleInterfaces';
 import type {
@@ -100,10 +102,14 @@ const messages = defineMessages('components.Settings', {
   chaptarrSettingsDescription:
     'Configure your Chaptarr server(s) below to enable ebook and audiobook requests. Approved book requests are added to Chaptarr in the requested format and searched for. You can connect multiple Chaptarr servers, but only one of them can be marked as default. Other Readarr compatible servers work too.',
   addchaptarr: 'Add Chaptarr Server',
+  talearrsettings: 'TaleArr Settings',
+  talearrSettingsDescription:
+    'Configure your TaleArr server(s) below to enable ebook and audiobook requests. TaleArr is a fork of Chaptarr, so approved book requests are added the same way, and its rejection labels show in manual searches. You can connect multiple TaleArr servers, but only one of them can be marked as default.',
+  addtalearr: 'Add TaleArr Server',
   mediaTypeBook: 'book',
   bookService: 'Book Requests',
   bookServiceTip:
-    'Chaptarr and LazyLibrarian are both configured. Choose which one book requests are sent to.',
+    'Choose where book requests are sent. Chaptarr and TaleArr both use the servers above, so pick the one they run. Test a server to check.',
   bookServiceSaved: 'Book requests are now sent to {service}.',
   bookServiceFailed: 'Something went wrong while saving the book service.',
   musicServiceSettingsDescription:
@@ -147,6 +153,7 @@ interface ServerInstanceProps {
   isLidarr?: boolean;
   isLazyLibrarian?: boolean;
   isChaptarr?: boolean;
+  isTalearr?: boolean;
   isBazarr?: boolean;
   isAudiobookshelf?: boolean;
   isNoBookEndsSync?: boolean;
@@ -204,6 +211,7 @@ const ServerInstance = ({
   isLidarr = false,
   isLazyLibrarian = false,
   isChaptarr = false,
+  isTalearr = false,
   isBazarr = false,
   isAudiobookshelf = false,
   isNoBookEndsSync = false,
@@ -289,7 +297,22 @@ const ServerInstance = ({
           rel="noopener noreferrer"
           className="opacity-50 hover:opacity-100"
         >
-          {isBazarr ? (
+          {isTalearr ? (
+            <picture>
+              <source
+                type="image/webp"
+                srcSet="/companions/talearr.webp 1x, /companions/talearr@2x.webp 2x"
+              />
+              <img
+                src="/companions/talearr.png"
+                srcSet="/companions/talearr.png 1x, /companions/talearr@2x.png 2x"
+                alt="TaleArr"
+                width={40}
+                height={40}
+                className="h-10 w-10 flex-shrink-0"
+              />
+            </picture>
+          ) : isBazarr ? (
             <LanguageIcon className="h-10 w-10 flex-shrink-0" />
           ) : isNoBookEndsSync ? (
             <PlayCircleIcon className="h-10 w-10 flex-shrink-0" />
@@ -451,14 +474,18 @@ const SettingsServices = () => {
     mutate('/api/v1/settings/public');
   };
 
+  // Saves where book requests go; the caller tells the user
+  const applyBookService = async (bookService: BookService) => {
+    await axios.post('/api/v1/settings/main', { bookService });
+    await Promise.all([revalidateMain(), mutate('/api/v1/settings/public')]);
+  };
+
   const saveBookService = async (bookService: BookService) => {
     try {
-      await axios.post('/api/v1/settings/main', { bookService });
-      revalidateMain();
-      mutate('/api/v1/settings/public');
+      await applyBookService(bookService);
       addToast(
         intl.formatMessage(messages.bookServiceSaved, {
-          service: bookService === 'chaptarr' ? 'Chaptarr' : 'LazyLibrarian',
+          service: bookServiceName(bookService),
         }),
         { appearance: 'success', autoDismiss: true }
       );
@@ -520,11 +547,28 @@ const SettingsServices = () => {
   const isLazyLibrarianConfigured =
     !!lazyLibrarianData?.hostname && !!lazyLibrarianData.apiKey;
 
-  const showBookService =
-    isLazyLibrarianConfigured &&
-    !!chaptarrData?.some(
-      (chaptarr) => chaptarr.isDefault || chaptarrData.length === 1
-    );
+  const hasDefaultChaptarr = !!chaptarrData?.some(
+    (chaptarr) => chaptarr.isDefault || chaptarrData.length === 1
+  );
+
+  // Chaptarr and TaleArr share the servers below, so there is always a
+  // choice once one is set up
+  const showBookService = hasDefaultChaptarr;
+
+  const currentBookService: BookService =
+    publicData?.bookService ?? mainData?.bookService ?? 'chaptarr';
+
+  // What the Chaptarr servers are: TaleArr when it is picked, even before
+  // a server is set up, otherwise Chaptarr
+  const chaptarrService: ChaptarrBookService = usesChaptarr(
+    publicData?.bookService
+  )
+    ? publicData.bookService
+    : mainData?.bookService === 'talearr'
+      ? 'talearr'
+      : 'chaptarr';
+  const chaptarrServiceName = bookServiceName(chaptarrService);
+  const isTalearr = chaptarrService === 'talearr';
 
   return (
     <>
@@ -611,7 +655,7 @@ const SettingsServices = () => {
                 : deleteServerModal.type === 'sonarr'
                   ? 'Sonarr'
                   : deleteServerModal.type === 'chaptarr'
-                    ? 'Chaptarr'
+                    ? chaptarrServiceName
                     : 'Lidarr',
           })}
         >
@@ -848,15 +892,25 @@ const SettingsServices = () => {
       </div>
       <div className="mb-6 mt-10">
         <h3 className="heading">
-          {intl.formatMessage(messages.chaptarrsettings)}
+          {intl.formatMessage(
+            isTalearr ? messages.talearrsettings : messages.chaptarrsettings
+          )}
         </h3>
         <p className="description">
-          {intl.formatMessage(messages.chaptarrSettingsDescription)}
+          {intl.formatMessage(
+            isTalearr
+              ? messages.talearrSettingsDescription
+              : messages.chaptarrSettingsDescription
+          )}
         </p>
       </div>
       {editChaptarrModal.open && (
         <ChaptarrModal
           chaptarr={editChaptarrModal.chaptarr}
+          service={chaptarrService}
+          // A LazyLibrarian pick is left alone
+          canSwitchService={mainData?.bookService !== 'lazylibrarian'}
+          onSwitchService={applyBookService}
           onClose={() => setEditChaptarrModal({ open: false, chaptarr: null })}
           onSave={() => {
             revalidateChaptarr();
@@ -873,7 +927,7 @@ const SettingsServices = () => {
               !chaptarrData.some((chaptarr) => chaptarr.isDefault) && (
                 <Alert
                   title={intl.formatMessage(messages.noDefaultServer, {
-                    serverType: 'Chaptarr',
+                    serverType: chaptarrServiceName,
                     mediaType: intl.formatMessage(messages.mediaTypeBook),
                   })}
                 />
@@ -893,6 +947,7 @@ const SettingsServices = () => {
                     .join(', ')}
                   isSSL={chaptarr.useSsl}
                   isChaptarr
+                  isTalearr={isTalearr}
                   isDefault={chaptarr.isDefault}
                   externalUrl={chaptarr.externalUrl}
                   onEdit={() => setEditChaptarrModal({ open: true, chaptarr })}
@@ -914,7 +969,11 @@ const SettingsServices = () => {
                     }
                   >
                     <PlusIcon />
-                    <span>{intl.formatMessage(messages.addchaptarr)}</span>
+                    <span>
+                      {intl.formatMessage(
+                        isTalearr ? messages.addtalearr : messages.addchaptarr
+                      )}
+                    </span>
                   </Button>
                 </div>
               </li>
@@ -934,17 +993,16 @@ const SettingsServices = () => {
                 <select
                   id="bookService"
                   name="bookService"
-                  value={
-                    publicData?.bookService ??
-                    mainData?.bookService ??
-                    'chaptarr'
-                  }
+                  value={currentBookService}
                   onChange={(e) =>
                     saveBookService(e.target.value as BookService)
                   }
                 >
                   <option value="chaptarr">Chaptarr</option>
-                  <option value="lazylibrarian">LazyLibrarian</option>
+                  <option value="talearr">TaleArr</option>
+                  {isLazyLibrarianConfigured && (
+                    <option value="lazylibrarian">LazyLibrarian</option>
+                  )}
                 </select>
               </div>
             </div>
