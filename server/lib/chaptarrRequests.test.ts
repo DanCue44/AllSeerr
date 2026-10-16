@@ -8,6 +8,7 @@ import type {
   ChaptarrAddBookOptions,
   ChaptarrAddBookResult,
   ChaptarrBook,
+  ChaptarrEdition,
   ChaptarrMediaType,
   ChaptarrPendingResult,
 } from '@server/api/servarr/chaptarr';
@@ -59,6 +60,8 @@ class FakeChaptarr {
     options: ChaptarrAddBookOptions
   ) => ChaptarrAddBookResult;
   public pendingOutcome: ChaptarrPendingResult = 'succeeded';
+  public editions: Record<number, ChaptarrEdition[]> = {};
+  public editionUpdateError?: Error;
 
   public lookups: string[] = [];
   public added: { foreignBookId: string; options: ChaptarrAddBookOptions }[] =
@@ -69,6 +72,9 @@ class FakeChaptarr {
   public removedAuthors: number[] = [];
   public waited: number[] = [];
   public authorFormats: [number, ChaptarrMediaType, string][] = [];
+  public editionUpdates: [number, ChaptarrEdition[]][] = [];
+  // Edition updates and searches in the order they were asked for
+  public events: string[] = [];
 
   async lookupBooks(term: string, mediaType?: ChaptarrMediaType) {
     this.lookups.push(mediaType ? `${term}|${mediaType}` : term);
@@ -116,6 +122,21 @@ class FakeChaptarr {
 
   async searchBooks(bookIds: number[]) {
     this.searched.push(bookIds);
+    this.events.push(`search:${bookIds.join(',')}`);
+  }
+
+  async getEditions(bookId: number) {
+    return this.editions[bookId] ?? [];
+  }
+
+  async updateBookEditions(bookId: number, editions: ChaptarrEdition[]) {
+    this.events.push(`editions:${bookId}`);
+
+    if (this.editionUpdateError) {
+      throw this.editionUpdateError;
+    }
+
+    this.editionUpdates.push([bookId, editions]);
   }
 
   async enableAuthorFormat(
@@ -768,6 +789,282 @@ describe('sendBookToChaptarr', () => {
       }),
       /no match for Pride and Prejudice by Jane Austen/
     );
+  });
+
+  describe('the edition in the requested language', () => {
+    const english = {
+      code: 'en' as const,
+    };
+    const request = (
+      mediaType: ChaptarrMediaType,
+      language: { code: 'en' | 'any' } | null = english
+    ) => ({
+      olId: WORK_ID,
+      mediaType,
+      bookId: 30,
+      add,
+      language: language ?? undefined,
+    });
+    const monitoredEditions = (bookId = 30) =>
+      chaptarr.editionUpdates
+        .filter(([id]) => id === bookId)
+        .at(-1)?.[1]
+        .filter((edition) => edition.monitored)
+        .map((edition) => edition.foreignEditionId);
+
+    it('monitors an English audiobook edition before searching', async () => {
+      chaptarr.library = [
+        book({ id: 30, mediaType: 'audiobook', title: 'Juego de dos' }),
+      ];
+      chaptarr.editions[30] = [
+        {
+          foreignEditionId: 'e:spa',
+          title: 'Juego de dos',
+          language: 'spa',
+          format: 'Audible Audio',
+          monitored: true,
+        },
+        {
+          foreignEditionId: 'e:eng-ebook',
+          title: 'Two Can Play',
+          language: 'eng',
+          format: 'Kindle Edition',
+          monitored: false,
+        },
+        {
+          foreignEditionId: 'e:eng-audio',
+          title: 'Two Can Play',
+          language: 'eng',
+          format: 'Audiobook',
+          monitored: false,
+        },
+      ];
+
+      const result = await sendBookToChaptarr(
+        asApi(chaptarr),
+        request('audiobook')
+      );
+
+      assert.strictEqual(result.bookId, 30);
+      assert.deepStrictEqual(monitoredEditions(), ['e:eng-audio']);
+      assert.deepStrictEqual(chaptarr.events, ['editions:30', 'search:30']);
+    });
+
+    it('falls back to the language in another format', async () => {
+      chaptarr.library = [book({ id: 30, mediaType: 'audiobook' })];
+      chaptarr.editions[30] = [
+        {
+          foreignEditionId: 'e:deu',
+          language: 'deu',
+          format: 'Audio CD',
+          monitored: true,
+        },
+        {
+          foreignEditionId: 'e:eng-ebook',
+          language: 'eng',
+          format: 'ebook',
+          monitored: false,
+        },
+      ];
+
+      await sendBookToChaptarr(asApi(chaptarr), request('audiobook'));
+
+      assert.deepStrictEqual(monitoredEditions(), ['e:eng-ebook']);
+    });
+
+    it('picks an undetermined edition under the English title', async () => {
+      chaptarr.library = [book({ id: 30, mediaType: 'audiobook' })];
+      chaptarr.editions[30] = [
+        {
+          foreignEditionId: 'e:por',
+          title: 'Orgulho e Preconceito',
+          language: 'por',
+          monitored: true,
+        },
+        {
+          foreignEditionId: 'e:und-other',
+          title: 'Orgueil et Préjugés',
+          language: 'und',
+          monitored: false,
+        },
+        {
+          foreignEditionId: 'e:und',
+          title: 'Pride and Prejudice',
+          language: 'und',
+          monitored: false,
+        },
+      ];
+
+      await sendBookToChaptarr(asApi(chaptarr), request('audiobook'));
+
+      assert.deepStrictEqual(monitoredEditions(), ['e:und']);
+    });
+
+    it('leaves the editions when none fits', async () => {
+      chaptarr.library = [book({ id: 30, mediaType: 'audiobook' })];
+      chaptarr.editions[30] = [
+        {
+          foreignEditionId: 'e:por',
+          title: 'Orgulho e Preconceito',
+          language: 'por',
+          monitored: true,
+        },
+      ];
+
+      await sendBookToChaptarr(asApi(chaptarr), request('audiobook'));
+
+      assert.deepStrictEqual(chaptarr.editionUpdates, []);
+      assert.deepStrictEqual(chaptarr.searched, [[30]]);
+    });
+
+    it('does not save editions that are right already', async () => {
+      chaptarr.library = [book({ id: 30, mediaType: 'ebook' })];
+      chaptarr.editions[30] = [
+        { foreignEditionId: 'e:spa', language: 'spa', monitored: false },
+        { foreignEditionId: 'e:eng', language: 'eng', monitored: true },
+      ];
+
+      await sendBookToChaptarr(asApi(chaptarr), request('ebook'));
+
+      assert.deepStrictEqual(chaptarr.editionUpdates, []);
+    });
+
+    it('saves repeated editions only once', async () => {
+      chaptarr.library = [book({ id: 30, mediaType: 'ebook' })];
+      chaptarr.editions[30] = [
+        { foreignEditionId: 'e:por', language: 'por', monitored: true },
+        { foreignEditionId: 'e:eng', language: 'eng', monitored: false },
+        { foreignEditionId: 'e:eng', language: 'eng', monitored: false },
+        { foreignEditionId: 'e:por', language: 'por', monitored: true },
+      ];
+
+      await sendBookToChaptarr(asApi(chaptarr), request('ebook'));
+
+      assert.deepStrictEqual(
+        chaptarr.editionUpdates[0][1].map((edition) => [
+          edition.foreignEditionId,
+          edition.monitored,
+        ]),
+        [
+          ['e:por', false],
+          ['e:eng', true],
+        ]
+      );
+    });
+
+    it('still monitors and searches when saving the edition fails', async () => {
+      chaptarr.library = [book({ id: 30, mediaType: 'ebook' })];
+      chaptarr.editions[30] = [
+        { foreignEditionId: 'e:por', language: 'por', monitored: true },
+        { foreignEditionId: 'e:eng', language: 'eng', monitored: false },
+      ];
+      chaptarr.editionUpdateError = new Error(
+        '[Chaptarr] Failed to update book editions: Sequence contains more than one matching element'
+      );
+
+      const result = await sendBookToChaptarr(
+        asApi(chaptarr),
+        request('ebook')
+      );
+
+      assert.strictEqual(result.bookId, 30);
+      assert.deepStrictEqual(chaptarr.monitored, [[[30], true]]);
+      assert.deepStrictEqual(chaptarr.searched, [[30]]);
+    });
+
+    it('leaves the editions alone without a language', async () => {
+      chaptarr.library = [book({ id: 30, mediaType: 'ebook' })];
+      chaptarr.editions[30] = [
+        { foreignEditionId: 'e:por', language: 'por', monitored: true },
+        { foreignEditionId: 'e:eng', language: 'eng', monitored: false },
+      ];
+
+      await sendBookToChaptarr(asApi(chaptarr), request('ebook', null));
+      await sendBookToChaptarr(
+        asApi(chaptarr),
+        request('ebook', { code: 'any' })
+      );
+
+      assert.deepStrictEqual(chaptarr.editionUpdates, []);
+      assert.deepStrictEqual(chaptarr.events, ['search:30', 'search:30']);
+    });
+
+    it('fixes the edition of a duplicate entry', async () => {
+      const author = {
+        id: 7,
+        authorName: 'Jane Austen',
+        foreignAuthorId: 'gr:1265',
+      };
+      chaptarr.lookupResults['Pride and Prejudice'] = [book({ author })];
+      chaptarr.library = [
+        book({ id: 50, authorId: 7, mediaType: 'ebook', author }),
+        book({ id: 51, authorId: 7, mediaType: 'ebook', author }),
+      ];
+      chaptarr.editions[50] = [
+        { foreignEditionId: 'e:spa', language: 'spa', monitored: true },
+        { foreignEditionId: 'e:eng', language: 'eng', monitored: false },
+      ];
+      chaptarr.addResult = () => {
+        throw Object.assign(new Error('[Chaptarr] Failed to add book'), {
+          cause: {
+            response: {
+              status: 500,
+              data: {
+                message:
+                  'Requested work gr:3060926 resolves to multiple local Ebook books.',
+              },
+            },
+          },
+        });
+      };
+
+      const result = await sendBookToChaptarr(asApi(chaptarr), {
+        olId: WORK_ID,
+        mediaType: 'ebook',
+        add,
+        language: english,
+      });
+
+      assert.strictEqual(result.bookId, 50);
+      assert.deepStrictEqual(monitoredEditions(50), ['e:eng']);
+      assert.deepStrictEqual(chaptarr.events, ['editions:50', 'search:50']);
+    });
+
+    it('adds a new book with the edition in the language and format', async () => {
+      chaptarr.lookupResults['Pride and Prejudice'] = [
+        book({
+          editions: [
+            { foreignEditionId: 'e:spa', language: 'spa', monitored: true },
+            { foreignEditionId: 'e:eng', language: 'eng', format: 'Paperback' },
+            {
+              foreignEditionId: 'e:eng-audio',
+              language: 'eng',
+              format: 'Audible Audio',
+            },
+          ],
+        }),
+      ];
+      let addedEditions: ChaptarrEdition[] | undefined;
+      chaptarr.addResult = (added) => {
+        addedEditions = added.editions;
+        return { status: 'pending', pendingId: 903 };
+      };
+      chaptarr.pendingOutcome = 'timeout';
+
+      await sendBookToChaptarr(asApi(chaptarr), {
+        olId: WORK_ID,
+        mediaType: 'audiobook',
+        add,
+        language: english,
+      });
+
+      assert.deepStrictEqual(
+        addedEditions
+          ?.filter((edition) => edition.monitored)
+          .map((edition) => edition.foreignEditionId),
+        ['e:eng-audio']
+      );
+    });
   });
 });
 

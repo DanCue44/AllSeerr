@@ -278,6 +278,34 @@ export const getBookFileCount = (book: ChaptarrBook): number =>
   book.statistics?.bookFileCount ?? (book.hasFiles ? 1 : 0);
 
 /**
+ * The editions without repeats of the same metadata edition, keeping the
+ * first of each. The kept one is monitored when any of its repeats is.
+ */
+export const uniqueEditions = (
+  editions: ChaptarrEdition[]
+): ChaptarrEdition[] => {
+  const byKey = new Map<string, ChaptarrEdition>();
+  const unique: ChaptarrEdition[] = [];
+
+  editions.forEach((edition, index) => {
+    const key =
+      edition.foreignEditionId ??
+      (edition.id !== undefined ? `id:${edition.id}` : `index:${index}`);
+    const kept = byKey.get(key);
+
+    if (!kept) {
+      const copy = { ...edition };
+      byKey.set(key, copy);
+      unique.push(copy);
+    } else if (edition.monitored) {
+      kept.monitored = true;
+    }
+  });
+
+  return unique;
+};
+
+/**
  * Format specific fields of an author, such as ebookQualityProfileId
  */
 const formatFields = (
@@ -429,6 +457,56 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
       throw new Error(`[Chaptarr] Failed to retrieve book: ${e.message}`, {
         cause: e,
       });
+    }
+  }
+
+  /**
+   * The editions of a library book. The monitored one decides the title
+   * Chaptarr shows and searches for.
+   */
+  public async getEditions(bookId: number): Promise<ChaptarrEdition[]> {
+    try {
+      const response = await this.axios.get<ChaptarrEdition[]>('/edition', {
+        params: { bookId },
+        timeout: UPDATE_TIMEOUT_MS,
+      });
+
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (e) {
+      throw new Error(`[Chaptarr] Failed to retrieve editions: ${e.message}`, {
+        cause: e,
+      });
+    }
+  }
+
+  /**
+   * Saves a library book with these editions, which is how Chaptarr changes
+   * the monitored edition (it has no edition monitor endpoint). The book is
+   * read again so only its editions change. Chaptarr refuses a book listing
+   * the same edition twice ("Sequence contains more than one matching
+   * element"), so pass the editions through uniqueEditions first.
+   */
+  public async updateBookEditions(
+    bookId: number,
+    editions: ChaptarrEdition[]
+  ): Promise<void> {
+    const book = await this.getBook(bookId);
+
+    if (!book) {
+      throw new Error(`[Chaptarr] Book ${bookId} not found`);
+    }
+
+    try {
+      await this.axios.put(
+        `/book/${bookId}`,
+        { ...book, editions },
+        { timeout: UPDATE_TIMEOUT_MS }
+      );
+    } catch (e) {
+      throw new Error(
+        `[Chaptarr] Failed to update book editions: ${getArrErrorMessage(e)}`,
+        { cause: e }
+      );
     }
   }
 

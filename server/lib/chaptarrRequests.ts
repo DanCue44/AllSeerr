@@ -3,12 +3,14 @@ import type ChaptarrAPI from '@server/api/servarr/chaptarr';
 import type {
   ChaptarrAddBookOptions,
   ChaptarrBook,
+  ChaptarrEdition,
   ChaptarrMediaType,
 } from '@server/api/servarr/chaptarr';
 import {
   getBookFileCount,
   isDuplicateBooksError,
   isMonitoredFor,
+  uniqueEditions,
 } from '@server/api/servarr/chaptarr';
 import type { BookLanguage } from '@server/constants/bookLanguages';
 import { BOOK_LANGUAGE_ANY } from '@server/constants/bookLanguages';
@@ -228,20 +230,97 @@ const getLibraryBookId = (
   return local?.[0]?.id;
 };
 
+// How edition formats name audiobooks and ebooks, as in "Audible Audio",
+// "Audio CD", "Kindle Edition" or "ebook"
+const AUDIOBOOK_FORMAT = /audio|audible|\bmp3\b|\bm4b\b|\bcd\b|cassette/i;
+const EBOOK_FORMAT = /e-?book|kindle|epub|digital|nook|kobo|\bpdf\b|mobi/i;
+// Edition languages Chaptarr's metadata could not determine
+const UNDETERMINED_LANGUAGES = ['und', 'undetermined'];
+
+const getEditionMediaType = (
+  edition: ChaptarrEdition
+): ChaptarrMediaType | undefined => {
+  if (edition.mediaType === 'ebook' || edition.mediaType === 'audiobook') {
+    return edition.mediaType;
+  }
+
+  const format = typeof edition.format === 'string' ? edition.format : '';
+
+  if (AUDIOBOOK_FORMAT.test(format)) {
+    return 'audiobook';
+  }
+
+  return EBOOK_FORMAT.test(format) || edition.isEbook === true
+    ? 'ebook'
+    : undefined;
+};
+
+const isUndeterminedEdition = (edition: ChaptarrEdition): boolean =>
+  typeof edition.language === 'string' &&
+  UNDETERMINED_LANGUAGES.includes(edition.language.trim().toLowerCase());
+
 /**
- * Monitors only the first edition in the requested language of a book about
- * to be added, when its metadata names the language of its editions
+ * The edition of a book to monitor for a language: one in the language and
+ * the format, then one in the language in any format, then one of an
+ * undetermined language under the work's title in the language. Of several
+ * equal ones a monitored one wins, then the first. Returns -1 when none
+ * fits or no language was requested.
+ */
+export const pickEditionInLanguage = (
+  editions: ChaptarrEdition[],
+  language?: BookLanguage,
+  mediaType?: ChaptarrMediaType,
+  title?: string
+): number => {
+  if (!language || language === BOOK_LANGUAGE_ANY) {
+    return -1;
+  }
+
+  const titles = title ? titleKeys(title) : [];
+  const tiers: ((edition: ChaptarrEdition) => boolean)[] = [
+    (edition) =>
+      !!mediaType &&
+      isEditionInLanguage(edition, language) &&
+      getEditionMediaType(edition) === mediaType,
+    (edition) => isEditionInLanguage(edition, language),
+    (edition) =>
+      titles.length > 0 &&
+      isUndeterminedEdition(edition) &&
+      titleKeys(edition.title).some((key) => titles.includes(key)),
+  ];
+
+  for (const fits of tiers) {
+    const indexes = editions
+      .map((edition, index) => (fits(edition) ? index : -1))
+      .filter((index) => index >= 0);
+
+    if (indexes.length) {
+      return indexes.find((index) => editions[index].monitored) ?? indexes[0];
+    }
+  }
+
+  return -1;
+};
+
+/**
+ * Monitors only the edition in the requested language of a book about to
+ * be added, when its metadata names the language of its editions
  */
 export const preferEditionInLanguage = (
   book: ChaptarrBook,
-  language?: BookLanguage
+  language?: BookLanguage,
+  mediaType?: ChaptarrMediaType,
+  title?: string
 ): ChaptarrBook => {
-  if (!language || language === BOOK_LANGUAGE_ANY || !book.editions?.length) {
+  if (!book.editions?.length) {
     return book;
   }
 
-  const index = book.editions.findIndex((edition) =>
-    isEditionInLanguage(edition, language)
+  const index = pickEditionInLanguage(
+    book.editions,
+    language,
+    mediaType,
+    title
   );
 
   if (index < 0) {
@@ -255,6 +334,95 @@ export const preferEditionInLanguage = (
       monitored: editionIndex === index,
     })),
   };
+};
+
+/**
+ * Makes the monitored edition of a library book one in the requested
+ * language, see pickEditionInLanguage. Chaptarr shows and searches for a
+ * book under the title of its monitored edition, so a book first added for
+ * another language would otherwise be grabbed in that language. The title
+ * of the work is only read when no edition names the language. A failure
+ * is only logged, the book is still monitored and searched for.
+ */
+const monitorEditionInLanguage = async (
+  chaptarr: ChaptarrAPI,
+  book: ChaptarrBook,
+  mediaType: ChaptarrMediaType,
+  language?: BookLanguage,
+  getTitle?: () => Promise<string | undefined>
+): Promise<void> => {
+  const bookId = book.id;
+
+  if (!bookId || !language || language === BOOK_LANGUAGE_ANY) {
+    return;
+  }
+
+  try {
+    const editions = await chaptarr.getEditions(bookId);
+
+    if (!editions.length) {
+      return;
+    }
+
+    let index = pickEditionInLanguage(editions, language, mediaType);
+
+    if (index < 0 && getTitle) {
+      index = pickEditionInLanguage(
+        editions,
+        language,
+        mediaType,
+        await getTitle()
+      );
+    }
+
+    if (index < 0) {
+      logger.warn('Chaptarr has no edition of the book in the language', {
+        label: 'Chaptarr',
+        bookId,
+        title: book.title,
+        mediaType,
+        language,
+      });
+      return;
+    }
+
+    const picked = uniqueEditions(
+      editions.map((edition, editionIndex) => ({
+        ...edition,
+        monitored: editionIndex === index,
+      }))
+    );
+    const current = uniqueEditions(editions);
+
+    if (
+      picked.every(
+        (edition, editionIndex) =>
+          !!edition.monitored === !!current[editionIndex].monitored
+      )
+    ) {
+      return;
+    }
+
+    await chaptarr.updateBookEditions(bookId, picked);
+
+    logger.info('Monitored the edition in the requested language', {
+      label: 'Chaptarr',
+      bookId,
+      edition: editions[index].title,
+      editionLanguage: editions[index].language,
+      mediaType,
+      language,
+    });
+  } catch (e) {
+    logger.warn('Could not monitor the edition in the requested language', {
+      label: 'Chaptarr',
+      bookId,
+      title: book.title,
+      mediaType,
+      language,
+      errorMessage: e.message,
+    });
+  }
 };
 
 /**
@@ -287,10 +455,18 @@ const tagAuthorLanguage = async (
   }
 };
 
+interface MonitorLanguage {
+  code?: BookLanguage;
+  tags?: ChaptarrLanguageTags;
+  // The title of the work in the language, for editions without one
+  getTitle?: () => Promise<string | undefined>;
+}
+
 /**
  * Monitors a library book for its format and searches for it, unless it
- * has its files already. The author is tagged with the requested language
- * first, so the search already follows it.
+ * has its files already. The edition in the requested language is
+ * monitored and the author tagged with the language first, so the search
+ * already follows it.
  */
 const monitorAndSearch = async (
   chaptarr: ChaptarrAPI,
@@ -298,11 +474,18 @@ const monitorAndSearch = async (
   mediaType: ChaptarrMediaType,
   search: boolean,
   format: ChaptarrFormatSettings,
-  languageTags?: ChaptarrLanguageTags
+  language: MonitorLanguage = {}
 ): Promise<ChaptarrBookResult> => {
   const bookId = book.id as number;
 
-  await tagAuthorLanguage(chaptarr, book, mediaType, languageTags);
+  await monitorEditionInLanguage(
+    chaptarr,
+    book,
+    mediaType,
+    language.code,
+    language.getTitle
+  );
+  await tagAuthorLanguage(chaptarr, book, mediaType, language.tags);
 
   if (!isMonitoredFor(book, mediaType)) {
     await chaptarr.setBooksMonitored([bookId], true);
@@ -481,8 +664,25 @@ export const sendBookToChaptarr = async (
   const { mediaType, add } = request;
   const search = add.searchForNewBook;
   const languageTags = request.language?.tags;
+  let wanted: ChaptarrWantedBook | undefined;
+  // The work's title, read from OpenLibrary only when an edition without a
+  // language has to be told apart by it
+  let workTitle: Promise<string | undefined> | undefined;
+  const getTitle = () => {
+    workTitle ??= wanted
+      ? Promise.resolve(wanted.title)
+      : getWantedBook(request.olId).then(
+          (work) => work.title,
+          () => undefined
+        );
+    return workTitle;
+  };
   const monitor = (book: ChaptarrBook) =>
-    monitorAndSearch(chaptarr, book, mediaType, search, add, languageTags);
+    monitorAndSearch(chaptarr, book, mediaType, search, add, {
+      code: request.language?.code,
+      tags: languageTags,
+      getTitle,
+    });
 
   if (request.bookId) {
     const book = await chaptarr.getBook(request.bookId);
@@ -497,8 +697,6 @@ export const sendBookToChaptarr = async (
   if (request.foreignBookId) {
     match = (await chaptarr.lookupBooks(request.foreignBookId))[0];
   }
-
-  let wanted: ChaptarrWantedBook | undefined;
 
   if (!match) {
     wanted = {
@@ -533,7 +731,12 @@ export const sendBookToChaptarr = async (
 
   try {
     result = await chaptarr.addBook(
-      preferEditionInLanguage(match, request.language?.code),
+      preferEditionInLanguage(
+        match,
+        request.language?.code,
+        mediaType,
+        wanted?.title
+      ),
       {
         ...add,
         tags:
@@ -661,8 +864,9 @@ export const getChaptarrLibraryBook = async (
 };
 
 /**
- * Readies a library book for an automatic search: monitored for its format,
- * its author monitored for that format too and tagged with the language.
+ * Readies a library book for an automatic search: its edition in the
+ * language monitored, the book monitored for its format, its author
+ * monitored for that format too and tagged with the language.
  * Chaptarr refuses automatic grabs otherwise, which a plain BookSearch on a
  * book added outside a request (or by LazyLibrarian before Chaptarr) runs
  * into. Each step only logs a failure, so the search still runs.
@@ -680,6 +884,7 @@ export const prepareChaptarrBookSearch = async (
       ? undefined
       : await getChaptarrLanguageTags(chaptarr, language, { bookId });
 
+  await monitorEditionInLanguage(chaptarr, book, mediaType, language);
   await tagAuthorLanguage(chaptarr, book, mediaType, languageTags);
 
   if (!isMonitoredFor(book, mediaType)) {

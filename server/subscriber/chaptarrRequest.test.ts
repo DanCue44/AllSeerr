@@ -174,6 +174,8 @@ mock.method(
 mock.method(ChaptarrAPI.prototype, 'getBook', async (bookId: number) =>
   library.find((book) => book.id === bookId)
 );
+// The library books here list no editions, so none is switched
+mock.method(ChaptarrAPI.prototype, 'getEditions', async () => []);
 mock.method(
   ChaptarrAPI.prototype,
   'addBook',
