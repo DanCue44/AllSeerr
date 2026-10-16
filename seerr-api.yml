@@ -514,9 +514,9 @@ components:
           description: ISO 639-1 code of the language books are requested in, unless a user sets their own. `any` takes whichever language is found. With Chaptarr, AllSeerr keeps a tag and a release profile for each requested language.
         bookService:
           type: string
-          enum: [chaptarr, lazylibrarian]
+          enum: [chaptarr, talearr, lazylibrarian]
           example: chaptarr
-          description: Service book requests are sent to. When it is not set or not configured, Chaptarr is used when configured, otherwise LazyLibrarian.
+          description: Service book requests are sent to. TaleArr, a Chaptarr fork, uses the Chaptarr servers. When it is not set or not configured, Chaptarr is used when configured, otherwise LazyLibrarian.
         googleBooksApiKey:
           type: string
           example: yourapikey
@@ -1376,7 +1376,7 @@ components:
           example: false
         bookService:
           type: string
-          enum: [chaptarr, lazylibrarian]
+          enum: [chaptarr, talearr, lazylibrarian]
           description: Service book requests are sent to, missing when books cannot be requested
           example: chaptarr
         bookLanguage:
@@ -2726,6 +2726,11 @@ components:
           description: The arr would grab the release by itself
         rejections:
           type: array
+          items:
+            type: string
+        rejectionLabels:
+          type: array
+          description: TaleArr only, short labels of the rejections such as Language or Pack
           items:
             type: string
         customFormatScore:
@@ -5641,6 +5646,30 @@ paths:
                   isChaptarr:
                     type: boolean
                     description: False for other Readarr compatible servers, which have no per format profiles and root folders
+                  isTalearr:
+                    type: boolean
+                    description: True when the server is TaleArr, the Chaptarr fork
+                  talearr:
+                    type: object
+                    description: What TaleArr reports, only for TaleArr
+                    properties:
+                      version:
+                        type: string
+                        example: 0.11.0
+                      grabPolicy:
+                        type: object
+                        properties:
+                          abridgedPolicy:
+                            type: string
+                            enum: [unabridgedOnly, preferUnabridged, any]
+                          allowBundles:
+                            type: boolean
+                          failRejectedImports:
+                            type: boolean
+                          maxAutomaticRetries:
+                            type: number
+                      metadataProblem:
+                        type: string
                   profiles:
                     type: array
                     items:
