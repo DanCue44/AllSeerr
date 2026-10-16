@@ -905,6 +905,58 @@ describe('arr actions for Chaptarr', () => {
     );
   });
 
+  it('names TaleArr and shows its rejection labels only when it is the book service', async () => {
+    handlers['chaptarr GET /release'] = () => ({
+      releases: [
+        {
+          guid: 'de',
+          indexerId: 1,
+          approved: false,
+          rejections: ['Wanted language is English, found German'],
+          rejectionDetails: [
+            {
+              reason: 'Wanted language is English, found German',
+              label: 'Language',
+              source: 'LanguageSpecification',
+            },
+          ],
+        },
+      ],
+      hiddenReleases: [],
+    });
+    const media = await seedBook();
+    const admin = await loginAs('admin@seerr.dev');
+    const settings = getSettings();
+    const prior = settings.main.bookService;
+
+    try {
+      settings.main.bookService = 'talearr';
+      const info = await admin
+        .get(`/media/${media.id}/arr`)
+        .query({ bookFormat: 'ebook' });
+      const talearr = await admin
+        .get(`/media/${media.id}/arr/releases`)
+        .query({ bookFormat: 'ebook' });
+
+      assert.strictEqual(info.body.serviceName, 'TaleArr');
+      assert.deepStrictEqual(talearr.body.results[0].rejectionLabels, [
+        'Language',
+      ]);
+
+      settings.main.bookService = 'chaptarr';
+      const chaptarr = await admin
+        .get(`/media/${media.id}/arr/releases`)
+        .query({ bookFormat: 'ebook' });
+
+      assert.strictEqual(chaptarr.body.results[0].rejectionLabels, undefined);
+      assert.deepStrictEqual(chaptarr.body.results[0].rejections, [
+        'Wanted language is English, found German',
+      ]);
+    } finally {
+      settings.main.bookService = prior;
+    }
+  });
+
   it('grabs a release for the book and its author', async () => {
     handlers['chaptarr POST /release'] = () => ({});
     const media = await seedBook();

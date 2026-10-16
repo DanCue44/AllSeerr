@@ -17,6 +17,10 @@ import {
   getEffectiveBookLanguage,
   isBookLanguage,
 } from '@server/constants/bookLanguages';
+import {
+  bookServiceName,
+  isTalearrService,
+} from '@server/constants/bookService';
 import { IssueStatus } from '@server/constants/issue';
 import type { BookFormat } from '@server/constants/media';
 import { MediaStatus, MediaType } from '@server/constants/media';
@@ -95,7 +99,17 @@ const NO_FILE_REASON = 'There is no file to replace.';
  */
 export const normalizeRelease = (
   raw: ServarrRelease,
-  { hidden = false }: { hidden?: boolean } = {}
+  {
+    hidden = false,
+    serviceName = 'Chaptarr',
+    rejectionLabels = false,
+  }: {
+    hidden?: boolean;
+    // The book service a hidden release was filtered by
+    serviceName?: string;
+    // TaleArr labels every rejection, such as "Language" or "Pack"
+    rejectionLabels?: boolean;
+  } = {}
 ): ArrRelease => {
   const protocol =
     raw.protocol === 'torrent' || raw.protocol === 'usenet'
@@ -108,6 +122,17 @@ export const normalizeRelease = (
         : (rejection?.reason ?? rejection?.message ?? '')
     )
     .filter((rejection) => rejection.length > 0);
+  const labels = rejectionLabels
+    ? [
+        ...new Set(
+          (raw.rejectionDetails ?? [])
+            .map((detail) =>
+              typeof detail?.label === 'string' ? detail.label.trim() : ''
+            )
+            .filter((label) => label.length > 0)
+        ),
+      ]
+    : [];
   const ageHours =
     typeof raw.ageHours === 'number'
       ? raw.ageHours
@@ -135,8 +160,9 @@ export const normalizeRelease = (
     approved: !hidden && !!raw.approved,
     rejections:
       hidden && rejections.length === 0
-        ? ['Hidden by a release filter in Chaptarr']
+        ? [`Hidden by a release filter in ${serviceName}`]
         : rejections,
+    ...(labels.length > 0 && { rejectionLabels: labels }),
     ...(typeof raw.customFormatScore === 'number' && {
       customFormatScore: raw.customFormatScore,
     }),
@@ -226,7 +252,10 @@ export const getArrService = (
     default:
       return getSettings().bookService === 'lazylibrarian'
         ? { service: 'lazylibrarian', serviceName: 'LazyLibrarian' }
-        : { service: 'chaptarr', serviceName: 'Chaptarr' };
+        : {
+            service: 'chaptarr',
+            serviceName: bookServiceName(getSettings().bookService),
+          };
   }
 };
 
@@ -540,8 +569,11 @@ const resolveChaptarr = async (
     settings.chaptarr.find((chaptarr) => chaptarr.id === media.serviceId) ??
     getDefaultChaptarr(settings.chaptarr);
 
+  const serviceName = bookServiceName(settings.bookService);
+  const talearr = isTalearrService(settings.bookService);
+
   if (!server) {
-    throw new ArrActionError(409, 'No Chaptarr server is set up.');
+    throw new ArrActionError(409, `No ${serviceName} server is set up.`);
   }
 
   const chaptarr = new ChaptarrAPI({
@@ -588,7 +620,7 @@ const resolveChaptarr = async (
   if (!book?.id) {
     throw new ArrActionError(
       404,
-      `The ${formatName(format)} of this book is not in Chaptarr.`
+      `The ${formatName(format)} of this book is not in ${serviceName}.`
     );
   }
 
@@ -597,7 +629,7 @@ const resolveChaptarr = async (
 
   return {
     service: 'chaptarr',
-    serviceName: 'Chaptarr',
+    serviceName,
     title: book.title,
     hasFile: getBookFileCount(book) > 0,
     unavailable: {},
@@ -626,8 +658,16 @@ const resolveChaptarr = async (
       const { releases, hidden } = await chaptarr.getReleases(bookId);
 
       return [
-        ...releases.map((release) => normalizeRelease(release)),
-        ...hidden.map((release) => normalizeRelease(release, { hidden: true })),
+        ...releases.map((release) =>
+          normalizeRelease(release, { serviceName, rejectionLabels: talearr })
+        ),
+        ...hidden.map((release) =>
+          normalizeRelease(release, {
+            hidden: true,
+            serviceName,
+            rejectionLabels: talearr,
+          })
+        ),
       ]
         .filter((release) => release.guid)
         .sort(compareReleases);

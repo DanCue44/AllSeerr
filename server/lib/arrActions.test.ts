@@ -187,6 +187,53 @@ describe('normalizeRelease', () => {
     ]);
   });
 
+  it('adds the TaleArr rejection labels only when asked to', () => {
+    const rejected: ServarrRelease = {
+      ...chaptarrRelease,
+      approved: false,
+      rejections: [
+        'Wanted language is English, found German',
+        'Release is a pack of 12 books',
+        'Wanted language is English, found French',
+      ],
+      rejectionDetails: [
+        {
+          reason: 'Wanted language is English, found German',
+          label: 'Language',
+          source: 'LanguageSpecification',
+        },
+        { reason: 'Release is a pack of 12 books', label: 'Pack' },
+        {
+          reason: 'Wanted language is English, found French',
+          label: ' Language ',
+        },
+        // Stock Chaptarr sends details without labels
+        { reason: 'Size', category: 'Size' },
+      ],
+    };
+
+    assert.deepStrictEqual(
+      normalizeRelease(rejected, { rejectionLabels: true }).rejectionLabels,
+      ['Language', 'Pack']
+    );
+    assert.strictEqual(normalizeRelease(rejected).rejectionLabels, undefined);
+    assert.strictEqual(
+      normalizeRelease(chaptarrRelease, { rejectionLabels: true })
+        .rejectionLabels,
+      undefined
+    );
+  });
+
+  it('names the book service that hid a release', () => {
+    assert.deepStrictEqual(
+      normalizeRelease(chaptarrRelease, {
+        hidden: true,
+        serviceName: 'TaleArr',
+      }).rejections,
+      ['Hidden by a release filter in TaleArr']
+    );
+  });
+
   it('works out the age from the publish date when ageHours is missing', () => {
     const release = normalizeRelease({
       guid: 'g',

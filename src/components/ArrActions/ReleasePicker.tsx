@@ -416,7 +416,7 @@ const ReleasePicker = ({
                       {release.rejections.length > 0 && (
                         <details className="group mt-1.5 text-xs">
                           <summary
-                            className={`flex cursor-pointer list-none items-center gap-1 ${
+                            className={`flex cursor-pointer list-none flex-wrap items-center gap-1 ${
                               ambient ? 'text-as-warn' : 'text-yellow-500'
                             }`}
                           >
@@ -424,6 +424,18 @@ const ReleasePicker = ({
                             {intl.formatMessage(messages.rejections, {
                               count: release.rejections.length,
                             })}
+                            {release.rejectionLabels?.map((label) => (
+                              <span
+                                key={`${key}-label-${label}`}
+                                className={
+                                  ambient
+                                    ? 'rounded border border-as-warn/40 px-1.5 py-px text-[11px] font-semibold'
+                                    : 'rounded bg-yellow-900/60 px-1.5 py-px text-[11px] font-semibold text-yellow-200'
+                                }
+                              >
+                                {label}
+                              </span>
+                            ))}
                           </summary>
                           <ul
                             className={`mt-1 list-disc space-y-0.5 pl-6 ${faint}`}
