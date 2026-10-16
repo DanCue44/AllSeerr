@@ -115,6 +115,14 @@ const AmbientShell = ({ children }: LayoutProps) => {
     revalidateOnMount: true,
   });
 
+  // Only admins see downloads, and the count reads every arr's queue
+  const { data: downloadsResponse } = useSWR<{ attention: number }>(
+    hasPermission(Permission.MANAGE_REQUESTS)
+      ? '/api/v1/downloads/count'
+      : null,
+    { revalidateOnMount: true, refreshInterval: 60_000 }
+  );
+
   const pendingRequestsCount: number = requestResponse?.pending ?? 0;
   const openIssuesCount: number = issueResponse?.open ?? 0;
 
@@ -184,6 +192,13 @@ const AmbientShell = ({ children }: LayoutProps) => {
       hasPermission(Permission.MANAGE_REQUESTS)
     ) {
       return pendingRequestsCount;
+    }
+
+    if (
+      link.messagesKey === 'downloads' &&
+      (downloadsResponse?.attention ?? 0) > 0
+    ) {
+      return downloadsResponse?.attention ?? 0;
     }
 
     if (

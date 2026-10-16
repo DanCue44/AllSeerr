@@ -44,6 +44,7 @@ import calendarRoutes from './calendar';
 import collectionRoutes from './collection';
 import coverArtRoutes from './coverart';
 import discoverRoutes, { createTmdbWithRegionLanguage } from './discover';
+import downloadRoutes from './downloads';
 import favoriteRoutes from './favorite';
 import issueRoutes from './issue';
 import issueCommentRoutes from './issueComment';
@@ -155,6 +156,11 @@ router.use(
   '/rollover',
   isAuthenticated(Permission.MANAGE_REQUESTS),
   rolloverRoutes
+);
+router.use(
+  '/downloads',
+  isAuthenticated(Permission.MANAGE_REQUESTS),
+  downloadRoutes
 );
 router.use('/watchlist', isAuthenticated(), watchlistRoutes);
 router.use('/favorite', isAuthenticated(), favoriteRoutes);

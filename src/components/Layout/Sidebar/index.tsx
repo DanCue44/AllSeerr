@@ -7,6 +7,7 @@ import defineMessages from '@app/utils/defineMessages';
 import { SPACES } from '@app/utils/spaces';
 import { Transition, TransitionChild } from '@headlessui/react';
 import {
+  ArrowDownTrayIcon,
   BookOpenIcon,
   BuildingLibraryIcon,
   CalendarDaysIcon,
@@ -34,6 +35,7 @@ export const menuMessages = defineMessages('components.Layout.Sidebar', {
   browsebooks: 'Books',
   library: 'Library',
   requests: 'Requests',
+  downloads: 'Downloads',
   calendar: 'Calendar',
   blocklist: 'Blocklist',
   issues: 'Issues',
@@ -107,6 +109,13 @@ export const SidebarLinks: SidebarLinkProps[] = [
     messagesKey: 'requests',
     svgIcon: <ClockIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/requests/,
+  },
+  {
+    href: '/downloads',
+    messagesKey: 'downloads',
+    svgIcon: <ArrowDownTrayIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/downloads/,
+    requiredPermission: Permission.MANAGE_REQUESTS,
   },
   {
     href: '/calendar',

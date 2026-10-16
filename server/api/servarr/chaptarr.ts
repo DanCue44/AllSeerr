@@ -6,7 +6,7 @@ import type {
   ServarrStatusMessage,
   Tag,
 } from './base';
-import ServarrBase, { getArrErrorMessage } from './base';
+import ServarrBase from './base';
 
 export type ChaptarrMediaType = 'ebook' | 'audiobook';
 
@@ -984,35 +984,6 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
       throw new Error(`[Chaptarr] Failed to retrieve queue: ${e.message}`, {
         cause: e,
       });
-    }
-  }
-
-  /**
-   * Removes a download from the queue and from the download client. With
-   * blocklist, its release is never grabbed again. skipRedownload keeps
-   * Chaptarr from searching by itself, for callers that search after.
-   */
-  public async removeQueueItem(
-    queueId: number,
-    {
-      blocklist,
-      removeFromClient = true,
-      skipRedownload = true,
-    }: {
-      blocklist: boolean;
-      removeFromClient?: boolean;
-      skipRedownload?: boolean;
-    }
-  ): Promise<void> {
-    try {
-      await this.axios.delete(`/queue/${queueId}`, {
-        params: { removeFromClient, blocklist, skipRedownload },
-      });
-    } catch (e) {
-      throw new Error(
-        `[Chaptarr] Failed to remove the download from the queue: ${getArrErrorMessage(e)}`,
-        { cause: e }
-      );
     }
   }
 

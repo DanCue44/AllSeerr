@@ -6,7 +6,13 @@ type LinkKey = SidebarLinkProps['messagesKey'];
 
 // Links that live under "More" so the bar stays short. Everything else in
 // the sidebar is shown directly, so new sidebar entries appear automatically.
-const OVERFLOW_KEYS: LinkKey[] = ['blocklist', 'issues', 'users', 'settings'];
+const OVERFLOW_KEYS: LinkKey[] = [
+  'downloads',
+  'blocklist',
+  'issues',
+  'users',
+  'settings',
+];
 
 // The sidebar link of each space
 export const SPACE_LINK_KEYS: Record<SpaceKey, LinkKey> = {

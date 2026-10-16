@@ -175,6 +175,9 @@ export const getArrErrorMessage = (e: unknown): string => {
   return error?.message ?? String(e);
 };
 
+// Downloads read from a queue at once, more than a queue holds
+const QUEUE_RECORDS_PAGE_SIZE = 1000;
+
 interface QueueResponse<QueueItemAppendT> {
   page: number;
   pageSize: number;
@@ -286,6 +289,57 @@ class ServarrBase<QueueItemAppendT> extends ExternalAPI {
       );
     }
   };
+
+  /**
+   * Every download in the queue as the arr sends it, with what params asks
+   * it to include, such as includeMovie. getQueue reads only the first page.
+   */
+  public async getQueueRecords<T>(
+    params: Record<string, unknown> = {}
+  ): Promise<T[]> {
+    try {
+      const response = await this.axios.get<{ records?: T[] }>('/queue', {
+        params: { page: 1, pageSize: QUEUE_RECORDS_PAGE_SIZE, ...params },
+      });
+
+      return Array.isArray(response.data?.records) ? response.data.records : [];
+    } catch (e) {
+      throw new Error(
+        `[${this.apiName}] Failed to retrieve queue: ${e.message}`,
+        { cause: e }
+      );
+    }
+  }
+
+  /**
+   * Removes a download from the queue and, unless told not to, from the
+   * download client. With blocklist, its release is never grabbed again.
+   * skipRedownload keeps the arr from searching by itself, for callers that
+   * search after.
+   */
+  public async removeQueueItem(
+    queueId: number,
+    {
+      blocklist,
+      removeFromClient = true,
+      skipRedownload = true,
+    }: {
+      blocklist: boolean;
+      removeFromClient?: boolean;
+      skipRedownload?: boolean;
+    }
+  ): Promise<void> {
+    try {
+      await this.axios.delete(`/queue/${queueId}`, {
+        params: { removeFromClient, blocklist, skipRedownload },
+      });
+    } catch (e) {
+      throw new Error(
+        `[${this.apiName}] Failed to remove the download from the queue: ${getArrErrorMessage(e)}`,
+        { cause: e }
+      );
+    }
+  }
 
   public getTags = async (): Promise<Tag[]> => {
     try {
