@@ -165,3 +165,36 @@ export const getRequestDownloads = (
   }
 ): Media['downloadStatus'] =>
   request.recording ? [] : request.media?.[getRequestDownloadKey(request)];
+
+/**
+ * The format a book request is shown as: the ebook, the audiobook, or for a
+ * recording request the recording asked for, such as the abridged audiobook
+ */
+export type BookRequestFormat =
+  | 'ebook'
+  | 'audiobook'
+  | 'unabridgedaudiobook'
+  | 'abridgedaudiobook'
+  | 'audiobookrecording';
+
+export const getBookRequestFormat = (request: {
+  isAudiobook?: boolean;
+  recording?: string | null;
+}): BookRequestFormat => {
+  if (!request.isAudiobook) {
+    return 'ebook';
+  }
+
+  switch (request.recording) {
+    case undefined:
+    case null:
+    case '':
+      return 'audiobook';
+    case 'unabridged':
+      return 'unabridgedaudiobook';
+    case 'abridged':
+      return 'abridgedaudiobook';
+    default:
+      return 'audiobookrecording';
+  }
+};

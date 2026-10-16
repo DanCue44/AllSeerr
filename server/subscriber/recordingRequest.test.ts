@@ -415,7 +415,7 @@ describe('recording requests', () => {
         (call) =>
           call.arguments[0] === Notification.MEDIA_AVAILABLE &&
           call.arguments[1]?.event ===
-            'Audiobook Recording Request Now Available'
+            'Unabridged Audiobook Request Now Available'
       )
     );
   });
@@ -520,6 +520,129 @@ describe('recording requests', () => {
       (await findRequest(res.body.id)).status,
       MediaRequestStatus.APPROVED
     );
+  });
+});
+
+describe('abridged recording requests', () => {
+  const abridgedBody = { ...unabridgedBody, recording: 'abridged' };
+
+  it('goes through approval to TaleArr and names the abridged audiobook', async () => {
+    // The library has the unabridged audiobook this time
+    await seedAvailableAudiobook();
+    addImpl = async () => ({
+      status: 'created',
+      searchQueued: true,
+      recording: recording({
+        narrators: ['D.W. Moffett'],
+        abridged: 'abridged',
+      }),
+    });
+    await setRequester(Permission.REQUEST);
+    const user = await loginAs('demo@seerr.dev');
+
+    const created = await user.post('/request').send(abridgedBody);
+    assert.strictEqual(created.status, 201, created.body.message);
+    assert.strictEqual(created.body.status, MediaRequestStatus.PENDING);
+    assert.strictEqual(created.body.recording, 'abridged');
+    await settleTestBackgroundTasks();
+    assert.strictEqual(addCalls.length, 0);
+
+    const admin = await loginAs('admin@seerr.dev');
+    const approved = await admin.post(`/request/${created.body.id}/approve`);
+    assert.strictEqual(approved.status, 200, approved.body.message);
+
+    await waitFor(
+      async () => (await findRequest(created.body.id)).recordingBookId === 4100
+    );
+    assert.deepStrictEqual(addCalls, [
+      {
+        bookId: AUDIOBOOK_ID,
+        kind: 'abridged',
+        search: true,
+        requestedBy: 'allseerr',
+        externalRef: String(created.body.id),
+      },
+    ]);
+    assert.strictEqual(
+      (await findRequest(created.body.id)).status,
+      MediaRequestStatus.APPROVED
+    );
+
+    // The scan finds the files of the abridged recording
+    await syncRecordingRequests(
+      [0],
+      [
+        {
+          id: 4100,
+          title: 'The Firm',
+          foreignBookId: 'hc:149559',
+          monitored: true,
+          mediaType: 'audiobook',
+          statistics: { bookFileCount: 1 },
+        },
+        {
+          id: AUDIOBOOK_ID,
+          title: 'The Firm',
+          foreignBookId: 'hc:149559',
+          monitored: true,
+          mediaType: 'audiobook',
+          statistics: { bookFileCount: 1 },
+        },
+      ]
+    );
+    await waitFor(
+      async () =>
+        (await findRequest(created.body.id)).status ===
+        MediaRequestStatus.COMPLETED
+    );
+
+    const available = notificationManagerMock.calls.find(
+      (call) => call.arguments[0] === Notification.MEDIA_AVAILABLE
+    );
+    assert.ok(available);
+    assert.strictEqual(
+      available.arguments[1]?.event,
+      'Abridged Audiobook Request Now Available'
+    );
+    assert.deepStrictEqual(
+      available.arguments[1]?.extra?.find(
+        (field: { name: string }) => field.name === 'Recording'
+      ),
+      { name: 'Recording', value: 'Abridged, narrated by D.W. Moffett' }
+    );
+    assert.strictEqual((await findMedia()).statusAudio, MediaStatus.AVAILABLE);
+  });
+
+  it('is refused while the same abridged recording is requested', async () => {
+    await seedAvailableAudiobook();
+    await setRequester(Permission.REQUEST);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const first = await agent.post('/request').send(abridgedBody);
+    assert.strictEqual(first.status, 201, first.body.message);
+    const again = await agent.post('/request').send(abridgedBody);
+    assert.strictEqual(again.status, 409);
+
+    // The unabridged recording is asked for on its own
+    const unabridged = await agent.post('/request').send(unabridgedBody);
+    assert.strictEqual(unabridged.status, 201, unabridged.body.message);
+  });
+
+  it('can be declined and asked for again', async () => {
+    await seedAvailableAudiobook();
+    await setRequester(Permission.REQUEST);
+    const user = await loginAs('demo@seerr.dev');
+    const created = await user.post('/request').send(abridgedBody);
+
+    const admin = await loginAs('admin@seerr.dev');
+    const declined = await admin
+      .post(`/request/${created.body.id}/decline`)
+      .send({ reason: 'Not now' });
+    assert.strictEqual(declined.status, 200, declined.body.message);
+    assert.strictEqual(addCalls.length, 0);
+
+    const again = await user.post('/request').send(abridgedBody);
+    assert.strictEqual(again.status, 201, again.body.message);
   });
 });
 
@@ -667,6 +790,31 @@ describe('book recordings', () => {
     assert.strictEqual(info.requests.length, 1);
     assert.strictEqual(info.requests[0].status, MediaRequestStatus.PENDING);
     assert.strictEqual(info.requests[0].recording, 'unabridged');
+  });
+
+  it('offers the abridged recording when the library has the unabridged one', async () => {
+    const media = await seedAvailableAudiobook();
+    const admin = await getRepository(User).findOneOrFail({
+      where: { email: 'admin@seerr.dev' },
+    });
+    recordingsView = {
+      recordings: [{ ...primary, abridged: 'unabridged' }],
+      candidates: [
+        {
+          editionId: 28707,
+          narrators: ['D.W. Moffett'],
+          abridged: 'abridged',
+        },
+      ],
+    };
+
+    const info = await getBookRecordings(media, admin);
+
+    assert.deepStrictEqual(info.options.abridged, { available: true });
+    assert.deepStrictEqual(info.options.unabridged, {
+      available: false,
+      reason: 'have',
+    });
   });
 
   it('says why recordings are not offered', async () => {

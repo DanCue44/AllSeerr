@@ -14,6 +14,7 @@ import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import {
+  getBookRequestFormat,
   getRequestDownloads,
   getRequestMediaStatus,
 } from '@app/utils/bookRecordings';
@@ -63,6 +64,8 @@ const messages = defineMessages('components.AllSeerr.RequestList', {
   typeBook: 'Book',
   typeAudiobook: 'Audiobook',
   typeAudiobookRecording: 'Audiobook Recording',
+  typeUnabridgedAudiobook: 'Unabridged Audiobook',
+  typeAbridgedAudiobook: 'Abridged Audiobook',
   typeDate: '{type} · {date}',
   waitingApproval: 'Waiting for approval',
   downloadingProgress: 'Downloading {progress}%',
@@ -503,11 +506,13 @@ const typeMessage = (request: NonFunctionProperties<MediaRequest>) =>
         : messages.typeTv
       : request.type === 'music'
         ? messages.typeAlbum
-        : request.isAudiobook
-          ? request.recording
-            ? messages.typeAudiobookRecording
-            : messages.typeAudiobook
-          : messages.typeBook;
+        : {
+            ebook: messages.typeBook,
+            audiobook: messages.typeAudiobook,
+            unabridgedaudiobook: messages.typeUnabridgedAudiobook,
+            abridgedaudiobook: messages.typeAbridgedAudiobook,
+            audiobookrecording: messages.typeAudiobookRecording,
+          }[getBookRequestFormat(request)];
 
 /** First line of the card: "{Type} · {short date}". */
 const TypeLine = ({
@@ -889,13 +894,7 @@ const RequestCard = ({
       : undefined
     : isBook(title)
       ? [
-          intl.formatMessage(
-            requestData.isAudiobook
-              ? requestData.recording
-                ? globalMessages.audiobookrecording
-                : globalMessages.audiobook
-              : globalMessages.ebook
-          ),
+          intl.formatMessage(globalMessages[getBookRequestFormat(requestData)]),
           title.authors.map((author) => author.name).join(', '),
         ]
           .filter(Boolean)

@@ -9,6 +9,7 @@ import useBookLanguages from '@app/hooks/useBookLanguages';
 import useRequestOverride from '@app/hooks/useRequestOverride';
 import { useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
+import { getBookRequestFormat } from '@app/utils/bookRecordings';
 import defineMessages from '@app/utils/defineMessages';
 import {
   CalendarIcon,
@@ -236,11 +237,7 @@ const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
                 <span className="mr-1">
                   <Badge badgeType="primary">
                     {intl.formatMessage(
-                      request.isAudiobook
-                        ? request.recording
-                          ? globalMessages.audiobookrecording
-                          : globalMessages.audiobook
-                        : globalMessages.ebook
+                      globalMessages[getBookRequestFormat(request)]
                     )}
                   </Badge>
                 </span>

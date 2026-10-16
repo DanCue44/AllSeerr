@@ -29,11 +29,15 @@ export interface NoBookEndsItem {
   status: MediaStatus;
   statusAudio: MediaStatus;
   // TaleArr only, once the audiobook is available there: its recordings,
-  // whether the user may ask for another one, the unabridged one in
-  // particular, and the recording requests made for the book
+  // whether the user may ask for another one, the unabridged or abridged
+  // one in particular, and the recording requests made for the book
   recordings?: BookRecordingSummary[];
   canRequestRecording?: boolean;
+  // TaleArr knows an unabridged edition and keeps no unabridged recording
   canRequestUnabridged?: boolean;
+  // TaleArr knows an abridged edition and keeps no abridged recording, so
+  // the library copy is unabridged or not known to be either
+  canRequestAbridged?: boolean;
   recordingRequests?: RecordingRequestSummary[];
 }
 
@@ -66,6 +70,7 @@ export const withNoBookEndsRecordings = async (
     recordings: info.recordings,
     canRequestRecording: info.canRequest,
     canRequestUnabridged: info.canRequest && info.options.unabridged.available,
+    canRequestAbridged: info.canRequest && info.options.abridged.available,
     recordingRequests: info.requests,
   };
 };

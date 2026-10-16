@@ -13,6 +13,7 @@ import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import {
+  getBookRequestFormat,
   getRequestDownloads,
   getRequestMediaStatus,
 } from '@app/utils/bookRecordings';
@@ -594,11 +595,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                   </span>
                   <Badge badgeType="primary">
                     {intl.formatMessage(
-                      requestData.isAudiobook
-                        ? requestData.recording
-                          ? globalMessages.audiobookrecording
-                          : globalMessages.audiobook
-                        : globalMessages.ebook
+                      globalMessages[getBookRequestFormat(requestData)]
                     )}
                   </Badge>
                 </div>

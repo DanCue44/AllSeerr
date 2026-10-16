@@ -232,7 +232,11 @@ describe('GET /nobookends/item/:absItemId', () => {
     assert.strictEqual(searchCalls, 0);
   });
 
-  it('adds the recordings of the audiobook with TaleArr', async () => {
+  // Answers the item of a book whose audiobook TaleArr has, with the
+  // recordings and editions TaleArr knows
+  const getItemWithTalearr = async (
+    view: Awaited<ReturnType<ChaptarrAPI['getTalearrRecordings']>>
+  ) => {
     const settings = getSettings();
     settings.chaptarr = [
       {
@@ -260,26 +264,7 @@ describe('GET /nobookends/item/:absItemId', () => {
     const recordings = mock.method(
       ChaptarrAPI.prototype,
       'getTalearrRecordings',
-      async () => ({
-        recordings: [
-          {
-            bookId: 3401,
-            role: 'primary' as const,
-            editionId: 1,
-            narrators: ['D.W. Moffett'],
-            abridged: 'abridged' as const,
-            monitored: true,
-            hasFiles: true,
-          },
-        ],
-        candidates: [
-          {
-            editionId: 2,
-            narrators: ['Scott Brick'],
-            abridged: 'unabridged' as const,
-          },
-        ],
-      })
+      async () => view
     );
 
     try {
@@ -290,18 +275,93 @@ describe('GET /nobookends/item/:absItemId', () => {
       });
       const agent = await login();
 
-      const res = await agent.get(`/nobookends/item/${AUDIOBOOK_ITEM}`);
-      assert.strictEqual(res.status, 200);
-      assert.strictEqual(res.body.canRequestRecording, true);
-      assert.strictEqual(res.body.canRequestUnabridged, true);
-      assert.deepStrictEqual(res.body.recordingRequests, []);
-      assert.strictEqual(res.body.recordings[0].abridged, 'abridged');
-      assert.strictEqual(res.body.recordings[0].status, MediaStatus.AVAILABLE);
+      return await agent.get(`/nobookends/item/${AUDIOBOOK_ITEM}`);
     } finally {
       recordings.mock.restore();
       settings.chaptarr = [];
       settings.main.bookService = undefined;
     }
+  };
+
+  it('adds the recordings of the audiobook with TaleArr', async () => {
+    const res = await getItemWithTalearr({
+      recordings: [
+        {
+          bookId: 3401,
+          role: 'primary',
+          editionId: 1,
+          narrators: ['D.W. Moffett'],
+          abridged: 'abridged',
+          monitored: true,
+          hasFiles: true,
+        },
+      ],
+      candidates: [
+        {
+          editionId: 2,
+          narrators: ['Scott Brick'],
+          abridged: 'unabridged',
+        },
+      ],
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.canRequestRecording, true);
+    assert.strictEqual(res.body.canRequestUnabridged, true);
+    // The library has the abridged one already
+    assert.strictEqual(res.body.canRequestAbridged, false);
+    assert.deepStrictEqual(res.body.recordingRequests, []);
+    assert.strictEqual(res.body.recordings[0].abridged, 'abridged');
+    assert.strictEqual(res.body.recordings[0].status, MediaStatus.AVAILABLE);
+  });
+
+  it('offers the abridged recording of an unabridged audiobook', async () => {
+    const res = await getItemWithTalearr({
+      recordings: [
+        {
+          bookId: 3401,
+          role: 'primary',
+          editionId: 1,
+          narrators: ['Scott Brick'],
+          abridged: 'unabridged',
+          monitored: true,
+          hasFiles: true,
+        },
+      ],
+      candidates: [
+        {
+          editionId: 3,
+          narrators: ['D.W. Moffett'],
+          abridged: 'abridged',
+        },
+      ],
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.canRequestRecording, true);
+    assert.strictEqual(res.body.canRequestAbridged, true);
+    assert.strictEqual(res.body.canRequestUnabridged, false);
+  });
+
+  it('offers neither when TaleArr knows no other edition', async () => {
+    const res = await getItemWithTalearr({
+      recordings: [
+        {
+          bookId: 3401,
+          role: 'primary',
+          editionId: 1,
+          narrators: ['Scott Brick'],
+          abridged: 'unabridged',
+          monitored: true,
+          hasFiles: true,
+        },
+      ],
+      candidates: [],
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.canRequestAbridged, false);
+    assert.strictEqual(res.body.canRequestUnabridged, false);
   });
 
   it('answers without a title when OpenLibrary is down', async () => {

@@ -30,6 +30,8 @@ const globalMessages = defineMessages('i18n', {
   ebook: 'Ebook',
   audiobook: 'Audiobook',
   audiobookrecording: 'Audiobook Recording',
+  unabridgedaudiobook: 'Unabridged Audiobook',
+  abridgedaudiobook: 'Abridged Audiobook',
   cancel: 'Cancel',
   canceling: 'Canceling…',
   approve: 'Approve',

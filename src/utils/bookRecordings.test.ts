@@ -8,6 +8,7 @@ import type {
 } from '@server/lib/talearrRecordings';
 import {
   canHaveRecordings,
+  getBookRequestFormat,
   getCandidateParts,
   getInitialRecordingChoice,
   getRecordingRequestState,
@@ -180,6 +181,26 @@ describe('book recordings', () => {
     assert.strictEqual(
       canHaveRecordings('talearr', MediaStatus.PROCESSING),
       false
+    );
+  });
+
+  it('names the recording a book request is for', () => {
+    assert.strictEqual(getBookRequestFormat({ isAudiobook: false }), 'ebook');
+    assert.strictEqual(
+      getBookRequestFormat({ isAudiobook: true, recording: null }),
+      'audiobook'
+    );
+    assert.strictEqual(
+      getBookRequestFormat({ isAudiobook: true, recording: 'unabridged' }),
+      'unabridgedaudiobook'
+    );
+    assert.strictEqual(
+      getBookRequestFormat({ isAudiobook: true, recording: 'abridged' }),
+      'abridgedaudiobook'
+    );
+    assert.strictEqual(
+      getBookRequestFormat({ isAudiobook: true, recording: 'narrator' }),
+      'audiobookrecording'
     );
   });
 });

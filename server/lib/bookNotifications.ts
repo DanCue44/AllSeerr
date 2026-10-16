@@ -58,8 +58,29 @@ export const getBookNotificationDetails = async (
   };
 };
 
+/**
+ * The format a book request or notification names: an ebook, an audiobook,
+ * or for a recording request the recording asked for, such as "Abridged
+ * Audiobook"
+ */
 export const getBookFormatName = (
   isAudiobook?: boolean,
   recording?: string | null
-): string =>
-  isAudiobook ? (recording ? 'Audiobook Recording' : 'Audiobook') : 'Ebook';
+): string => {
+  if (!isAudiobook) {
+    return 'Ebook';
+  }
+
+  switch (recording) {
+    case undefined:
+    case null:
+    case '':
+      return 'Audiobook';
+    case 'unabridged':
+      return 'Unabridged Audiobook';
+    case 'abridged':
+      return 'Abridged Audiobook';
+    default:
+      return 'Audiobook Recording';
+  }
+};

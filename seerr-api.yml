@@ -41,7 +41,7 @@ tags:
       - `GET /nobookends/item/{absItemId}` for the book of an Audiobookshelf library item
       - `GET /book/{bookId}` for a book, its status per format (`mediaInfo.status` for the ebook, `mediaInfo.statusAudio` for the audiobook) and its Audiobookshelf item per format
       - `POST /request` with `mediaType: book` and `isAudiobook` to request a format
-      - With TaleArr (`books.recordings` in the status), `recordings`, `canRequestUnabridged` and `recordingRequests` on the item, and `POST /request` with `recording: unabridged` to ask for the unabridged recording of an abridged audiobook
+      - With TaleArr (`books.recordings` in the status), `recordings`, `canRequestUnabridged`, `canRequestAbridged` and `recordingRequests` on the item, and `POST /request` with `recording: unabridged` or `recording: abridged` to ask for the unabridged recording of an abridged audiobook or the abridged recording of an unabridged one
       - `GET /request?mediaType=book&requestedBy={userId}` for the user's requests, with download progress in `media.downloadStatus` (ebook) and `media.downloadStatusAudio` (audiobook)
       - `POST /issue` with `bookFormat` to report a problem with a format
       - `GET /discover/books` and `GET /discover/books/upcoming` for discovery
@@ -10448,7 +10448,7 @@ paths:
                 recording:
                   type: string
                   enum: [unabridged, abridged, narrator, edition]
-                  description: Audiobooks on TaleArr only. Requests another recording of an audiobook that is already available in TaleArr instead of the audiobook itself, such as the unabridged reading of a book the library has abridged. `GET /book/{bookId}/recordings` lists what can be asked for. The request needs approval like a book request unless the user may auto-approve, counts against the book quota, and is refused with 400 when TaleArr is not the book service or the audiobook is not available there, and with 409 when the same recording was requested already.
+                  description: Audiobooks on TaleArr only. Requests another recording of an audiobook that is already available in TaleArr instead of the audiobook itself, such as the unabridged reading of a book the library has abridged, or the abridged reading of one it has unabridged. `GET /book/{bookId}/recordings` lists what can be asked for. The request needs approval like a book request unless the user may auto-approve, counts against the book quota, and is refused with 400 when TaleArr is not the book service or the audiobook is not available there, and with 409 when the same recording was requested already.
                 recordingNarrator:
                   type: string
                   maxLength: 200
@@ -11192,6 +11192,9 @@ paths:
                   canRequestUnabridged:
                     type: boolean
                     description: TaleArr only. Whether the user may request the unabridged recording now. False when the library has it, TaleArr knows no unabridged edition or it was requested already.
+                  canRequestAbridged:
+                    type: boolean
+                    description: TaleArr only. Whether the user may request the abridged recording now (`recording` `abridged` on `POST /request`), such as when the library has the unabridged one. False when the library has an abridged recording, TaleArr knows no abridged edition or it was requested already. Requests without `recording` still follow TaleArr's grab policy, which picks the unabridged reading by default.
                   recordingRequests:
                     type: array
                     description: The recording requests made for the book, newest first
