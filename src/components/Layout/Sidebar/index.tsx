@@ -115,7 +115,7 @@ export const SidebarLinks: SidebarLinkProps[] = [
     messagesKey: 'downloads',
     svgIcon: <ArrowDownTrayIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/downloads/,
-    requiredPermission: Permission.MANAGE_REQUESTS,
+    requiredPermission: Permission.ADMIN,
   },
   {
     href: '/calendar',

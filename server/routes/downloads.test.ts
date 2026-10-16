@@ -206,19 +206,21 @@ async function createUser(email: string, permissions: number) {
   return apiKey;
 }
 
-const manager = () =>
-  createUser(
-    'manager@example.com',
-    Permission.REQUEST | Permission.MANAGE_REQUESTS
-  );
+const manager = () => createUser('admin@example.com', Permission.ADMIN);
 
 describe('GET /downloads', () => {
-  it('is only for users who manage requests', async () => {
+  it('is only for admins', async () => {
     const apiKey = await createUser('viewer@example.com', Permission.REQUEST);
+    const requestManager = await createUser(
+      'manager@example.com',
+      Permission.REQUEST | Permission.MANAGE_REQUESTS
+    );
 
-    for (const path of ['/downloads', '/downloads/count']) {
-      const res = await request(app).get(path).set('X-Api-Key', apiKey);
-      assert.strictEqual(res.status, 403, path);
+    for (const key of [apiKey, requestManager]) {
+      for (const path of ['/downloads', '/downloads/count']) {
+        const res = await request(app).get(path).set('X-Api-Key', key);
+        assert.strictEqual(res.status, 403, path);
+      }
     }
 
     const res = await request(app)

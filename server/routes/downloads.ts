@@ -24,7 +24,7 @@ const COUNT_MAX_AGE_MS = 60 * 1000;
  */
 const downloadRoutes = Router();
 
-downloadRoutes.use(isAuthenticated(Permission.MANAGE_REQUESTS));
+downloadRoutes.use(isAuthenticated(Permission.ADMIN));
 
 const handleError = (
   e: Error,

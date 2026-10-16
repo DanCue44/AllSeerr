@@ -117,9 +117,7 @@ const AmbientShell = ({ children }: LayoutProps) => {
 
   // Only admins see downloads, and the count reads every arr's queue
   const { data: downloadsResponse } = useSWR<{ attention: number }>(
-    hasPermission(Permission.MANAGE_REQUESTS)
-      ? '/api/v1/downloads/count'
-      : null,
+    hasPermission(Permission.ADMIN) ? '/api/v1/downloads/count' : null,
     { revalidateOnMount: true, refreshInterval: 60_000 }
   );
 

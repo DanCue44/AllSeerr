@@ -4,7 +4,7 @@ import { Permission } from '@server/lib/permissions';
 import type { NextPage } from 'next';
 
 const DownloadsPage: NextPage = () => {
-  useRouteGuard(Permission.MANAGE_REQUESTS);
+  useRouteGuard(Permission.ADMIN);
   return <Downloads />;
 };
 
