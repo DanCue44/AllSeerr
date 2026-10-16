@@ -6,7 +6,7 @@ import type {
   ServarrStatusMessage,
   Tag,
 } from './base';
-import ServarrBase from './base';
+import ServarrBase, { getArrErrorMessage } from './base';
 
 export type ChaptarrMediaType = 'ebook' | 'audiobook';
 
