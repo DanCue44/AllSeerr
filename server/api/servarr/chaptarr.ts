@@ -193,7 +193,21 @@ export interface ChaptarrCapabilities {
 export type TalearrAbridgedPolicy =
   | 'unabridgedOnly'
   | 'preferUnabridged'
-  | 'any';
+  | 'any'
+  | 'abridgedOnly';
+
+/**
+ * TaleArr's grab policy override for one book. Unsupported when the server
+ * has no such route, as stock Chaptarr and older TaleArr do not.
+ */
+export type TalearrBookGrabPolicy =
+  | { supported: false }
+  | {
+      supported: true;
+      // The override, null when the book follows the global policy, and
+      // undefined when TaleArr does not know the book
+      abridgedPolicy?: TalearrAbridgedPolicy | null;
+    };
 
 /**
  * TaleArr's grab policy, from Settings > Indexers > Grab policy
@@ -329,11 +343,58 @@ const RECORDINGS_TIMEOUT_MS = 15_000;
 // The health check TaleArr reports metadata server problems with
 const TALEARR_METADATA_CHECK = 'TalearrMetadataServerProbeCheck';
 
+// In TaleArr's enum order, for serializers that send numbers
 const ABRIDGED_POLICIES: TalearrAbridgedPolicy[] = [
   'unabridgedOnly',
   'preferUnabridged',
   'any',
+  'abridgedOnly',
 ];
+
+const parseAbridgedPolicy = (
+  value: unknown
+): TalearrAbridgedPolicy | undefined =>
+  typeof value === 'number'
+    ? ABRIDGED_POLICIES[value]
+    : ABRIDGED_POLICIES.find(
+        (policy) => policy.toLowerCase() === String(value).toLowerCase()
+      );
+
+/**
+ * Whether a 404 came from a route TaleArr has, about a book it does not
+ * know, which answers with a message. A route the server does not have
+ * answers 404 without one.
+ */
+const isKnownRouteNotFound = (data: unknown): boolean =>
+  !!data && typeof data === 'object' && !Array.isArray(data);
+
+/**
+ * Reads TaleArr's answer to the per book grab policy route
+ */
+export const parseTalearrBookGrabPolicy = (
+  status: number,
+  data: unknown
+): TalearrBookGrabPolicy => {
+  if (status === 404) {
+    return isKnownRouteNotFound(data)
+      ? { supported: true }
+      : { supported: false };
+  }
+
+  if (status < 200 || status >= 300 || !data || typeof data !== 'object') {
+    return { supported: false };
+  }
+
+  const raw = (data as Record<string, unknown>).abridgedPolicy;
+
+  return {
+    supported: true,
+    abridgedPolicy:
+      raw === null || raw === undefined
+        ? null
+        : (parseAbridgedPolicy(raw) ?? null),
+  };
+};
 
 const mentionsTalearr = (value: unknown): boolean =>
   typeof value === 'string' && value.toLowerCase().includes('talearr');
@@ -359,13 +420,7 @@ export const parseTalearrGrabPolicy = (
   }
 
   // Enums come as camelCase names, or as numbers on some serializers
-  const abridgedPolicy =
-    typeof raw.abridgedPolicy === 'number'
-      ? ABRIDGED_POLICIES[raw.abridgedPolicy]
-      : ABRIDGED_POLICIES.find(
-          (policy) =>
-            policy.toLowerCase() === String(raw.abridgedPolicy).toLowerCase()
-        );
+  const abridgedPolicy = parseAbridgedPolicy(raw.abridgedPolicy);
 
   return {
     abridgedPolicy: abridgedPolicy ?? 'unabridgedOnly',
@@ -767,6 +822,56 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
     }
 
     return parseTalearrAddRecording(response.status, response.data);
+  }
+
+  /**
+   * TaleArr's grab policy override for one book, such as abridged only.
+   * Answers unsupported, rather than throwing, when the server has no such
+   * route.
+   */
+  public async getTalearrBookGrabPolicy(
+    bookId: number
+  ): Promise<TalearrBookGrabPolicy> {
+    const response = await this.axios.get<unknown>(
+      `/talearr/grabpolicy/book/${bookId}`,
+      {
+        timeout: IDENTITY_TIMEOUT_MS,
+        validateStatus: (status) => status < 500 && status !== 401,
+      }
+    );
+
+    return parseTalearrBookGrabPolicy(response.status, response.data);
+  }
+
+  /**
+   * Sets TaleArr's grab policy override for one book, or clears it with
+   * null so the book follows the global policy. False when the server has
+   * no such route.
+   */
+  public async setTalearrBookGrabPolicy(
+    bookId: number,
+    abridgedPolicy: TalearrAbridgedPolicy | null
+  ): Promise<boolean> {
+    const response = await this.axios.put<unknown>(
+      `/talearr/grabpolicy/book/${bookId}`,
+      { abridgedPolicy },
+      {
+        timeout: UPDATE_TIMEOUT_MS,
+        validateStatus: (status) => status < 500 && status !== 401,
+      }
+    );
+
+    if (response.status >= 200 && response.status < 300) {
+      return true;
+    }
+
+    if (response.status === 404 && !isKnownRouteNotFound(response.data)) {
+      return false;
+    }
+
+    throw new Error(
+      `TaleArr answered the grab policy of book ${bookId} with status ${response.status}`
+    );
   }
 
   public async getChaptarrRootFolders(): Promise<ChaptarrRootFolder[]> {

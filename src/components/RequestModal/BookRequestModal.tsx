@@ -16,6 +16,8 @@ import {
 import defineMessages from '@app/utils/defineMessages';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { BookOpenIcon } from '@heroicons/react/24/solid';
+import type { AudiobookVersion } from '@server/constants/audiobookVersion';
+import { DEFAULT_AUDIOBOOK_VERSION } from '@server/constants/audiobookVersion';
 import type { BookLanguage } from '@server/constants/bookLanguages';
 import { isBookLanguage } from '@server/constants/bookLanguages';
 import type { BookFormatChoice } from '@server/constants/media';
@@ -50,6 +52,12 @@ const messages = defineMessages('components.RequestModal.BookRequestModal', {
   noebookedition: 'No ebook edition found. The ebook can still be requested.',
   noaudiobookedition:
     'No audiobook edition found. The audiobook can still be requested.',
+  audiobookversion: 'Audiobook Version',
+  versionunabridged: 'Unabridged',
+  versionabridged: 'Abridged',
+  versionboth: 'Both',
+  versionbothtip:
+    'The abridged reading is asked for as a recording of its own, when TaleArr knows one.',
 });
 
 interface BookRequestModalProps {
@@ -119,6 +127,14 @@ const BookRequestModal = ({
     );
   }, [defaultBookFormat, canRequestEbook, canRequestAudiobook]);
 
+  // TaleArr only, when the Audiobook Versions setting lets the requester
+  // pick the readings of the audiobook
+  const canChooseVersion =
+    settings.currentSettings.audiobookVersions === 'requester';
+  const [audiobookVersion, setAudiobookVersion] = useState<AudiobookVersion>(
+    DEFAULT_AUDIOBOOK_VERSION
+  );
+
   useEffect(() => {
     if (onUpdating) {
       onUpdating(isUpdating);
@@ -173,6 +189,7 @@ const BookRequestModal = ({
           mediaType: 'book',
           isAudiobook,
           ...(canChooseLanguage ? { language } : {}),
+          ...(isAudiobook && canChooseVersion ? { audiobookVersion } : {}),
         });
         responses.push(response.data);
       }
@@ -351,6 +368,15 @@ const BookRequestModal = ({
     },
   ];
 
+  const versionOptions: { value: AudiobookVersion; label: string }[] = [
+    {
+      value: 'unabridged',
+      label: intl.formatMessage(messages.versionunabridged),
+    },
+    { value: 'abridged', label: intl.formatMessage(messages.versionabridged) },
+    { value: 'both', label: intl.formatMessage(messages.versionboth) },
+  ];
+
   // Each format is its own request, so both formats need two from the quota
   const quotaExceeded =
     !!quota?.book.restricted ||
@@ -443,6 +469,41 @@ const BookRequestModal = ({
           </p>
         )}
       </div>
+      {canChooseVersion && format !== 'ebook' && (
+        <div className="mt-4">
+          <span className="text-sm font-medium text-gray-300">
+            {intl.formatMessage(messages.audiobookversion)}
+          </span>
+          <div
+            className="mt-2 grid grid-cols-3 gap-2"
+            role="radiogroup"
+            aria-label={intl.formatMessage(messages.audiobookversion)}
+          >
+            {versionOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={audiobookVersion === option.value}
+                disabled={isUpdating}
+                onClick={() => setAudiobookVersion(option.value)}
+                className={`rounded-md px-2 py-2 text-sm font-medium ring-1 transition duration-150 sm:px-3 ${
+                  audiobookVersion === option.value
+                    ? 'bg-indigo-600 text-white ring-indigo-500'
+                    : 'bg-gray-800 text-gray-300 ring-gray-700 hover:bg-gray-700'
+                } disabled:cursor-not-allowed disabled:opacity-50`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {audiobookVersion === 'both' && (
+            <p className="mt-2 text-sm text-gray-400">
+              {intl.formatMessage(messages.versionbothtip)}
+            </p>
+          )}
+        </div>
+      )}
       {canChooseLanguage && (
         <BookLanguageSelect
           value={language}

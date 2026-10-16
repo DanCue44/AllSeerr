@@ -1,3 +1,11 @@
+import type {
+  AudiobookVersion,
+  AudiobookVersionsMode,
+} from '@server/constants/audiobookVersion';
+import {
+  DEFAULT_AUDIOBOOK_VERSION,
+  getAudiobookVersionsMode,
+} from '@server/constants/audiobookVersion';
 import type { BookService } from '@server/constants/bookService';
 import { isTalearrService, usesChaptarr } from '@server/constants/bookService';
 import type { User } from '@server/entity/User';
@@ -206,6 +214,10 @@ export interface NoBookEndsStatus {
     // Whether other recordings of an audiobook can be requested, which
     // only TaleArr offers
     recordings: boolean;
+    // TaleArr only: the Audiobook Versions setting, and the version an
+    // audiobook request picks first when the requester may choose one
+    audiobookVersions?: AudiobookVersionsMode;
+    defaultAudiobookVersion?: AudiobookVersion;
   };
   issues: { canCreate: boolean };
   // Whether the user may approve, decline and edit everyone's requests
@@ -235,6 +247,10 @@ export const getNoBookEndsStatus = async (
   const booksEnabled = !!settings.bookService;
   const canManageRequests = user.hasPermission(Permission.MANAGE_REQUESTS);
   const syncUrl = getNoBookEndsSyncPublicUrl(settings.nobookendsSync);
+  const audiobookVersions = getAudiobookVersionsMode(
+    settings.bookService,
+    settings.main.audiobookVersions
+  );
 
   return {
     version: getAppVersion(),
@@ -260,6 +276,12 @@ export const getNoBookEndsStatus = async (
       defaultFormat: settings.main.defaultBookFormat ?? 'both',
       quota: booksEnabled ? await getNoBookEndsQuota(user) : null,
       recordings: isTalearrService(settings.bookService),
+      ...(audiobookVersions
+        ? {
+            audiobookVersions,
+            defaultAudiobookVersion: DEFAULT_AUDIOBOOK_VERSION,
+          }
+        : {}),
     },
     issues: {
       canCreate: user.hasPermission(

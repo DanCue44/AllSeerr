@@ -29,6 +29,11 @@ import {
   PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/solid';
+import type { AudiobookVersionsMode } from '@server/constants/audiobookVersion';
+import {
+  DEFAULT_AUDIOBOOK_VERSIONS_MODE,
+  isAudiobookVersionsMode,
+} from '@server/constants/audiobookVersion';
 import type { ChaptarrBookService } from '@server/constants/bookService';
 import { bookServiceName, usesChaptarr } from '@server/constants/bookService';
 import type OverrideRule from '@server/entity/OverrideRule';
@@ -112,6 +117,16 @@ const messages = defineMessages('components.Settings', {
     'Choose where book requests are sent. Chaptarr and TaleArr both use the servers above, so pick the one they run. Test a server to check.',
   bookServiceSaved: 'Book requests are now sent to {service}.',
   bookServiceFailed: 'Something went wrong while saving the book service.',
+  audiobookVersions: 'Audiobook Versions',
+  audiobookVersionsTip:
+    'Which readings of an audiobook TaleArr is asked for when a request is approved. Both adds the unabridged reading and asks for the abridged one as a recording of its own.',
+  audiobookVersionsBoth: 'Both',
+  audiobookVersionsUnabridged: 'Unabridged',
+  audiobookVersionsAbridged: 'Abridged',
+  audiobookVersionsRequester: 'The requester chooses',
+  audiobookVersionsSaved: 'Audiobook versions saved.',
+  audiobookVersionsFailed:
+    'Something went wrong while saving the audiobook versions.',
   musicServiceSettingsDescription:
     'Configure your {serverType} server(s) below. You can connect multiple {serverType} servers, but only one of them can be marked as default. Administrators are able to override the server used to process new requests prior to approval.',
   deleteserverconfirm: 'Are you sure you want to delete this server?',
@@ -491,6 +506,24 @@ const SettingsServices = () => {
       );
     } catch {
       addToast(intl.formatMessage(messages.bookServiceFailed), {
+        appearance: 'error',
+        autoDismiss: true,
+      });
+    }
+  };
+
+  const saveAudiobookVersions = async (
+    audiobookVersions: AudiobookVersionsMode
+  ) => {
+    try {
+      await axios.post('/api/v1/settings/main', { audiobookVersions });
+      await Promise.all([revalidateMain(), mutate('/api/v1/settings/public')]);
+      addToast(intl.formatMessage(messages.audiobookVersionsSaved), {
+        appearance: 'success',
+        autoDismiss: true,
+      });
+    } catch {
+      addToast(intl.formatMessage(messages.audiobookVersionsFailed), {
         appearance: 'error',
         autoDismiss: true,
       });
@@ -1003,6 +1036,47 @@ const SettingsServices = () => {
                   {isLazyLibrarianConfigured && (
                     <option value="lazylibrarian">LazyLibrarian</option>
                   )}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+        {showBookService && currentBookService === 'talearr' && (
+          <div className="form-row max-w-6xl">
+            <label htmlFor="audiobookVersions" className="text-label">
+              {intl.formatMessage(messages.audiobookVersions)}
+              <span className="label-tip">
+                {intl.formatMessage(messages.audiobookVersionsTip)}
+              </span>
+            </label>
+            <div className="form-input-area">
+              <div className="form-input-field">
+                <select
+                  id="audiobookVersions"
+                  name="audiobookVersions"
+                  value={
+                    isAudiobookVersionsMode(mainData?.audiobookVersions)
+                      ? mainData.audiobookVersions
+                      : DEFAULT_AUDIOBOOK_VERSIONS_MODE
+                  }
+                  onChange={(e) =>
+                    saveAudiobookVersions(
+                      e.target.value as AudiobookVersionsMode
+                    )
+                  }
+                >
+                  <option value="both">
+                    {intl.formatMessage(messages.audiobookVersionsBoth)}
+                  </option>
+                  <option value="unabridged">
+                    {intl.formatMessage(messages.audiobookVersionsUnabridged)}
+                  </option>
+                  <option value="abridged">
+                    {intl.formatMessage(messages.audiobookVersionsAbridged)}
+                  </option>
+                  <option value="requester">
+                    {intl.formatMessage(messages.audiobookVersionsRequester)}
+                  </option>
                 </select>
               </div>
             </div>

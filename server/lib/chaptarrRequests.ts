@@ -62,6 +62,9 @@ export interface ChaptarrBookRequest {
   // edition in the language is preferred.
   language?: { code: BookLanguage; tags?: ChaptarrLanguageTags };
   pendingImport?: { timeoutMs?: number; intervalMs?: number };
+  // Runs once the book is in the library and monitored, before it is
+  // searched for, such as to set TaleArr's grab policy of the book
+  prepareSearch?: (bookId: number) => Promise<void>;
 }
 
 export interface ChaptarrBookResult {
@@ -474,7 +477,8 @@ const monitorAndSearch = async (
   mediaType: ChaptarrMediaType,
   search: boolean,
   format: ChaptarrFormatSettings,
-  language: MonitorLanguage = {}
+  language: MonitorLanguage = {},
+  prepareSearch?: (bookId: number) => Promise<void>
 ): Promise<ChaptarrBookResult> => {
   const bookId = book.id as number;
 
@@ -512,6 +516,8 @@ const monitorAndSearch = async (
       });
     }
   }
+
+  await prepareSearch?.(bookId);
 
   if (search && getBookFileCount(book) === 0) {
     await chaptarr.searchBooks([bookId]);
@@ -678,11 +684,15 @@ export const sendBookToChaptarr = async (
     return workTitle;
   };
   const monitor = (book: ChaptarrBook) =>
-    monitorAndSearch(chaptarr, book, mediaType, search, add, {
-      code: request.language?.code,
-      tags: languageTags,
-      getTitle,
-    });
+    monitorAndSearch(
+      chaptarr,
+      book,
+      mediaType,
+      search,
+      add,
+      { code: request.language?.code, tags: languageTags, getTitle },
+      request.prepareSearch
+    );
 
   if (request.bookId) {
     const book = await chaptarr.getBook(request.bookId);

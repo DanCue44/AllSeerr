@@ -9,6 +9,7 @@ import ChaptarrAPI, {
   isAuthorBusyError,
   isMonitoredFor,
   parseTalearrAddRecording,
+  parseTalearrBookGrabPolicy,
   parseTalearrGrabPolicy,
   parseTalearrRecording,
   parseTalearrRecordings,
@@ -663,6 +664,47 @@ describe('parseTalearrGrabPolicy', () => {
     assert.strictEqual(
       parseTalearrGrabPolicy({ message: 'NotFound' }),
       undefined
+    );
+  });
+});
+
+describe('parseTalearrBookGrabPolicy', () => {
+  it('reads the override of a book, or none', () => {
+    assert.deepStrictEqual(
+      parseTalearrBookGrabPolicy(200, { abridgedPolicy: 'abridgedOnly' }),
+      { supported: true, abridgedPolicy: 'abridgedOnly' }
+    );
+    assert.deepStrictEqual(
+      parseTalearrBookGrabPolicy(200, { abridgedPolicy: 3 }),
+      { supported: true, abridgedPolicy: 'abridgedOnly' }
+    );
+    assert.deepStrictEqual(
+      parseTalearrBookGrabPolicy(200, { abridgedPolicy: null }),
+      { supported: true, abridgedPolicy: null }
+    );
+  });
+
+  it('tells a book TaleArr does not know from a route it does not have', () => {
+    assert.deepStrictEqual(
+      parseTalearrBookGrabPolicy(404, { message: 'Book not found' }),
+      { supported: true }
+    );
+    assert.deepStrictEqual(parseTalearrBookGrabPolicy(404, ''), {
+      supported: false,
+    });
+    assert.deepStrictEqual(parseTalearrBookGrabPolicy(200, '<html></html>'), {
+      supported: false,
+    });
+    assert.deepStrictEqual(parseTalearrBookGrabPolicy(405, undefined), {
+      supported: false,
+    });
+  });
+
+  it('reads the abridged only global policy', () => {
+    assert.strictEqual(
+      parseTalearrGrabPolicy({ ...grabPolicy, abridgedPolicy: 'abridgedOnly' })
+        ?.abridgedPolicy,
+      'abridgedOnly'
     );
   });
 });

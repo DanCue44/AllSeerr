@@ -336,6 +336,60 @@ describe('GET /nobookends/status', () => {
     assert.strictEqual(res.body.openInNoBookEnds, true);
   });
 
+  it('tells the app the audiobook versions with TaleArr', async () => {
+    enableBooks();
+    const settings = getSettings();
+    settings.chaptarr = [
+      {
+        id: 0,
+        name: 'TaleArr',
+        hostname: 'talearr',
+        port: 8789,
+        apiKey: 'key',
+        useSsl: false,
+        activeProfileId: 1,
+        activeProfileName: 'E-Book',
+        activeDirectory: '/ebooks',
+        activeMetadataProfileId: 2,
+        activeMetadataProfileName: 'Ebook',
+        tags: [],
+        is4k: false,
+        isDefault: true,
+        syncEnabled: true,
+        preventSearch: false,
+        tagRequests: false,
+        overrideRule: [],
+      },
+    ];
+    settings.main.bookService = 'talearr';
+    const priorVersions = settings.main.audiobookVersions;
+    const { agent } = await loginAs('demo@seerr.dev');
+
+    try {
+      // Settings saved before the setting existed ask for both
+      settings.main.audiobookVersions = undefined;
+      const unset = await agent.get('/nobookends/status');
+      assert.strictEqual(unset.body.books.recordings, true);
+      assert.strictEqual(unset.body.books.audiobookVersions, 'both');
+      assert.strictEqual(unset.body.books.defaultAudiobookVersion, 'both');
+
+      settings.main.audiobookVersions = 'requester';
+      const requester = await agent.get('/nobookends/status');
+      assert.strictEqual(requester.body.books.audiobookVersions, 'requester');
+
+      // Only TaleArr has versions
+      settings.main.bookService = 'chaptarr';
+      const chaptarr = await agent.get('/nobookends/status');
+      assert.strictEqual(chaptarr.body.books.audiobookVersions, undefined);
+      assert.strictEqual(
+        chaptarr.body.books.defaultAudiobookVersion,
+        undefined
+      );
+    } finally {
+      settings.main.audiobookVersions = priorVersions;
+    }
+  });
+
   it('turns features off that are not set up or hidden', async () => {
     const { agent } = await loginAs('admin@seerr.dev');
 

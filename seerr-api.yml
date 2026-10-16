@@ -42,6 +42,7 @@ tags:
       - `GET /book/{bookId}` for a book, its status per format (`mediaInfo.status` for the ebook, `mediaInfo.statusAudio` for the audiobook) and its Audiobookshelf item per format
       - `POST /request` with `mediaType: book` and `isAudiobook` to request a format
       - With TaleArr (`books.recordings` in the status), `recordings`, `canRequestUnabridged`, `canRequestAbridged` and `recordingRequests` on the item, and `POST /request` with `recording: unabridged` or `recording: abridged` to ask for the unabridged recording of an abridged audiobook or the abridged recording of an unabridged one
+      - With TaleArr, `books.audiobookVersions` in the status: at `requester`, `audiobookVersion` on `POST /request` picks the unabridged reading, the abridged one or both
       - `GET /request?mediaType=book&requestedBy={userId}` for the user's requests, with download progress in `media.downloadStatus` (ebook) and `media.downloadStatusAudio` (audiobook)
       - `POST /issue` with `bookFormat` to report a problem with a format
       - `GET /discover/books` and `GET /discover/books/upcoming` for discovery
@@ -518,6 +519,11 @@ components:
           enum: [chaptarr, talearr, lazylibrarian]
           example: chaptarr
           description: Service book requests are sent to. TaleArr, a Chaptarr fork, uses the Chaptarr servers. When it is not set or not configured, Chaptarr is used when configured, otherwise LazyLibrarian.
+        audiobookVersions:
+          type: string
+          enum: [both, unabridged, abridged, requester]
+          example: both
+          description: TaleArr only. Which readings of an audiobook an approved request asks TaleArr for. `both` (the default, also when not set) adds the audiobook as usual, so TaleArr searches for the unabridged reading, then asks for the abridged reading as a recording request of its own when TaleArr knows an abridged edition. `unabridged` follows TaleArr's global grab policy. `abridged` sets the book's grab policy in TaleArr to abridged only before the search, or asks for the abridged recording when TaleArr has no per book grab policy. `requester` lets the requester pick one of the three with `audiobookVersion` on `POST /request`.
         googleBooksApiKey:
           type: string
           example: yourapikey
@@ -1404,6 +1410,11 @@ components:
             ]
           description: Language books are requested in, unless a user sets their own
           example: en
+        audiobookVersions:
+          type: string
+          enum: [both, unabridged, abridged, requester]
+          description: The Audiobook Versions setting in effect, missing unless TaleArr is the book service. With `requester`, the book request window offers the version.
+          example: both
         plexClientIdentifier:
           type: string
           format: uuid
@@ -2735,6 +2746,11 @@ components:
           type: number
           nullable: true
           description: Recording requests only. TaleArr's book id of the recording once TaleArr has added it.
+        audiobookVersion:
+          type: string
+          nullable: true
+          enum: [unabridged, abridged, both, null]
+          description: Audiobooks on TaleArr only, with Audiobook Versions set to `requester`. The version the requester picked. Null on every other request, which follows the setting.
         monitorMode:
           type: string
           nullable: true
@@ -5827,13 +5843,22 @@ paths:
                         properties:
                           abridgedPolicy:
                             type: string
-                            enum: [unabridgedOnly, preferUnabridged, any]
+                            enum:
+                              [
+                                unabridgedOnly,
+                                preferUnabridged,
+                                any,
+                                abridgedOnly,
+                              ]
                           allowBundles:
                             type: boolean
                           failRejectedImports:
                             type: boolean
                           maxAutomaticRetries:
                             type: number
+                      bookGrabPolicy:
+                        type: boolean
+                        description: Whether TaleArr has a grab policy per book (`/api/v1/talearr/grabpolicy/book/{bookId}`), which Audiobook Versions uses to search for the abridged reading itself
                       metadataProblem:
                         type: string
                   profiles:
@@ -10458,6 +10483,11 @@ paths:
                   type: number
                   minimum: 1
                   description: Required for `recording` `edition`. TaleArr's id of the edition, from the candidates of `GET /book/{bookId}/recordings`.
+                audiobookVersion:
+                  type: string
+                  nullable: true
+                  enum: [unabridged, abridged, both, null]
+                  description: Audiobooks on TaleArr only. The readings to ask for, honored when Audiobook Versions is set to `requester` (see `audiobookVersions` in the public settings and `books.audiobookVersions` in `GET /nobookends/status`) and ignored otherwise. Without one, such a request asks for both. Refused with 400 when unknown.
                 serverId:
                   type: number
                 profileId:
@@ -10918,6 +10948,14 @@ paths:
                       recordings:
                         type: boolean
                         description: Whether other recordings of an audiobook can be requested (`recording` on `POST /request`), which only TaleArr offers
+                      audiobookVersions:
+                        type: string
+                        enum: [both, unabridged, abridged, requester]
+                        description: TaleArr only. The Audiobook Versions setting. With `requester`, an audiobook request may pick `audiobookVersion`. With `both`, the abridged recording is asked for along with the audiobook.
+                      defaultAudiobookVersion:
+                        type: string
+                        enum: [unabridged, abridged, both]
+                        description: TaleArr only. The version an audiobook request picks first when the requester may choose one.
                       canRequest:
                         type: boolean
                         description: Whether the user may request books

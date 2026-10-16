@@ -2,6 +2,7 @@ import type {
   NoBookEndsSyncHealth,
   NoBookEndsSyncStatus,
 } from '@server/api/nobookendsSync';
+import type { AudiobookVersionsMode } from '@server/constants/audiobookVersion';
 import type { BookLanguage } from '@server/constants/bookLanguages';
 import type { BookFormatChoice } from '@server/constants/media';
 import type { AudiobookshelfSettings, BookService } from '@server/lib/settings';
@@ -61,6 +62,8 @@ export interface PublicSettingsResponse {
   allowCurrentSeasonRequests: boolean;
   defaultBookFormat: BookFormatChoice;
   bookLanguage: BookLanguage;
+  // TaleArr only, the Audiobook Versions setting in effect
+  audiobookVersions?: AudiobookVersionsMode;
   enableSpecialEpisodes: boolean;
   cacheImages: boolean;
   vapidPublic: string;

@@ -1,3 +1,5 @@
+import type { AudiobookVersionsMode } from '@server/constants/audiobookVersion';
+import { getAudiobookVersionsMode } from '@server/constants/audiobookVersion';
 import type { BookLanguage } from '@server/constants/bookLanguages';
 import { getEffectiveBookLanguage } from '@server/constants/bookLanguages';
 import type { BookService } from '@server/constants/bookService';
@@ -270,6 +272,9 @@ export interface MainSettings {
   bookLanguage: BookLanguage;
   // Service book requests go to, picked automatically when not set
   bookService?: BookService;
+  // TaleArr only: which readings of an audiobook a request asks for, or
+  // 'requester' to let the requester pick one per request
+  audiobookVersions?: AudiobookVersionsMode;
   // Google Books API key, used to check whether books have ebook editions
   googleBooksApiKey: string;
   currentSeasonRolloverDelayDays: number;
@@ -374,6 +379,8 @@ interface FullPublicSettings extends PublicSettings {
   allowCurrentSeasonRequests: boolean;
   defaultBookFormat: BookFormatChoice;
   bookLanguage: BookLanguage;
+  // TaleArr only, the Audiobook Versions setting in effect
+  audiobookVersions?: AudiobookVersionsMode;
   enableSpecialEpisodes: boolean;
   cacheImages: boolean;
   vapidPublic: string;
@@ -626,6 +633,7 @@ class Settings {
         allowCurrentSeasonRequests: false,
         defaultBookFormat: 'both',
         bookLanguage: 'en',
+        audiobookVersions: 'both',
         googleBooksApiKey: '',
         currentSeasonRolloverDelayDays: 3,
         enableSpecialEpisodes: false,
@@ -1044,6 +1052,10 @@ class Settings {
       bookLanguage: getEffectiveBookLanguage(
         undefined,
         this.data.main.bookLanguage
+      ),
+      audiobookVersions: getAudiobookVersionsMode(
+        this.bookService,
+        this.data.main.audiobookVersions
       ),
       enableSpecialEpisodes: this.data.main.enableSpecialEpisodes,
       cacheImages: this.data.main.cacheImages,

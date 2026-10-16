@@ -5,6 +5,11 @@ import type {
   TmdbMovieDetails,
   TmdbTvDetails,
 } from '@server/api/themoviedb/interfaces';
+import type { AudiobookVersion } from '@server/constants/audiobookVersion';
+import {
+  getAudiobookVersionsMode,
+  isAudiobookVersion,
+} from '@server/constants/audiobookVersion';
 import {
   getBookLanguageName,
   isBookLanguage,
@@ -95,6 +100,7 @@ export class WatchProviderBlockedError extends Error {}
 export class ContentRatingRestrictedError extends Error {}
 export class InvalidBookLanguageError extends Error {}
 export class InvalidRecordingRequestError extends Error {}
+export class InvalidAudiobookVersionError extends Error {}
 
 type MediaRequestOptions = {
   isAutoRequest?: boolean;
@@ -901,6 +907,27 @@ export class MediaRequest {
       throw new InvalidBookLanguageError('Unknown book language.');
     }
 
+    if (
+      requestBody.audiobookVersion !== undefined &&
+      requestBody.audiobookVersion !== null &&
+      !isAudiobookVersion(requestBody.audiobookVersion)
+    ) {
+      throw new InvalidAudiobookVersionError('Unknown audiobook version.');
+    }
+
+    // The version is kept only where the requester may pick one: an
+    // audiobook on TaleArr with the setting at `requester`. Anywhere else
+    // it is ignored, so clients may always send it.
+    const audiobookVersion =
+      isAudiobook &&
+      isAudiobookVersion(requestBody.audiobookVersion) &&
+      getAudiobookVersionsMode(
+        getSettings().bookService,
+        getSettings().main.audiobookVersions
+      ) === 'requester'
+        ? requestBody.audiobookVersion
+        : null;
+
     // Only managers choose the language, everyone else requests in their
     // own. A language from anyone else is ignored rather than refused, so
     // older clients that send one keep working.
@@ -1014,6 +1041,7 @@ export class MediaRequest {
       is4k: false,
       isAudiobook,
       language,
+      audiobookVersion,
       isAutoRequest: options.isAutoRequest ?? false,
       ignoreQuota,
       skipNotification: options.skipNotification,
@@ -1349,6 +1377,12 @@ export class MediaRequest {
   // TaleArr's book id of the recording once TaleArr has added it
   @Column({ type: 'integer', nullable: true })
   public recordingBookId?: number | null;
+
+  // Audiobooks on TaleArr only: the version the requester picked when the
+  // Audiobook Versions setting lets them, unabridged, abridged or both.
+  // Null for every other request, which follows the setting.
+  @Column({ type: 'varchar', nullable: true })
+  public audiobookVersion?: AudiobookVersion | null;
 
   // Not stored. Set on a request made as part of a bulk request, which
   // sends one summary notification instead of one per request.

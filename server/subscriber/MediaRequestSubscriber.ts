@@ -48,7 +48,14 @@ import { addBookToLazyLibrarian } from '@server/lib/lazyLibrarianRequests';
 import { getMusicNotificationDetails } from '@server/lib/musicNotifications';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { getDefaultChaptarr, getSettings } from '@server/lib/settings';
-import { sendRecordingToTalearr } from '@server/lib/talearrRecordings';
+import {
+  applyBookGrabPolicy,
+  getRequestAudiobookVersion,
+} from '@server/lib/talearrAudiobookVersions';
+import {
+  requestAbridgedRecording,
+  sendRecordingToTalearr,
+} from '@server/lib/talearrRecordings';
 import { notifyWatchlistUsers } from '@server/lib/watchlistNotifications';
 import logger from '@server/logger';
 import { runInBackground } from '@server/utils/backgroundTasks';
@@ -1705,6 +1712,23 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
             settings.main.bookLanguage
           );
 
+      // TaleArr only: the readings of the audiobook asked for. The grab
+      // policy of the book is set before it is searched for, and the
+      // abridged recording asked for once the book is in TaleArr.
+      const audiobookVersion = getRequestAudiobookVersion(entity);
+      let abridgedRecording = false;
+      const prepareSearch = audiobookVersion
+        ? async (bookId: number) => {
+            ({ abridgedRecording } = await applyBookGrabPolicy(
+              chaptarr,
+              chaptarrSettings,
+              bookId,
+              audiobookVersion,
+              entity.id
+            ));
+          }
+        : undefined;
+
       // Run entity asynchronously so we don't wait for it on the UI side.
       // Books are sent to a server one at a time, so the books of an author
       // reach Chaptarr one after another and its author is only added once.
@@ -1726,6 +1750,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
                 requestId: entity.id,
               }),
             },
+            prepareSearch,
           })
         )
         // Writes back only once the request's transaction has ended
@@ -1757,6 +1782,33 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
             'externalServiceId',
             'externalServiceIdAudio',
           ]);
+
+          if (audiobookVersion && audiobookVersion !== 'unabridged') {
+            if (abridgedRecording && result.bookId) {
+              await requestAbridgedRecording(entity, {
+                server: chaptarrSettings,
+                bookId: result.bookId,
+              }).catch((e) => {
+                logger.warn(
+                  'Could not ask TaleArr for the abridged recording',
+                  {
+                    label: 'Media Request',
+                    requestId: entity.id,
+                    errorMessage: e instanceof Error ? e.message : String(e),
+                  }
+                );
+              });
+            } else if (!result.bookId) {
+              logger.info(
+                'TaleArr is still importing the author, the book follows the global grab policy',
+                {
+                  label: 'Media Request',
+                  requestId: entity.id,
+                  audiobookVersion,
+                }
+              );
+            }
+          }
         })
         .catch(async (e) => {
           try {

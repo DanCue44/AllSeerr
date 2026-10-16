@@ -15,6 +15,7 @@ import {
   BlocklistedMediaError,
   ContentRatingRestrictedError,
   DuplicateMediaRequestError,
+  InvalidAudiobookVersionError,
   InvalidBookLanguageError,
   InvalidRecordingRequestError,
   MediaRequest,
@@ -417,6 +418,7 @@ requestRoutes.post<never, MediaRequest, MediaRequestBody>(
           return next({ status: 403, message: error.message });
         case DuplicateMediaRequestError:
           return next({ status: 409, message: error.message });
+        case InvalidAudiobookVersionError:
         case InvalidBookLanguageError:
         case InvalidRecordingRequestError:
           return next({ status: 400, message: error.message });

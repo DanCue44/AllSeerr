@@ -2,6 +2,7 @@ import type { TalearrIdentity } from '@server/api/servarr/chaptarr';
 import ChaptarrAPI from '@server/api/servarr/chaptarr';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { hasBookGrabPolicy } from '@server/lib/talearrAudiobookVersions';
 import logger from '@server/logger';
 import { Router } from 'express';
 
@@ -53,6 +54,11 @@ chaptarrRoutes.post('/test', async (req, res, next) => {
           ? chaptarr.getTalearrIdentity()
           : Promise.resolve<TalearrIdentity>({ isTalearr: false }),
       ]);
+    // TaleArr's per book grab policy, which the Audiobook Versions setting
+    // uses to search for the abridged reading
+    const bookGrabPolicy = talearr.isTalearr
+      ? await hasBookGrabPolicy(chaptarr)
+      : false;
 
     return res.status(200).json({
       appName,
@@ -62,6 +68,7 @@ chaptarrRoutes.post('/test', async (req, res, next) => {
         talearr: {
           version: talearr.version,
           grabPolicy: talearr.grabPolicy,
+          bookGrabPolicy,
           metadataProblem: talearr.metadataProblem,
         },
       }),

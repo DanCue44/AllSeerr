@@ -1,3 +1,4 @@
+import type { AudiobookVersion } from '@server/constants/audiobookVersion';
 import type { BookRecordingKind } from '@server/constants/bookRecording';
 import type {
   BookFormatChoice,
@@ -43,6 +44,9 @@ export type MediaRequestBody = {
   recordingNarrator?: string;
   // TaleArr's id of the edition an edition recording is asked for
   recordingEditionId?: number;
+  // Audiobooks on TaleArr only, with Audiobook Versions at `requester`:
+  // the unabridged reading, the abridged one or both
+  audiobookVersion?: AudiobookVersion | null;
   serverId?: number;
   profileId?: number;
   profileName?: string;

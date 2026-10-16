@@ -12,7 +12,11 @@ import type {
 } from '@server/constants/bookRecording';
 import { MAX_RECORDING_NARRATOR_LENGTH } from '@server/constants/bookRecording';
 import { isTalearrService } from '@server/constants/bookService';
-import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
@@ -540,8 +544,21 @@ export const sendRecordingToTalearr = async (
     return;
   }
 
-  const { server, bookId } = target;
-  const kind = entity.recording;
+  dispatchRecording(entity, target, media, () => transactionSettled(manager));
+};
+
+/**
+ * Sends a recording request to TaleArr on the server's queue and keeps
+ * what TaleArr answers. Writes back only once `settled` resolves, such as
+ * when the transaction that saved the request has ended.
+ */
+const dispatchRecording = (
+  entity: MediaRequest,
+  { server, bookId }: RecordingTarget,
+  media: Media,
+  settled: () => Promise<void>
+): void => {
+  const kind = entity.recording as BookRecordingKind;
   const narrator = cleanNarrator(entity.recordingNarrator);
   const body = {
     bookId,
@@ -580,7 +597,7 @@ export const sendRecordingToTalearr = async (
       return result;
     })
     // Writes back only once the request's transaction has ended
-    .finally(() => transactionSettled(manager))
+    .finally(settled)
     .then(async (result) => {
       if (!('searchQueued' in result)) {
         await failRecordingRequest(entity, describeRefusal(result));
@@ -689,4 +706,90 @@ export const syncRecordingRequests = async (
   }
 
   return completed;
+};
+
+/**
+ * Asks TaleArr for the abridged recording of an audiobook it was just sent,
+ * as a recording request of its own linked to the audiobook request: same
+ * requester, approved with it and not counted against the quota again. It
+ * then reads, completes and notifies like any abridged recording request.
+ * Nothing is asked for when TaleArr knows no abridged edition, keeps one
+ * already, or one was requested already.
+ */
+export const requestAbridgedRecording = async (
+  parent: MediaRequest,
+  target: RecordingTarget
+): Promise<MediaRequest | undefined> => {
+  const requestRepository = getRepository(MediaRequest);
+  const media = await getRepository(Media).findOne({
+    where: { id: parent.media.id },
+  });
+
+  if (!media) {
+    return undefined;
+  }
+
+  const requests = await requestRepository.find({
+    where: { media: { id: media.id }, recording: Not(IsNull()) },
+  });
+  let view: TalearrRecordings | undefined;
+
+  try {
+    view = await createClient(target.server).getTalearrRecordings(
+      target.bookId
+    );
+  } catch (e) {
+    logger.warn('Could not read the recordings of a book from TaleArr', {
+      label: LABEL,
+      requestId: parent.id,
+      bookId: target.bookId,
+      errorMessage: e instanceof Error ? e.message : String(e),
+    });
+    return undefined;
+  }
+
+  const option = view
+    ? getRecordingOptions(view, requests).abridged
+    : { available: false, reason: 'none' as const };
+
+  if (!option.available) {
+    logger.info('Not asking TaleArr for the abridged recording', {
+      label: LABEL,
+      requestId: parent.id,
+      mediaId: media.id,
+      reason: view ? option.reason : 'no recordings route',
+    });
+    return undefined;
+  }
+
+  // Saved without the request subscriber, which would send it as a
+  // recording of an audiobook that is available already, and without the
+  // pending and approved notifications the audiobook request sent
+  const linked = await requestRepository.save(
+    new MediaRequest({
+      type: MediaType.BOOK,
+      media,
+      requestedBy: parent.requestedBy,
+      modifiedBy: parent.modifiedBy,
+      status: MediaRequestStatus.APPROVED,
+      is4k: false,
+      isAudiobook: true,
+      language: parent.language,
+      serverId: target.server.id,
+      recording: 'abridged',
+      isAutoRequest: parent.isAutoRequest,
+      ignoreQuota: true,
+    }),
+    { listeners: false }
+  );
+
+  logger.info('Asking TaleArr for the abridged recording too', {
+    label: LABEL,
+    requestId: parent.id,
+    recordingRequestId: linked.id,
+    mediaId: media.id,
+  });
+  dispatchRecording(linked, target, media, () => Promise.resolve());
+
+  return linked;
 };

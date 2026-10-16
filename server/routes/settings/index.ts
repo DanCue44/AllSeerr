@@ -6,6 +6,7 @@ import LazyLibrarianAPI from '@server/api/lazylibrarian';
 import PlexAPI, { plexStatusProbe } from '@server/api/plexapi';
 import PlexTvAPI from '@server/api/plextv';
 import TautulliAPI from '@server/api/tautulli';
+import { isAudiobookVersionsMode } from '@server/constants/audiobookVersion';
 import { isBookLanguage } from '@server/constants/bookLanguages';
 import { isBookService } from '@server/constants/bookService';
 import { ApiErrorCode } from '@server/constants/error';
@@ -133,6 +134,13 @@ settingsRoutes.post('/main', async (req, res, next) => {
 
   if (body.bookService !== undefined && !isBookService(body.bookService)) {
     return next({ status: 400, message: 'Unknown book service.' });
+  }
+
+  if (
+    body.audiobookVersions !== undefined &&
+    !isAudiobookVersionsMode(body.audiobookVersions)
+  ) {
+    return next({ status: 400, message: 'Unknown audiobook versions.' });
   }
 
   settings.main = merge(settings.main, body);

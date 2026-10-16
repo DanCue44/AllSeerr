@@ -37,11 +37,17 @@ export interface ChaptarrTestResponse {
   talearr?: {
     version?: string;
     grabPolicy?: {
-      abridgedPolicy: 'unabridgedOnly' | 'preferUnabridged' | 'any';
+      abridgedPolicy:
+        | 'unabridgedOnly'
+        | 'preferUnabridged'
+        | 'any'
+        | 'abridgedOnly';
       allowBundles: boolean;
       failRejectedImports: boolean;
       maxAutomaticRetries: number;
     };
+    // Whether TaleArr has a grab policy per book
+    bookGrabPolicy?: boolean;
     metadataProblem?: string;
   };
   profiles: { id: number; name: string; profileType?: string }[];
@@ -139,6 +145,11 @@ const messages = defineMessages('components.Settings.ChaptarrModal', {
   abridgedUnabridgedOnly: 'unabridged audiobooks only',
   abridgedPreferUnabridged: 'unabridged audiobooks preferred',
   abridgedAny: 'abridged audiobooks allowed',
+  abridgedAbridgedOnly: 'abridged audiobooks only',
+  talearrBookGrabPolicy:
+    'Per book grab policy: supported, so Audiobook Versions can search for the abridged reading itself.',
+  talearrNoBookGrabPolicy:
+    'Per book grab policy: not supported, so Audiobook Versions asks for the abridged reading as a recording of its own.',
   bundlesAllowed: 'allowed',
   bundlesSkipped: 'skipped',
   failRejectedOn: 'marked failed',
@@ -449,7 +460,9 @@ const ChaptarrModal = ({
                     ? messages.abridgedAny
                     : policy.abridgedPolicy === 'preferUnabridged'
                       ? messages.abridgedPreferUnabridged
-                      : messages.abridgedUnabridgedOnly
+                      : policy.abridgedPolicy === 'abridgedOnly'
+                        ? messages.abridgedAbridgedOnly
+                        : messages.abridgedUnabridgedOnly
                 ),
                 bundles: intl.formatMessage(
                   policy.allowBundles
@@ -463,6 +476,15 @@ const ChaptarrModal = ({
                 ),
                 retries: policy.maxAutomaticRetries,
               })}
+            {service === 'talearr' && talearr?.bookGrabPolicy !== undefined && (
+              <p className="mt-2">
+                {intl.formatMessage(
+                  talearr.bookGrabPolicy
+                    ? messages.talearrBookGrabPolicy
+                    : messages.talearrNoBookGrabPolicy
+                )}
+              </p>
+            )}
           </Alert>
           {service === 'talearr' && talearr?.metadataProblem && (
             <Alert
