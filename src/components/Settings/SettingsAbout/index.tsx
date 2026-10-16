@@ -4,6 +4,7 @@ import List from '@app/components/Common/List';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Releases from '@app/components/Settings/SettingsAbout/Releases';
+import WorksBestWith from '@app/components/Settings/SettingsAbout/WorksBestWith';
 import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
 import ErrorPage from '@app/pages/_error';
@@ -174,6 +175,9 @@ const SettingsAbout = () => {
             {link(SEERR_REPO_URL)}
           </List.Item>
         </List>
+      </div>
+      <div className="section">
+        <WorksBestWith />
       </div>
       <div className="section">
         <Releases currentVersion={data.version} />
