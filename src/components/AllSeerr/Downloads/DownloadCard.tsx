@@ -131,17 +131,10 @@ const imageStyle = {
 };
 
 /**
- * The poster or cover the arr sent, through the image cache when it is one
- * AllSeerr caches. Books Chaptarr has no cover for use the OpenLibrary one.
+ * A poster or cover through the image cache when it is one AllSeerr
+ * caches, or the placeholder without one
  */
-const Poster = ({ item }: { item: DownloadItem }) => {
-  const isBook = item.mediaType === 'ebook' || item.mediaType === 'audiobook';
-  const { data: book } = useSWR<BookDetails>(
-    isBook && !item.posterUrl && item.olId ? `/api/v1/book/${item.olId}` : null,
-    { revalidateOnFocus: false }
-  );
-  const src = item.posterUrl ?? book?.posterPath ?? undefined;
-
+export const PosterImage = ({ src }: { src?: string }) => {
   if (!src) {
     return (
       <CachedImage
@@ -165,6 +158,31 @@ const Poster = ({ item }: { item: DownloadItem }) => {
           : 'avatar';
 
   return <CachedImage type={type} src={src} alt="" style={imageStyle} fill />;
+};
+
+/**
+ * The cover of a book in AllSeerr, from its OpenLibrary work
+ */
+export const useBookCover = (olId?: string | null): string | undefined => {
+  const { data: book } = useSWR<BookDetails>(
+    olId ? `/api/v1/book/${olId}` : null,
+    { revalidateOnFocus: false }
+  );
+
+  return book?.posterPath ?? undefined;
+};
+
+/**
+ * The poster or cover the arr sent. Books Chaptarr has no cover for use
+ * the OpenLibrary one.
+ */
+const Poster = ({ item }: { item: DownloadItem }) => {
+  const isBook = item.mediaType === 'ebook' || item.mediaType === 'audiobook';
+  const bookCover = useBookCover(
+    isBook && !item.posterUrl ? item.olId : undefined
+  );
+
+  return <PosterImage src={item.posterUrl ?? bookCover} />;
 };
 
 const Badge = ({

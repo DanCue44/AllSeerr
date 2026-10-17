@@ -116,13 +116,21 @@ const AmbientShell = ({ children }: LayoutProps) => {
   });
 
   // Only admins see downloads, and the count reads every arr's queue
-  const { data: downloadsResponse } = useSWR<{ attention: number }>(
-    hasPermission(Permission.ADMIN) ? '/api/v1/downloads/count' : null,
-    { revalidateOnMount: true, refreshInterval: 60_000 }
-  );
+  const { data: downloadsResponse } = useSWR<{
+    attention: number;
+    seedingAtRisk?: number;
+  }>(hasPermission(Permission.ADMIN) ? '/api/v1/downloads/count' : null, {
+    revalidateOnMount: true,
+    refreshInterval: 60_000,
+  });
 
   const pendingRequestsCount: number = requestResponse?.pending ?? 0;
   const openIssuesCount: number = issueResponse?.open ?? 0;
+  // Downloads needing attention and torrents that may break a tracker's
+  // seeding rules
+  const downloadsBadgeCount =
+    (downloadsResponse?.attention ?? 0) +
+    (downloadsResponse?.seedingAtRisk ?? 0);
 
   useEffect(() => {
     if (setLocale && user) {
@@ -192,11 +200,8 @@ const AmbientShell = ({ children }: LayoutProps) => {
       return pendingRequestsCount;
     }
 
-    if (
-      link.messagesKey === 'downloads' &&
-      (downloadsResponse?.attention ?? 0) > 0
-    ) {
-      return downloadsResponse?.attention ?? 0;
+    if (link.messagesKey === 'downloads' && downloadsBadgeCount > 0) {
+      return downloadsBadgeCount;
     }
 
     if (

@@ -344,6 +344,8 @@ const LOOKUP_TIMEOUT_MS = 30_000;
 const IDENTITY_TIMEOUT_MS = 10_000;
 // TaleArr's recordings route reads its own cache of Audible facts
 const RECORDINGS_TIMEOUT_MS = 15_000;
+// TaleArr's seeding route asks the download client and MyAnonamouse
+const SEEDING_TIMEOUT_MS = 15_000;
 // The health check TaleArr reports metadata server problems with
 const TALEARR_METADATA_CHECK = 'TalearrMetadataServerProbeCheck';
 
@@ -795,6 +797,30 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
     return response.status === 200
       ? parseTalearrRecordings(response.data)
       : undefined;
+  }
+
+  /**
+   * What TaleArr's download client seeds and whether the trackers' seeding
+   * rules are kept, as TaleArr sends it. Undefined when the server has no
+   * such route, as stock Chaptarr and older TaleArr do not.
+   */
+  public async getTalearrSeeding(): Promise<unknown> {
+    const response = await this.axios.get<unknown>('/talearr/seeding', {
+      timeout: SEEDING_TIMEOUT_MS,
+      validateStatus: (status) => status < 500 && status !== 401,
+    });
+
+    if (response.status === 404) {
+      return undefined;
+    }
+
+    if (response.status !== 200) {
+      throw new Error(
+        `TaleArr answered the seeding request with status ${response.status}`
+      );
+    }
+
+    return response.data;
   }
 
   /**

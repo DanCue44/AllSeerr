@@ -130,3 +130,84 @@ export interface DownloadRemoveResponse {
   // Why the new search could not be started, the download is gone anyway
   searchError?: string;
 }
+
+export type SeedingState =
+  | 'seeding'
+  | 'stalled'
+  | 'queued'
+  | 'paused'
+  | 'checking'
+  | 'error'
+  | 'downloading';
+
+/**
+ * A torrent TaleArr's download client is seeding, or should be. Bytes and
+ * seconds, ISO 8601 times. Fields TaleArr does not know are null.
+ */
+export interface SeedingTorrent {
+  // The hash in the download client
+  downloadId: string;
+  // The release name in the client
+  title: string;
+  // Null when TaleArr cannot match the torrent to a book
+  bookId: number | null;
+  bookTitle: string | null;
+  authorName: string | null;
+  mediaType: 'audiobook' | 'ebook' | null;
+  indexer: string | null;
+  isPrivateTracker: boolean;
+  downloadClient: string | null;
+  state: SeedingState;
+  size: number;
+  uploaded: number;
+  ratio: number;
+  seedingSeconds: number;
+  // The tracker's minimum, such as 72 hours for MyAnonamouse
+  requiredSeedingSeconds: number | null;
+  // When the client stops seeding by itself
+  seedGoalSeconds: number | null;
+  requirementMet: boolean;
+  atRisk: boolean;
+  riskReason: string | null;
+  addedAt: string | null;
+  completedAt: string | null;
+  // Added by AllSeerr: the book in AllSeerr, when it has the TaleArr book
+  mediaId?: number;
+  olId?: string;
+}
+
+export interface SeedingSummary {
+  total: number;
+  seeding: number;
+  atRisk: number;
+  privateUnsatisfied: number;
+}
+
+/**
+ * The MyAnonamouse account TaleArr checks, for its seeding rules
+ */
+export interface MamStatus {
+  userClass: string | null;
+  isVip: boolean;
+  unsatisfied: number | null;
+  unsatisfiedLimit: number | null;
+  wedges: number | null;
+  bonusPoints: number | null;
+  checkedAt: string | null;
+}
+
+export interface TalearrSeeding {
+  generatedAt: string | null;
+  torrents: SeedingTorrent[];
+  summary: SeedingSummary;
+  // Null when TaleArr has no MyAnonamouse indexer
+  mam: MamStatus | null;
+}
+
+/**
+ * Seeding is only known to TaleArr; stock Chaptarr and LazyLibrarian answer
+ * unsupported
+ */
+export type SeedingResponse =
+  | { supported: false }
+  | ({ supported: true } & TalearrSeeding);

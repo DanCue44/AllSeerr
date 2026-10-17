@@ -132,6 +132,9 @@ describe('seerr-api.yml', () => {
     app.post('/api/v1/request', (_req, res) => {
       res.status(201).json({});
     });
+    app.get('/api/v1/downloads/seeding', (_req, res) => {
+      res.status(200).json({ supported: false });
+    });
     app.get('/api/v1/nobookends/status', (_req, res) => {
       res.status(200).json({});
     });
@@ -189,6 +192,9 @@ describe('seerr-api.yml', () => {
       '/api/v1/book/OL45804W/recordings'
     );
     assert.strictEqual(recordings.status, 200, recordings.body.message);
+
+    const seeding = await request(app).get('/api/v1/downloads/seeding');
+    assert.strictEqual(seeding.status, 200, seeding.body.message);
 
     // Another recording of an audiobook is asked for on the request route
     const recordingRequest = await request(app).post('/api/v1/request').send({

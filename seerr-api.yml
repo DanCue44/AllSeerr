@@ -13516,8 +13516,160 @@ paths:
                     type: number
                   attention:
                     type: number
+                  seedingAtRisk:
+                    type: number
+                    description: Seeding torrents at risk, 0 unless TaleArr is the book service
         '403':
           description: Not allowed to manage requests
+  /downloads/seeding:
+    get:
+      summary: List what TaleArr seeds
+      description: |
+        The torrents TaleArr's download client seeds, or should be seeding, with the seeded time against the tracker's minimum (72 hours for MyAnonamouse), and the MyAnonamouse account TaleArr checks. Torrents of private trackers that will not meet the minimum, such as paused or errored ones, are `atRisk` with a `riskReason`. Answers are kept for 30 seconds. With stock Chaptarr or LazyLibrarian as the book service, or a TaleArr without seeding, the answer is `{ "supported": false }`.
+
+        Requires the `ADMIN` permission.
+      tags:
+        - downloads
+      responses:
+        '200':
+          description: Seeding torrents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [supported]
+                properties:
+                  supported:
+                    type: boolean
+                  generatedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  torrents:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        downloadId:
+                          type: string
+                          description: The hash in the download client
+                        title:
+                          type: string
+                          example: Ali Hazelwood - Deep End.m4b
+                        bookId:
+                          type: number
+                          nullable: true
+                          description: The TaleArr book, null when TaleArr cannot match the torrent
+                        bookTitle:
+                          type: string
+                          nullable: true
+                        authorName:
+                          type: string
+                          nullable: true
+                        mediaType:
+                          type: string
+                          enum: [audiobook, ebook]
+                          nullable: true
+                        indexer:
+                          type: string
+                          nullable: true
+                          example: MyAnonamouse
+                        isPrivateTracker:
+                          type: boolean
+                        downloadClient:
+                          type: string
+                          nullable: true
+                        state:
+                          type: string
+                          enum:
+                            [
+                              seeding,
+                              stalled,
+                              queued,
+                              paused,
+                              checking,
+                              error,
+                              downloading,
+                            ]
+                        size:
+                          type: number
+                          description: Bytes
+                        uploaded:
+                          type: number
+                          description: Bytes
+                        ratio:
+                          type: number
+                        seedingSeconds:
+                          type: number
+                        requiredSeedingSeconds:
+                          type: number
+                          nullable: true
+                          example: 259200
+                        seedGoalSeconds:
+                          type: number
+                          nullable: true
+                        requirementMet:
+                          type: boolean
+                        atRisk:
+                          type: boolean
+                        riskReason:
+                          type: string
+                          nullable: true
+                          example: Paused before 72 h of seeding
+                        addedAt:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        completedAt:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        mediaId:
+                          type: number
+                          description: The book in AllSeerr, when it has the TaleArr book
+                        olId:
+                          type: string
+                  summary:
+                    type: object
+                    properties:
+                      total:
+                        type: number
+                      seeding:
+                        type: number
+                      atRisk:
+                        type: number
+                      privateUnsatisfied:
+                        type: number
+                  mam:
+                    type: object
+                    nullable: true
+                    description: Null when TaleArr has no MyAnonamouse indexer
+                    properties:
+                      userClass:
+                        type: string
+                        nullable: true
+                      isVip:
+                        type: boolean
+                      unsatisfied:
+                        type: number
+                        nullable: true
+                      unsatisfiedLimit:
+                        type: number
+                        nullable: true
+                      wedges:
+                        type: number
+                        nullable: true
+                      bonusPoints:
+                        type: number
+                        nullable: true
+                      checkedAt:
+                        type: string
+                        format: date-time
+                        nullable: true
+        '403':
+          description: Not an admin
+        '502':
+          description: TaleArr did not answer or sent an answer that cannot be read
   /downloads/{downloadId}/search:
     post:
       summary: Search again for what a download is of

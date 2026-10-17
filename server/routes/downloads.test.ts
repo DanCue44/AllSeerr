@@ -277,7 +277,11 @@ describe('GET /downloads', () => {
       .set('X-Api-Key', apiKey);
 
     assert.strictEqual(res.status, 200);
-    assert.deepStrictEqual(res.body, { total: 2, attention: 1 });
+    assert.deepStrictEqual(res.body, {
+      total: 2,
+      attention: 1,
+      seedingAtRisk: 0,
+    });
     assert.strictEqual(calls.length, before);
   });
 });

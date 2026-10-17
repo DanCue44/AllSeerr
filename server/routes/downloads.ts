@@ -2,6 +2,7 @@ import type {
   DownloadRemoveBody,
   DownloadRemoveResponse,
   DownloadsResponse,
+  SeedingResponse,
 } from '@server/interfaces/api/downloadInterfaces';
 import { ArrActionError } from '@server/lib/arrActions';
 import {
@@ -10,6 +11,7 @@ import {
   searchDownload,
 } from '@server/lib/downloads';
 import { Permission } from '@server/lib/permissions';
+import { getSeeding } from '@server/lib/talearrSeeding';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import type { NextFunction } from 'express';
@@ -52,17 +54,44 @@ downloadRoutes.get<never, DownloadsResponse>('/', async (_req, res, next) => {
   }
 });
 
-downloadRoutes.get<never, { total: number; attention: number }>(
-  '/count',
+// The seeding torrents at risk, for the badge; TaleArr not answering only
+// leaves them out of the count
+const countSeedingAtRisk = async (): Promise<number> => {
+  try {
+    const seeding = await getSeeding();
+    return seeding.supported ? seeding.summary.atRisk : 0;
+  } catch {
+    return 0;
+  }
+};
+
+downloadRoutes.get<
+  never,
+  { total: number; attention: number; seedingAtRisk: number }
+>('/count', async (_req, res, next) => {
+  try {
+    const [{ totals }, seedingAtRisk] = await Promise.all([
+      getDownloads({ maxAgeMs: COUNT_MAX_AGE_MS }),
+      countSeedingAtRisk(),
+    ]);
+
+    return res.status(200).json({
+      total: totals.total,
+      attention: totals.attention,
+      seedingAtRisk,
+    });
+  } catch (e) {
+    return handleError(e, undefined, next, 'counting the downloads');
+  }
+});
+
+downloadRoutes.get<never, SeedingResponse>(
+  '/seeding',
   async (_req, res, next) => {
     try {
-      const { totals } = await getDownloads({ maxAgeMs: COUNT_MAX_AGE_MS });
-
-      return res
-        .status(200)
-        .json({ total: totals.total, attention: totals.attention });
+      return res.status(200).json(await getSeeding());
     } catch (e) {
-      return handleError(e, undefined, next, 'counting the downloads');
+      return handleError(e, undefined, next, 'reading what TaleArr seeds');
     }
   }
 );
