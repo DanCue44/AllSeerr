@@ -20,6 +20,7 @@ import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import useSettings from '@app/hooks/useSettings';
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
+import { rememberLoginNext, takeLoginNext } from '@app/utils/loginRedirect';
 import { Transition } from '@headlessui/react';
 import { XCircleIcon } from '@heroicons/react/24/solid';
 import { MediaServerType } from '@server/constants/server';
@@ -78,11 +79,20 @@ const Login = () => {
     }
   }, [authToken, revalidate]);
 
+  // A page opened from outside, such as the NoBookEnds app's connect page,
+  // is kept for this tab too, in case a sign in method leaves this page
+  useEffect(() => {
+    if (router.isReady) {
+      rememberLoginNext(router.query.next);
+    }
+  }, [router.isReady, router.query.next]);
+
   // Effect that is triggered whenever `useUser`'s user changes. If we get a new
-  // valid user, we redirect the user to the home page as the login was successful.
+  // valid user, we redirect the user to the page they asked for, or the home
+  // page, as the login was successful.
   useEffect(() => {
     if (user) {
-      router.push('/');
+      router.push(takeLoginNext(router.query.next));
     }
   }, [user, router]);
 

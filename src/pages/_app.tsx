@@ -16,6 +16,7 @@ import type { User } from '@app/hooks/useUser';
 import { Permission, useUser } from '@app/hooks/useUser';
 import '@app/styles/allseerr-theme.css';
 import '@app/styles/globals.css';
+import { getLoginPath, getSafeNextPath } from '@app/utils/loginRedirect';
 import { polyfillIntl } from '@app/utils/polyfillIntl';
 import { getHostAndPort } from '@app/utils/urlHelper';
 import '@fontsource-variable/inter';
@@ -189,7 +190,11 @@ const CoreApp: Omit<NextAppComponentType, 'origGetInitialProps'> = ({
     };
   }, [hasPermission, router.pathname]);
 
-  if (router.pathname.match(/(login|setup|resetpassword)/)) {
+  if (
+    router.pathname.match(/(login|setup|resetpassword)/) ||
+    // The page the NoBookEnds app opens to connect stands on its own
+    router.pathname.startsWith('/nobookends/')
+  ) {
     component = <Component {...pageProps} />;
   } else {
     component = (
@@ -320,7 +325,10 @@ CoreApp.getInitialProps = async (initialProps) => {
 
         if (router.pathname.match(/(setup|login)/)) {
           ctx.res.writeHead(307, {
-            Location: '/',
+            Location:
+              (router.pathname === '/login' &&
+                getSafeNextPath(ctx.query.next)) ||
+              '/',
           });
           ctx.res.end();
         }
@@ -330,7 +338,9 @@ CoreApp.getInitialProps = async (initialProps) => {
         // before anything actually renders
         if (!router.pathname.match(/(login|setup|resetpassword)/)) {
           ctx.res.writeHead(307, {
-            Location: '/login',
+            // A page opened from outside, such as the NoBookEnds app's
+            // connect page, is returned to after sign in
+            Location: getLoginPath(ctx.asPath),
           });
           ctx.res.end();
         }
