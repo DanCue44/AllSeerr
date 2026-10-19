@@ -9,6 +9,7 @@ import MetadataAlbum from '@server/entity/MetadataAlbum';
 import MetadataArtist from '@server/entity/MetadataArtist';
 import MetadataBookAudio from '@server/entity/MetadataBookAudio';
 import MetadataBookEbook from '@server/entity/MetadataBookEbook';
+import { NoBookEndsDevice } from '@server/entity/NoBookEndsDevice';
 import OverrideRule from '@server/entity/OverrideRule';
 import RemovalRequest from '@server/entity/RemovalRequest';
 import Season from '@server/entity/Season';
@@ -43,6 +44,7 @@ const entities = [
   MetadataArtist,
   MetadataBookAudio,
   MetadataBookEbook,
+  NoBookEndsDevice,
   OverrideRule,
   RemovalRequest,
   Season,

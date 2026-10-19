@@ -58,28 +58,47 @@ export const getNoBookEndsItemUrl = (
 };
 
 /**
+ * The app's own scheme, which the easy connect page hands the key back to
+ * from the sign in window the app opened
+ */
+export const NOBOOKENDS_APP_CONNECT_URL = 'nobookends://connect';
+
+interface NoBookEndsConnectParams {
+  audiobookshelfUrl: string;
+  allseerrUrl: string;
+  apiKey: string;
+}
+
+const getNoBookEndsConnectFragment = ({
+  audiobookshelfUrl,
+  allseerrUrl,
+  apiKey,
+}: NoBookEndsConnectParams): string =>
+  new URLSearchParams({
+    abs: trimUrl(audiobookshelfUrl) ?? audiobookshelfUrl,
+    allseerr: trimUrl(allseerrUrl) ?? allseerrUrl,
+    key: apiKey,
+  }).toString();
+
+/**
  * Sets NoBookEnds up in one tap: the Audiobookshelf server to sign in to,
  * and the AllSeerr server with the personal key it requests books with. The
  * values go in the fragment, which browsers never send, so the key does not
  * reach the NoBookEnds site or its logs when the app is not installed.
  */
-export const getNoBookEndsConnectUrl = ({
-  audiobookshelfUrl,
-  allseerrUrl,
-  apiKey,
-}: {
-  audiobookshelfUrl: string;
-  allseerrUrl: string;
-  apiKey: string;
-}): string => {
-  const params = new URLSearchParams({
-    abs: trimUrl(audiobookshelfUrl) ?? audiobookshelfUrl,
-    allseerr: trimUrl(allseerrUrl) ?? allseerrUrl,
-    key: apiKey,
-  });
+export const getNoBookEndsConnectUrl = (
+  params: NoBookEndsConnectParams
+): string =>
+  `${NOBOOKENDS_OPEN_URL}/connect#${getNoBookEndsConnectFragment(params)}`;
 
-  return `${NOBOOKENDS_OPEN_URL}/connect#${params.toString()}`;
-};
+/**
+ * The same values as the connect link, for the app's own scheme. The app
+ * opens AllSeerr in a sign in window that closes when it reaches this URL.
+ */
+export const getNoBookEndsAppConnectUrl = (
+  params: NoBookEndsConnectParams
+): string =>
+  `${NOBOOKENDS_APP_CONNECT_URL}#${getNoBookEndsConnectFragment(params)}`;
 
 const PRIVATE_IPV4 = [
   /^0\./,

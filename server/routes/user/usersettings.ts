@@ -5,6 +5,7 @@ import { ApiErrorCode } from '@server/constants/error';
 import { MediaServerType } from '@server/constants/server';
 import { UserType } from '@server/constants/user';
 import { getRepository } from '@server/datasource';
+import { NoBookEndsDevice } from '@server/entity/NoBookEndsDevice';
 import { User } from '@server/entity/User';
 import { UserSettings } from '@server/entity/UserSettings';
 import type {
@@ -18,9 +19,15 @@ import {
 } from '@server/lib/contentRatingLimit';
 import {
   getNoBookEndsAllSeerrUrl,
+  getNoBookEndsAppConnectUrl,
   getNoBookEndsConnectUrl,
   isNoBookEndsAvailable,
 } from '@server/lib/nobookends';
+import type { NoBookEndsDeviceResponse } from '@server/lib/nobookendsDevices';
+import {
+  addNoBookEndsDevice,
+  getNoBookEndsDevices,
+} from '@server/lib/nobookendsDevices';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import { generateUserApiKey, hashUserApiKey } from '@server/lib/userApiKey';
@@ -990,8 +997,11 @@ userSettingsRoutes.delete<{ id: string }>(
 interface NoBookEndsConnection {
   // Whether books and Audiobookshelf are set up, so the app can connect
   available: boolean;
+  // Whether any device is connected
   connected: boolean;
+  // When the newest device connected
   createdAt?: Date | null;
+  devices: NoBookEndsDeviceResponse[];
   // No Application URL is set and AllSeerr was opened at a home address,
   // which the app could not reach away from home
   applicationUrlMissing: boolean;
@@ -1019,10 +1029,16 @@ userSettingsRoutes.get<{ id: string }, NoBookEndsConnection>(
         return next({ status: 404, message: 'User not found.' });
       }
 
+      const devices = await getNoBookEndsDevices(user.id);
+      const legacyCreatedAt = user.nobookendsKeyHash
+        ? (user.nobookendsKeyCreatedAt ?? null)
+        : null;
+
       return res.status(200).json({
         available: isNoBookEndsAvailable(),
-        connected: !!user.nobookendsKeyHash,
-        createdAt: user.nobookendsKeyHash ? user.nobookendsKeyCreatedAt : null,
+        connected: devices.length > 0 || !!user.nobookendsKeyHash,
+        createdAt: devices[0]?.createdAt ?? legacyCreatedAt,
+        devices,
         applicationUrlMissing: !getNoBookEndsAllSeerrUrl(
           noBookEndsRequest(req)
         ),
@@ -1034,13 +1050,21 @@ userSettingsRoutes.get<{ id: string }, NoBookEndsConnection>(
 );
 
 /**
- * Makes the NoBookEnds key and the link that sets the app up with it. A new
- * link replaces the old key, which signs out the app it was given to. Like
- * the personal key, only the owner can make it, as it is shown once.
+ * Connects NoBookEnds on one more device: makes its key, the link that sets
+ * the app up with it, and the app URL the connect page hands it back with.
+ * Devices connected before keep working. Like the personal key, only the
+ * owner can make it, as it is shown once.
  */
 userSettingsRoutes.post<
   { id: string },
-  { apiKey: string; createdAt: Date; connectUrl: string }
+  {
+    apiKey: string;
+    createdAt: Date;
+    connectUrl: string;
+    appUrl: string;
+    device: NoBookEndsDeviceResponse;
+  },
+  { device?: string } | undefined
 >('/nobookends', isOwnProfile(), async (req, res, next) => {
   const settings = getSettings();
   const userRepository = getRepository(User);
@@ -1071,33 +1095,31 @@ userSettingsRoutes.post<
       return next({ status: 404, message: 'User not found.' });
     }
 
-    const apiKey = generateUserApiKey();
-    const createdAt = new Date();
-
-    await userRepository.update(user.id, {
-      nobookendsKeyHash: hashUserApiKey(apiKey),
-      nobookendsKeyCreatedAt: createdAt,
-    });
-
-    logger.info('NoBookEnds key generated', {
-      label: 'API',
-      userId: user.id,
-    });
+    const { apiKey, device } = await addNoBookEndsDevice(
+      user,
+      req.body?.device
+    );
+    const connectParams = {
+      audiobookshelfUrl: settings.audiobookshelf.url ?? '',
+      allseerrUrl,
+      apiKey,
+    };
 
     return res.status(201).json({
       apiKey,
-      createdAt,
-      connectUrl: getNoBookEndsConnectUrl({
-        audiobookshelfUrl: settings.audiobookshelf.url ?? '',
-        allseerrUrl,
-        apiKey,
-      }),
+      createdAt: device.createdAt,
+      connectUrl: getNoBookEndsConnectUrl(connectParams),
+      appUrl: getNoBookEndsAppConnectUrl(connectParams),
+      device,
     });
   } catch (e) {
     next({ status: 500, message: e.message });
   }
 });
 
+/**
+ * Disconnects NoBookEnds on every device
+ */
 userSettingsRoutes.delete<{ id: string }>(
   '/nobookends',
   isOwnProfileOrAdmin(),
@@ -1113,14 +1135,52 @@ userSettingsRoutes.delete<{ id: string }>(
         return next({ status: 404, message: 'User not found.' });
       }
 
+      await getRepository(NoBookEndsDevice).delete({ user: { id: user.id } });
       await userRepository.update(user.id, {
         nobookendsKeyHash: null,
         nobookendsKeyCreatedAt: null,
       });
 
-      logger.info('NoBookEnds key revoked', {
+      logger.info('NoBookEnds keys revoked', {
         label: 'API',
         userId: user.id,
+        revokedBy: req.user?.id,
+      });
+
+      return res.status(204).send();
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+/**
+ * Disconnects NoBookEnds on one device
+ */
+userSettingsRoutes.delete<{ id: string; deviceId: string }>(
+  '/nobookends/devices/:deviceId',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    const repository = getRepository(NoBookEndsDevice);
+
+    try {
+      const device = await repository.findOne({
+        where: {
+          id: Number(req.params.deviceId),
+          user: { id: Number(req.params.id) },
+        },
+      });
+
+      if (!device) {
+        return next({ status: 404, message: 'Device not found.' });
+      }
+
+      await repository.delete(device.id);
+
+      logger.info('NoBookEnds device removed', {
+        label: 'API',
+        userId: Number(req.params.id),
+        deviceId: device.id,
         revokedBy: req.user?.id,
       });
 

@@ -53,6 +53,8 @@ tags:
       - `GET /media/{mediaId}/arr?bookFormat=` for what can be done to a format in its arr
       - `POST /media/{mediaId}/arr/search` to search again, `GET /media/{mediaId}/arr/releases` to list releases, `POST /media/{mediaId}/arr/grab` to grab one and `POST /media/{mediaId}/arr/replace` to replace the file
 
+      To connect, the app opens the AllSeerr page `/nobookends/connect?device={name}` in a sign in window. It asks the user to sign in when needed, then to confirm, and sends the app to `nobookends://connect#abs=...&allseerr=...&key=asu_...` with the same values as a connect link, or to `nobookends://connect#error=cancelled`, `#error=unavailable` (books or Audiobookshelf are not set up) or `#error=no_app_url` (no address that works away from home). Each device gets its own key. Without a key `GET /nobookends/status` answers 403, which tells the app the address is an AllSeerr that supports NoBookEnds.
+
       When an admin set up NoBookEnds Sync, the status carries its public address in `nobookendsSync.url`. The app fetches Listen and Read alignments from there with the user's Audiobookshelf token. AllSeerr queues each book on the Sync server, at user priority, once it has both an audiobook and an ebook in Audiobookshelf.
   - name: other
     description: Endpoints related to other TMDB data
@@ -8549,7 +8551,7 @@ paths:
   /user/{userId}/settings/nobookends:
     get:
       summary: Get NoBookEnds connection status
-      description: Returns whether the user connected the NoBookEnds app with a key from its connect link. The key itself is never returned. Requires `MANAGE_USERS` permission if viewing other users.
+      description: Returns whether the user connected the NoBookEnds app, and the devices it is connected on. The keys are never returned. Requires `MANAGE_USERS` permission if viewing other users.
       tags:
         - users
         - nobookends
@@ -8573,19 +8575,43 @@ paths:
                     example: true
                   connected:
                     type: boolean
+                    description: Whether NoBookEnds is connected on any device
                     example: true
                   createdAt:
                     type: string
                     nullable: true
+                    description: When the newest device connected
                     example: '2026-10-13T05:00:00.000Z'
+                  devices:
+                    type: array
+                    description: The devices NoBookEnds is connected on, newest first
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                          example: 3
+                        label:
+                          type: string
+                          nullable: true
+                          description: The device name the app sent when it connected
+                          example: 'iPhone 16'
+                        createdAt:
+                          type: string
+                          example: '2026-10-19T05:00:00.000Z'
+                        lastUsedAt:
+                          type: string
+                          nullable: true
+                          description: When the app last used the key, saved at most about once an hour
+                          example: '2026-10-19T06:00:00.000Z'
                   applicationUrlMissing:
                     type: boolean
                     description: True when no Application URL is set and AllSeerr was opened at a home address (localhost, a private IP or a local name), which the app could not reach away from home. A connect link can only be made once the Application URL is set.
                     example: false
     post:
-      summary: Create a NoBookEnds connect link
+      summary: Connect NoBookEnds on a device
       description: |
-        Creates a personal API key for the NoBookEnds app, replacing the previous NoBookEnds key, and returns it with a link that sets the app up in one tap. The key is only returned once. It is separate from the key at `/user/{userId}/settings/api-key`, which it never replaces.
+        Creates a personal API key for the NoBookEnds app on one more device and returns it with a link that sets the app up in one tap, and the app URL that `/nobookends/connect` hands the key back to the app with. The key is only returned once. Devices connected before keep working; past 10 devices the oldest are removed. It is separate from the key at `/user/{userId}/settings/api-key`, which it never replaces.
 
         Only the user themselves can create it, and books and Audiobookshelf must be set up. The AllSeerr address in the link is the Application URL, or the address of this request when none is set and it is a public address.
       tags:
@@ -8597,6 +8623,17 @@ paths:
           required: true
           schema:
             type: number
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                device:
+                  type: string
+                  description: A short name for the device, such as its model. Cut to 60 characters.
+                  example: 'iPhone 16'
       responses:
         '201':
           description: Key and connect link created
@@ -8615,11 +8652,34 @@ paths:
                     type: string
                     description: Opens the app, or its site when it is not installed. The Audiobookshelf address (`abs`), the AllSeerr address (`allseerr`) and the key (`key`) are URL-encoded parameters in the fragment, which browsers never send to the site.
                     example: 'https://nobookends.com/open/connect#abs=https%3A%2F%2Fbooks.example.com&allseerr=https%3A%2F%2Fallseerr.example.com&key=asu_6p1x...'
+                  appUrl:
+                    type: string
+                    description: The same parameters for the app's own scheme, which the sign in window the app opened closes on.
+                    example: 'nobookends://connect#abs=https%3A%2F%2Fbooks.example.com&allseerr=https%3A%2F%2Fallseerr.example.com&key=asu_6p1x...'
+                  device:
+                    type: object
+                    properties:
+                      id:
+                        type: number
+                        example: 3
+                      label:
+                        type: string
+                        nullable: true
+                        description: The device name the app sent when it connected
+                        example: 'iPhone 16'
+                      createdAt:
+                        type: string
+                        example: '2026-10-19T05:00:00.000Z'
+                      lastUsedAt:
+                        type: string
+                        nullable: true
+                        description: When the app last used the key, saved at most about once an hour
+                        example: '2026-10-19T06:00:00.000Z'
         '400':
           description: Books or Audiobookshelf are not set up, or no Application URL is set and AllSeerr was opened at a home address
     delete:
       summary: Disconnect NoBookEnds
-      description: Revokes the NoBookEnds key, which signs the app out of AllSeerr. Requires `MANAGE_USERS` permission if revoking another user's key.
+      description: Revokes the NoBookEnds keys of every device, which signs the app out of AllSeerr everywhere. Requires `MANAGE_USERS` permission if revoking another user's keys.
       tags:
         - users
         - nobookends
@@ -8631,7 +8691,30 @@ paths:
             type: number
       responses:
         '204':
-          description: NoBookEnds key revoked
+          description: NoBookEnds keys revoked
+  /user/{userId}/settings/nobookends/devices/{deviceId}:
+    delete:
+      summary: Disconnect NoBookEnds on one device
+      description: Revokes the key of one device, which signs the app out there. The other devices stay connected. Requires `MANAGE_USERS` permission if removing another user's device.
+      tags:
+        - users
+        - nobookends
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: deviceId
+          required: true
+          schema:
+            type: number
+      responses:
+        '204':
+          description: Device removed
+        '404':
+          description: The user has no device with this ID
   /user/{userId}/settings/password:
     get:
       summary: Get password page informatiom

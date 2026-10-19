@@ -1,5 +1,6 @@
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
+import { getNoBookEndsDeviceUser } from '@server/lib/nobookendsDevices';
 import type {
   Permission,
   PermissionCheckOptions,
@@ -18,10 +19,12 @@ export const checkUser: Middleware = async (req, _res, next) => {
     const userRepository = getRepository(User);
     const keyHash = hashUserApiKey(apiKey);
 
-    // Either the key the user made or the one the NoBookEnds app connected with
-    user = await userRepository.findOne({
-      where: [{ apiKeyHash: keyHash }, { nobookendsKeyHash: keyHash }],
-    });
+    // The key the user made, the key of a device NoBookEnds connected on, or
+    // the single NoBookEnds key from before devices were kept apart
+    user =
+      (await userRepository.findOne({
+        where: [{ apiKeyHash: keyHash }, { nobookendsKeyHash: keyHash }],
+      })) ?? (await getNoBookEndsDeviceUser(keyHash));
   } else if (apiKey && apiKey === settings.main.apiKey) {
     const userRepository = getRepository(User);
 

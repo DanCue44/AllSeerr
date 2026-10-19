@@ -9,11 +9,14 @@ import {
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import MediaRequest from '@server/entity/MediaRequest';
+import { NoBookEndsDevice } from '@server/entity/NoBookEndsDevice';
 import { User } from '@server/entity/User';
 import { isPrivateHost } from '@server/lib/nobookends';
+import { MAX_NOBOOKENDS_DEVICES } from '@server/lib/nobookendsDevices';
 import { Permission } from '@server/lib/permissions';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { generateUserApiKey, hashUserApiKey } from '@server/lib/userApiKey';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
 import authRoutes from '@server/routes/auth';
 import nobookendsRoutes from '@server/routes/nobookends';
@@ -181,30 +184,172 @@ describe('NoBookEnds connect link', () => {
       assert.match(created.body.message, /Application URL/);
     }
 
-    const stored = await getRepository(User).findOneOrFail({
-      where: { id: userId },
-      select: ['id', 'nobookendsKeyHash'],
-    });
-    assert.strictEqual(stored.nobookendsKeyHash, null);
+    assert.strictEqual(await getRepository(NoBookEndsDevice).count(), 0);
   });
 
-  it('replaces the old key when a new link is made', async () => {
+  it('keeps the other devices connected when one more connects', async () => {
+    enableBooks();
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+    const first = await agent.post(`/user/${userId}/settings/nobookends`);
+    const second = await agent
+      .post(`/user/${userId}/settings/nobookends`)
+      .send({ device: 'Galaxy S24' });
+
+    assert.notStrictEqual(first.body.apiKey, second.body.apiKey);
+
+    for (const key of [first.body.apiKey, second.body.apiKey]) {
+      const res = await request(app)
+        .get(`/user/${userId}`)
+        .set('X-API-Key', key);
+      assert.strictEqual(res.status, 200);
+    }
+
+    const status = await agent.get(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(status.body.connected, true);
+    assert.deepStrictEqual(
+      status.body.devices.map((d: { label: string | null }) => d.label),
+      ['Galaxy S24', null]
+    );
+    assert.doesNotMatch(JSON.stringify(status.body), /keyHash|asu_/);
+  });
+
+  it('hands the key back to the app in the fragment of its own URL', async () => {
+    enableBooks();
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+    const created = await agent
+      .post(`/user/${userId}/settings/nobookends`)
+      .send({ device: ' iPhone\u0000 16 <script> ' });
+
+    assert.strictEqual(created.status, 201);
+    assert.strictEqual(created.body.device.label, 'iPhone 16 script');
+
+    const appUrl: string = created.body.appUrl;
+    assert.ok(appUrl.startsWith('nobookends://connect#'));
+    assert.doesNotMatch(appUrl.split('#')[0], /asu_/);
+    assert.strictEqual(
+      appUrl.split('#')[1],
+      new URL(created.body.connectUrl).hash.slice(1)
+    );
+  });
+
+  it('removes the oldest devices past the limit', async () => {
+    enableBooks();
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+    const keys: string[] = [];
+
+    for (let i = 0; i < MAX_NOBOOKENDS_DEVICES + 2; i++) {
+      const created = await agent
+        .post(`/user/${userId}/settings/nobookends`)
+        .send({ device: `Phone ${i}` });
+      keys.push(created.body.apiKey);
+    }
+
+    const status = await agent.get(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(status.body.devices.length, MAX_NOBOOKENDS_DEVICES);
+    const newestLabel: string = `Phone ${MAX_NOBOOKENDS_DEVICES + 1}`;
+    assert.strictEqual(status.body.devices[0].label, newestLabel);
+
+    const oldest = await request(app)
+      .get(`/user/${userId}`)
+      .set('X-API-Key', keys[0]);
+    assert.strictEqual(oldest.status, 403);
+
+    const newest = await request(app)
+      .get(`/user/${userId}`)
+      .set('X-API-Key', keys[keys.length - 1]);
+    assert.strictEqual(newest.status, 200);
+  });
+
+  it('notes when a device was last used', async () => {
+    enableBooks();
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+    const created = await agent.post(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(created.body.device.lastUsedAt, null);
+
+    await request(app)
+      .get('/nobookends/status')
+      .set('X-API-Key', created.body.apiKey);
+
+    const status = await agent.get(`/user/${userId}/settings/nobookends`);
+    assert.ok(status.body.devices[0].lastUsedAt);
+  });
+
+  it('removes one device and keeps the others', async () => {
     enableBooks();
     const { agent, userId } = await loginAs('demo@seerr.dev');
     const first = await agent.post(`/user/${userId}/settings/nobookends`);
     const second = await agent.post(`/user/${userId}/settings/nobookends`);
 
-    assert.notStrictEqual(first.body.apiKey, second.body.apiKey);
+    const removed = await agent.delete(
+      `/user/${userId}/settings/nobookends/devices/${first.body.device.id}`
+    );
+    assert.strictEqual(removed.status, 204);
 
-    const replaced = await request(app)
-      .get(`/user/${userId}`)
+    const gone = await request(app)
+      .get('/nobookends/status')
       .set('X-API-Key', first.body.apiKey);
-    assert.strictEqual(replaced.status, 403);
+    assert.strictEqual(gone.status, 403);
 
-    const current = await request(app)
-      .get(`/user/${userId}`)
+    const kept = await request(app)
+      .get('/nobookends/status')
       .set('X-API-Key', second.body.apiKey);
-    assert.strictEqual(current.status, 200);
+    assert.strictEqual(kept.status, 200);
+
+    const again = await agent.delete(
+      `/user/${userId}/settings/nobookends/devices/${first.body.device.id}`
+    );
+    assert.strictEqual(again.status, 404);
+  });
+
+  it("does not remove another user's device", async () => {
+    enableBooks();
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+    const created = await agent.post(`/user/${userId}/settings/nobookends`);
+    const { agent: admin, userId: adminId } = await loginAs('admin@seerr.dev');
+
+    // The device does not belong to the user in the path
+    const wrongUser = await admin.delete(
+      `/user/${adminId}/settings/nobookends/devices/${created.body.device.id}`
+    );
+    assert.strictEqual(wrongUser.status, 404);
+
+    // Only an admin removes the devices of others
+    const adminDevice = await admin.post(
+      `/user/${adminId}/settings/nobookends`
+    );
+    const notAdmin = await agent.delete(
+      `/user/${adminId}/settings/nobookends/devices/${adminDevice.body.device.id}`
+    );
+    assert.strictEqual(notAdmin.status, 403);
+
+    const byAdmin = await admin.delete(
+      `/user/${userId}/settings/nobookends/devices/${created.body.device.id}`
+    );
+    assert.strictEqual(byAdmin.status, 204);
+  });
+
+  it('still accepts the single key from before devices', async () => {
+    enableBooks();
+    const { agent, userId } = await loginAs('demo@seerr.dev');
+    const apiKey = generateUserApiKey();
+    await getRepository(User).update(userId, {
+      nobookendsKeyHash: hashUserApiKey(apiKey),
+      nobookendsKeyCreatedAt: new Date(),
+    });
+
+    const res = await request(app)
+      .get('/nobookends/status')
+      .set('X-API-Key', apiKey);
+    assert.strictEqual(res.status, 200);
+
+    const status = await agent.get(`/user/${userId}/settings/nobookends`);
+    assert.strictEqual(status.body.connected, true);
+
+    await agent.delete(`/user/${userId}/settings/nobookends`);
+    const revoked = await request(app)
+      .get('/nobookends/status')
+      .set('X-API-Key', apiKey);
+    assert.strictEqual(revoked.status, 403);
   });
 
   it('keeps the personal API key the user made', async () => {
@@ -215,11 +360,9 @@ describe('NoBookEnds connect link', () => {
 
     const stored = await getRepository(User).findOneOrFail({
       where: { id: userId },
-      select: ['id', 'apiKeyHash', 'nobookendsKeyHash'],
+      select: ['id', 'apiKeyHash'],
     });
     assert.ok(stored.apiKeyHash);
-    assert.ok(stored.nobookendsKeyHash);
-    assert.notStrictEqual(stored.apiKeyHash, stored.nobookendsKeyHash);
 
     const res = await request(app)
       .get(`/user/${userId}`)
