@@ -8,9 +8,10 @@ import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import {
-  ArrowPathIcon,
   ArrowTopRightOnSquareIcon,
+  DevicePhoneMobileIcon,
   LinkIcon,
+  PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
@@ -30,16 +31,26 @@ const messages = defineMessages(
     unavailable:
       'NoBookEnds can be connected once an admin sets up books and Audiobookshelf.',
     connected: 'Connected {date}',
+    devices: 'Connected Devices',
+    unnamedDevice: 'NoBookEnds',
+    deviceConnected: 'Connected {date}',
+    deviceLastUsed: 'Last used {date}',
+    deviceNotUsed: 'Not used yet',
+    removeDevice: 'Remove',
+    removeDeviceSuccess: 'Removed NoBookEnds from the device.',
+    removeDeviceError: 'Something went wrong while removing the device.',
+    connectAnother: 'Connect Another Device',
+    easyConnect:
+      'You can also connect from the app: enter the address of this site in NoBookEnds and sign in.',
     notConnected: 'NoBookEnds is not connected.',
     notConnectedOther: 'This user has not connected NoBookEnds.',
     connect: 'Connect NoBookEnds',
-    newLink: 'New Connect Link',
-    disconnect: 'Disconnect',
+    disconnect: 'Disconnect All',
     scan: 'Scan with the camera on your phone, or open the link on the phone that has NoBookEnds.',
     openLink: 'Open in NoBookEnds',
     linkCopied: 'Copied connect link to clipboard.',
     shownOnce:
-      'This link signs NoBookEnds in as you. It is only shown once, and a new link signs out the app the old one was used in.',
+      'This link signs NoBookEnds in as you on one device. It is only shown once. Devices connected before stay connected.',
     qrAlt: 'QR code that connects NoBookEnds',
     connectError: 'Something went wrong while creating the connect link.',
     applicationUrlMissing:
@@ -52,12 +63,26 @@ const messages = defineMessages(
   }
 );
 
+interface NoBookEndsDevice {
+  id: number;
+  label: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
 interface NoBookEndsConnection {
   available: boolean;
   connected: boolean;
   createdAt?: string | null;
+  devices: NoBookEndsDevice[];
   applicationUrlMissing: boolean;
 }
+
+const dateFormat = {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+} as const;
 
 const UserNoBookEnds = () => {
   const intl = useIntl();
@@ -106,6 +131,27 @@ const UserNoBookEnds = () => {
       mutate();
     } catch {
       addToast(intl.formatMessage(messages.connectError), {
+        autoDismiss: true,
+        appearance: 'error',
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const removeDevice = async (deviceId: number) => {
+    setIsUpdating(true);
+    try {
+      await axios.delete(
+        `/api/v1/user/${user?.id}/settings/nobookends/devices/${deviceId}`
+      );
+      mutate();
+      addToast(intl.formatMessage(messages.removeDeviceSuccess), {
+        autoDismiss: true,
+        appearance: 'success',
+      });
+    } catch {
+      addToast(intl.formatMessage(messages.removeDeviceError), {
         autoDismiss: true,
         appearance: 'error',
       });
@@ -218,19 +264,75 @@ const UserNoBookEnds = () => {
                 </div>
               </div>
             ) : (
-              <p className="mb-6 text-sm text-gray-300">
-                {data.connected && data.createdAt
-                  ? intl.formatMessage(messages.connected, {
-                      date: intl.formatDate(data.createdAt, {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      }),
-                    })
-                  : isOwnProfile
-                    ? intl.formatMessage(messages.notConnected)
-                    : intl.formatMessage(messages.notConnectedOther)}
-              </p>
+              <>
+                {data.devices.length === 0 && (
+                  <p className="mb-6 text-sm text-gray-300">
+                    {data.connected && data.createdAt
+                      ? intl.formatMessage(messages.connected, {
+                          date: intl.formatDate(data.createdAt, dateFormat),
+                        })
+                      : isOwnProfile
+                        ? intl.formatMessage(messages.notConnected)
+                        : intl.formatMessage(messages.notConnectedOther)}
+                  </p>
+                )}
+                {isOwnProfile &&
+                  data.available &&
+                  !data.applicationUrlMissing && (
+                    <p className="mb-6 text-sm text-gray-400">
+                      {intl.formatMessage(messages.easyConnect)}
+                    </p>
+                  )}
+              </>
+            )}
+            {data.devices.length > 0 && (
+              <div className="mb-6">
+                <h4 className="mb-2 text-sm font-semibold text-gray-200">
+                  {intl.formatMessage(messages.devices)}
+                </h4>
+                <ul
+                  className="divide-y divide-gray-700 overflow-hidden rounded-xl ring-1 ring-gray-700"
+                  data-testid="nobookends-devices"
+                >
+                  {data.devices.map((device) => (
+                    <li
+                      key={device.id}
+                      className="flex items-center gap-3 px-4 py-3"
+                    >
+                      <DevicePhoneMobileIcon className="h-6 w-6 shrink-0 text-gray-400" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-gray-100">
+                          {device.label ??
+                            intl.formatMessage(messages.unnamedDevice)}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {intl.formatMessage(messages.deviceConnected, {
+                            date: intl.formatDate(device.createdAt, dateFormat),
+                          })}
+                          {' · '}
+                          {device.lastUsedAt
+                            ? intl.formatMessage(messages.deviceLastUsed, {
+                                date: intl.formatDate(
+                                  device.lastUsedAt,
+                                  dateFormat
+                                ),
+                              })
+                            : intl.formatMessage(messages.deviceNotUsed)}
+                        </div>
+                      </div>
+                      <Button
+                        buttonType="danger"
+                        buttonSize="sm"
+                        onClick={() => removeDevice(device.id)}
+                        disabled={isUpdating}
+                      >
+                        <TrashIcon />
+                        <span>{intl.formatMessage(messages.removeDevice)}</span>
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             {data.applicationUrlMissing && !connectUrl && (
               <Alert
@@ -260,10 +362,12 @@ const UserNoBookEnds = () => {
                     onClick={() => connect()}
                     disabled={isUpdating}
                   >
-                    {data.connected ? <ArrowPathIcon /> : <LinkIcon />}
+                    {data.connected ? <PlusIcon /> : <LinkIcon />}
                     <span>
                       {intl.formatMessage(
-                        data.connected ? messages.newLink : messages.connect
+                        data.connected
+                          ? messages.connectAnother
+                          : messages.connect
                       )}
                     </span>
                   </Button>
