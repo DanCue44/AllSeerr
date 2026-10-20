@@ -2,19 +2,19 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: CI
 
+# Only pushes to this repository run CI. The runner is self-hosted, so pull
+# requests from forks must never start a job on it: there is no pull_request
+# trigger, and outside contributors' workflow runs need a maintainer's approval
+# (repository setting). Branches pushed here, including PR branches, still run.
 on:
-  pull_request:
   push:
-    branches:
-      - main
-      - develop
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

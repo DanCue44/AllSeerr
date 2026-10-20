@@ -2,15 +2,13 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: CodeQL
 
+# No pull_request trigger: the runner is self-hosted and must not run code
+# from forks (see ci.yml).
 on:
   push:
     branches:
       - main
       - develop
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-  pull_request:
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
@@ -21,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
