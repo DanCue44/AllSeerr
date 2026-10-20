@@ -88,7 +88,7 @@ const torrent = (overrides: Record<string, unknown> = {}) => ({
   bookTitle: 'Deep End',
   authorName: 'Ali Hazelwood',
   mediaType: 'audiobook',
-  indexer: 'MyAnonamouse',
+  indexer: 'Example Tracker',
   isPrivateTracker: true,
   downloadClient: 'qBittorrent (VPN)',
   state: 'seeding',
@@ -238,7 +238,7 @@ describe('GET /downloads/seeding', () => {
     assert.strictEqual(res.body.supported, true);
     assert.strictEqual(res.body.generatedAt, payload.generatedAt);
     assert.deepStrictEqual(res.body.summary, payload.summary);
-    assert.deepStrictEqual(res.body.mam, payload.mam);
+    assert.deepStrictEqual(res.body.trackerAccount, payload.mam);
     assert.deepStrictEqual(res.body.torrents[0], {
       ...payload.torrents[0],
       mediaId: media.id,

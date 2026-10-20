@@ -19,7 +19,7 @@ const torrent = (overrides: Partial<SeedingTorrent>): SeedingTorrent => ({
   bookTitle: 'Book',
   authorName: 'Author',
   mediaType: 'audiobook',
-  indexer: 'MyAnonamouse',
+  indexer: 'Example Tracker',
   isPrivateTracker: true,
   downloadClient: 'qBittorrent',
   state: 'seeding',

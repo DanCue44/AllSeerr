@@ -12,8 +12,8 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import defineMessages from '@app/utils/defineMessages';
 import { ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import type {
-  MamStatus,
   SeedingResponse,
+  TrackerAccount,
 } from '@server/interfaces/api/downloadInterfaces';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
@@ -22,7 +22,7 @@ const messages = defineMessages('components.AllSeerr.Downloads.Seeding', {
   seeding: 'Seeding',
   atRiskCount: 'At risk',
   belowMinimum: 'Below minimum',
-  mam: 'MyAnonamouse',
+  trackerAccount: 'Tracker Account',
   userClass: 'Class',
   vip: 'VIP',
   unsatisfied: 'Unsatisfied',
@@ -41,7 +41,7 @@ const messages = defineMessages('components.AllSeerr.Downloads.Seeding', {
 
 const REFRESH_MS = 30_000;
 
-const MamPanel = ({ mam }: { mam: MamStatus }) => {
+const TrackerAccountPanel = ({ mam }: { mam: TrackerAccount }) => {
   const intl = useIntl();
   const unknown = intl.formatMessage(messages.unknown);
   const number = (value: number | null) =>
@@ -52,7 +52,7 @@ const MamPanel = ({ mam }: { mam: MamStatus }) => {
     <section className="flex flex-col gap-3 rounded-[22px] bg-as-surface p-4 sm:p-[18px]">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3 className="font-display text-lg font-medium text-as-ink">
-          {intl.formatMessage(messages.mam)}
+          {intl.formatMessage(messages.trackerAccount)}
         </h3>
         {mam.checkedAt && (
           <span className="text-xs text-as-ink-muted">
@@ -110,7 +110,7 @@ const MamPanel = ({ mam }: { mam: MamStatus }) => {
 };
 
 /**
- * What TaleArr seeds, at risk torrents first, and the MyAnonamouse account
+ * What TaleArr seeds, at risk torrents first, and the tracker account
  * its seeding rules come from
  */
 const SeedingView = () => {
@@ -165,7 +165,7 @@ const SeedingView = () => {
         />
       </div>
 
-      {data.mam && <MamPanel mam={data.mam} />}
+      {data.trackerAccount && <TrackerAccountPanel mam={data.trackerAccount} />}
 
       {torrents.length === 0 ? (
         <EmptyState

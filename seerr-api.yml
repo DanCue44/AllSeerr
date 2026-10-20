@@ -13608,7 +13608,7 @@ paths:
     get:
       summary: List what TaleArr seeds
       description: |
-        The torrents TaleArr's download client seeds, or should be seeding, with the seeded time against the tracker's minimum (72 hours for MyAnonamouse), and the MyAnonamouse account TaleArr checks. Torrents of private trackers that will not meet the minimum, such as paused or errored ones, are `atRisk` with a `riskReason`. Answers are kept for 30 seconds. With stock Chaptarr or LazyLibrarian as the book service, or a TaleArr without seeding, the answer is `{ "supported": false }`.
+        The torrents TaleArr's download client seeds, or should be seeding, with the seeded time against the tracker's minimum, and the private tracker account TaleArr checks. Torrents of private trackers that will not meet the minimum, such as paused or errored ones, are `atRisk` with a `riskReason`. Answers are kept for 30 seconds. With stock Chaptarr or LazyLibrarian as the book service, or a TaleArr without seeding, the answer is `{ "supported": false }`.
 
         Requires the `ADMIN` permission.
       tags:
@@ -13656,7 +13656,7 @@ paths:
                         indexer:
                           type: string
                           nullable: true
-                          example: MyAnonamouse
+                          example: Example Tracker
                         isPrivateTracker:
                           type: boolean
                         downloadClient:
@@ -13723,10 +13723,10 @@ paths:
                         type: number
                       privateUnsatisfied:
                         type: number
-                  mam:
+                  trackerAccount:
                     type: object
                     nullable: true
-                    description: Null when TaleArr has no MyAnonamouse indexer
+                    description: Null when TaleArr checks no tracker account
                     properties:
                       userClass:
                         type: string

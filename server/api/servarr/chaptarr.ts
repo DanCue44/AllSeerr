@@ -344,7 +344,7 @@ const LOOKUP_TIMEOUT_MS = 30_000;
 const IDENTITY_TIMEOUT_MS = 10_000;
 // TaleArr's recordings route reads its own cache of Audible facts
 const RECORDINGS_TIMEOUT_MS = 15_000;
-// TaleArr's seeding route asks the download client and MyAnonamouse
+// TaleArr's seeding route asks the download client and the tracker
 const SEEDING_TIMEOUT_MS = 15_000;
 // The health check TaleArr reports metadata server problems with
 const TALEARR_METADATA_CHECK = 'TalearrMetadataServerProbeCheck';

@@ -1,6 +1,6 @@
 import type {
-  MamStatus,
   SeedingTorrent,
+  TrackerAccount,
 } from '@server/interfaces/api/downloadInterfaces';
 
 export type DownloadsView = 'queue' | 'seeding';
@@ -106,10 +106,10 @@ export const getSeedingTone = (torrent: SeedingTorrent): SeedingTone => {
 };
 
 /**
- * Whether the MyAnonamouse account is close to its limit of unsatisfied
+ * Whether the tracker account is close to its limit of unsatisfied
  * torrents, past which it cannot download more
  */
-export const isNearUnsatisfiedLimit = (mam: MamStatus): boolean =>
+export const isNearUnsatisfiedLimit = (mam: TrackerAccount): boolean =>
   mam.unsatisfied !== null &&
   !!mam.unsatisfiedLimit &&
   mam.unsatisfied >= mam.unsatisfiedLimit * 0.8;

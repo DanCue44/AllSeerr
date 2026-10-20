@@ -162,7 +162,7 @@ export interface SeedingTorrent {
   uploaded: number;
   ratio: number;
   seedingSeconds: number;
-  // The tracker's minimum, such as 72 hours for MyAnonamouse
+  // The tracker's minimum seeding time
   requiredSeedingSeconds: number | null;
   // When the client stops seeding by itself
   seedGoalSeconds: number | null;
@@ -184,9 +184,9 @@ export interface SeedingSummary {
 }
 
 /**
- * The MyAnonamouse account TaleArr checks, for its seeding rules
+ * The private tracker account TaleArr checks, for its seeding rules
  */
-export interface MamStatus {
+export interface TrackerAccount {
   userClass: string | null;
   isVip: boolean;
   unsatisfied: number | null;
@@ -200,8 +200,8 @@ export interface TalearrSeeding {
   generatedAt: string | null;
   torrents: SeedingTorrent[];
   summary: SeedingSummary;
-  // Null when TaleArr has no MyAnonamouse indexer
-  mam: MamStatus | null;
+  // Null when TaleArr checks no tracker account
+  trackerAccount: TrackerAccount | null;
 }
 
 /**

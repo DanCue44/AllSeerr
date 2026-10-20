@@ -4,19 +4,19 @@ import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import type {
-  MamStatus,
   SeedingResponse,
   SeedingState,
   SeedingSummary,
   SeedingTorrent,
   TalearrSeeding,
+  TrackerAccount,
 } from '@server/interfaces/api/downloadInterfaces';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import { getDefaultChaptarr, getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { In } from 'typeorm';
 
-// TaleArr asks the download client and MyAnonamouse for each answer, so it
+// TaleArr asks the download client and the tracker for each answer, so it
 // is asked at most this often however many admins have the page open
 export const SEEDING_CACHE_MS = 30 * 1000;
 
@@ -83,7 +83,7 @@ export const parseSeedingTorrent = (raw: RawRecord): SeedingTorrent => {
   };
 };
 
-const parseMam = (raw: unknown): MamStatus | null =>
+const parseTrackerAccount = (raw: unknown): TrackerAccount | null =>
   isRecord(raw)
     ? {
         userClass: asText(raw.userClass),
@@ -131,7 +131,8 @@ export const parseTalearrSeeding = (
       privateUnsatisfied:
         asNumber(summary.privateUnsatisfied) ?? counted.privateUnsatisfied,
     },
-    mam: parseMam(raw.mam),
+    // TaleArr sends the tracker account as `mam`
+    trackerAccount: parseTrackerAccount(raw.mam),
   };
 };
 
