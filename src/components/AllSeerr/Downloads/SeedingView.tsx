@@ -32,11 +32,11 @@ const messages = defineMessages('components.AllSeerr.Downloads.Seeding', {
   checkedAt: 'Checked {time}',
   unknown: 'Unknown',
   emptyTitle: 'Nothing is seeding',
-  emptyText: 'Torrents TaleArr grabs show up here while they seed.',
+  emptyText: 'Torrents Talearr grabs show up here while they seed.',
   unsupportedTitle: 'Seeding is not available',
   unsupportedText:
-    'Seeding shows when TaleArr is the book service and supports it. Chaptarr and LazyLibrarian do not report it.',
-  loadError: 'Unable to load what TaleArr seeds.',
+    'Seeding shows when Talearr is the book service and supports it. Chaptarr and LazyLibrarian do not report it.',
+  loadError: 'Unable to load what Talearr seeds.',
 });
 
 const REFRESH_MS = 30_000;
@@ -110,7 +110,7 @@ const TrackerAccountPanel = ({ mam }: { mam: TrackerAccount }) => {
 };
 
 /**
- * What TaleArr seeds, at risk torrents first, and the tracker account
+ * What Talearr seeds, at risk torrents first, and the tracker account
  * its seeding rules come from
  */
 const SeedingView = () => {

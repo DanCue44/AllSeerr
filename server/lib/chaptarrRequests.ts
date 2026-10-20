@@ -63,7 +63,7 @@ export interface ChaptarrBookRequest {
   language?: { code: BookLanguage; tags?: ChaptarrLanguageTags };
   pendingImport?: { timeoutMs?: number; intervalMs?: number };
   // Runs once the book is in the library and monitored, before it is
-  // searched for, such as to set TaleArr's grab policy of the book
+  // searched for, such as to set Talearr's grab policy of the book
   prepareSearch?: (bookId: number) => Promise<void>;
 }
 

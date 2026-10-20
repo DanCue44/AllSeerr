@@ -272,7 +272,7 @@ export interface MainSettings {
   bookLanguage: BookLanguage;
   // Service book requests go to, picked automatically when not set
   bookService?: BookService;
-  // TaleArr only: which readings of an audiobook a request asks for, or
+  // Talearr only: which readings of an audiobook a request asks for, or
   // 'requester' to let the requester pick one per request
   audiobookVersions?: AudiobookVersionsMode;
   // Google Books API key, used to check whether books have ebook editions
@@ -334,7 +334,7 @@ export const resolveBookService = ({
   const hasChaptarr = !!getDefaultChaptarr(chaptarr);
   const hasLazyLibrarian = !!lazylibrarian?.hostname && !!lazylibrarian.apiKey;
 
-  // TaleArr is a Chaptarr server too, so it uses the Chaptarr servers
+  // Talearr is a Chaptarr server too, so it uses the Chaptarr servers
   if (usesChaptarr(main.bookService) && hasChaptarr) {
     return main.bookService;
   }
@@ -379,7 +379,7 @@ interface FullPublicSettings extends PublicSettings {
   allowCurrentSeasonRequests: boolean;
   defaultBookFormat: BookFormatChoice;
   bookLanguage: BookLanguage;
-  // TaleArr only, the Audiobook Versions setting in effect
+  // Talearr only, the Audiobook Versions setting in effect
   audiobookVersions?: AudiobookVersionsMode;
   enableSpecialEpisodes: boolean;
   cacheImages: boolean;

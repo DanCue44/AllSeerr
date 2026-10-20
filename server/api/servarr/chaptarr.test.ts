@@ -542,17 +542,17 @@ const grabPolicy = {
 };
 
 describe('ChaptarrAPI.getTalearrIdentity', () => {
-  it('recognizes TaleArr with its version, grab policy and metadata health', async () => {
+  it('recognizes Talearr with its version, grab policy and metadata health', async () => {
     const { chaptarr, urls } = createIdentityApi({
       '/system/status': {
         appName: 'Chaptarr',
-        instanceName: 'TaleArr',
+        instanceName: 'Talearr',
         version: '0.4.2.1',
       },
       'http://localhost:8789/initialize.json': {
-        productName: 'TaleArr',
+        productName: 'Talearr',
         talearrVersion: '0.11.0',
-        instanceName: 'TaleArr',
+        instanceName: 'Talearr',
       },
       '/config/talearrgrabpolicy': grabPolicy,
       '/health': [
@@ -568,7 +568,7 @@ describe('ChaptarrAPI.getTalearrIdentity', () => {
     assert.deepStrictEqual(await chaptarr.getTalearrIdentity(), {
       isTalearr: true,
       version: '0.11.0',
-      instanceName: 'TaleArr',
+      instanceName: 'Talearr',
       grabPolicy: {
         abridgedPolicy: 'preferUnabridged',
         allowBundles: false,
@@ -581,7 +581,7 @@ describe('ChaptarrAPI.getTalearrIdentity', () => {
     assert.ok(urls.includes('http://localhost:8789/initialize.json'));
   });
 
-  it('reports stock Chaptarr as not TaleArr', async () => {
+  it('reports stock Chaptarr as not Talearr', async () => {
     const { chaptarr, urls } = createIdentityApi({
       '/system/status': {
         appName: 'Chaptarr',
@@ -599,11 +599,11 @@ describe('ChaptarrAPI.getTalearrIdentity', () => {
       isTalearr: false,
       instanceName: 'Chaptarr',
     });
-    // Health is only read from TaleArr
+    // Health is only read from Talearr
     assert.ok(!urls.includes('/health'));
   });
 
-  it('recognizes TaleArr by its grab policy when nothing else says so', async () => {
+  it('recognizes Talearr by its grab policy when nothing else says so', async () => {
     // A renamed instance, and an initialize.json the API key cannot read
     const { chaptarr } = createIdentityApi({
       '/system/status': { appName: 'Chaptarr', instanceName: 'Chaptarr Home' },
@@ -619,15 +619,15 @@ describe('ChaptarrAPI.getTalearrIdentity', () => {
     assert.strictEqual(identity.metadataProblem, undefined);
   });
 
-  it('recognizes TaleArr by its instance name alone', async () => {
+  it('recognizes Talearr by its instance name alone', async () => {
     const { chaptarr } = createIdentityApi({
-      '/system/status': { appName: 'Chaptarr', instanceName: 'TaleArr' },
+      '/system/status': { appName: 'Chaptarr', instanceName: 'Talearr' },
     });
 
     assert.strictEqual((await chaptarr.getTalearrIdentity()).isTalearr, true);
   });
 
-  it('is not TaleArr when the server cannot be read at all', async () => {
+  it('is not Talearr when the server cannot be read at all', async () => {
     const { chaptarr } = createIdentityApi({});
 
     assert.deepStrictEqual(await chaptarr.getTalearrIdentity(), {
@@ -684,7 +684,7 @@ describe('parseTalearrBookGrabPolicy', () => {
     );
   });
 
-  it('tells a book TaleArr does not know from a route it does not have', () => {
+  it('tells a book Talearr does not know from a route it does not have', () => {
     assert.deepStrictEqual(
       parseTalearrBookGrabPolicy(404, { message: 'Book not found' }),
       { supported: true }
@@ -709,7 +709,7 @@ describe('parseTalearrBookGrabPolicy', () => {
   });
 });
 
-describe('TaleArr recordings', () => {
+describe('Talearr recordings', () => {
   const primary = {
     bookId: 3401,
     role: 'primary',
@@ -748,7 +748,7 @@ describe('TaleArr recordings', () => {
     assert.strictEqual(view.candidates[0].runtimeMinutes, null);
   });
 
-  it('reads whether TaleArr is still resolving the facts of a book', () => {
+  it('reads whether Talearr is still resolving the facts of a book', () => {
     assert.strictEqual(
       parseTalearrRecordings({
         recordings: [],

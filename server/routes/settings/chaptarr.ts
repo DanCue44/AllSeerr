@@ -49,12 +49,12 @@ chaptarrRoutes.post('/test', async (req, res, next) => {
         chaptarr.getMetadataProfiles(),
         chaptarr.getChaptarrRootFolders(),
         chaptarr.getTags(),
-        // TaleArr is a Chaptarr fork, so the server may be either one
+        // Talearr is a Chaptarr fork, so the server may be either one
         isChaptarr
           ? chaptarr.getTalearrIdentity()
           : Promise.resolve<TalearrIdentity>({ isTalearr: false }),
       ]);
-    // TaleArr's per book grab policy, which the Audiobook Versions setting
+    // Talearr's per book grab policy, which the Audiobook Versions setting
     // uses to search for the abridged reading
     const bookGrabPolicy = talearr.isTalearr
       ? await hasBookGrabPolicy(chaptarr)

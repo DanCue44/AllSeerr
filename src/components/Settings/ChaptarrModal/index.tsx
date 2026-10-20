@@ -32,7 +32,7 @@ const MIXED = 0;
 export interface ChaptarrTestResponse {
   appName?: string;
   isChaptarr?: boolean;
-  // TaleArr, the Chaptarr fork, reports itself as Chaptarr too
+  // Talearr, the Chaptarr fork, reports itself as Chaptarr too
   isTalearr?: boolean;
   talearr?: {
     version?: string;
@@ -46,7 +46,7 @@ export interface ChaptarrTestResponse {
       failRejectedImports: boolean;
       maxAutomaticRetries: number;
     };
-    // Whether TaleArr has a grab policy per book
+    // Whether Talearr has a grab policy per book
     bookGrabPolicy?: boolean;
     metadataProblem?: string;
   };
@@ -128,14 +128,14 @@ const messages = defineMessages('components.Settings.ChaptarrModal', {
     'Scan {service} for existing books and request status so users cannot request books already available.',
   enableSearchHelp:
     'Automatically trigger a search in {service} when a request is approved.',
-  detectedTalearr: 'This server is TaleArr',
-  detectedTalearrVersion: 'This server is TaleArr {version}',
+  detectedTalearr: 'This server is Talearr',
+  detectedTalearrVersion: 'This server is Talearr {version}',
   detectedTalearrWrongService:
-    'Book requests are set to Chaptarr. Switch them to TaleArr to turn on what TaleArr adds, such as short rejection labels in manual searches.',
-  detectedChaptarr: 'This server is not TaleArr',
+    'Book requests are set to Chaptarr. Switch them to Talearr to turn on what Talearr adds, such as short rejection labels in manual searches.',
+  detectedChaptarr: 'This server is not Talearr',
   detectedChaptarrWrongService:
-    'It reports itself as {appName}, but book requests are set to TaleArr. Switch them to Chaptarr, or point this server at a TaleArr instance.',
-  switchToTalearr: 'Switch to TaleArr',
+    'It reports itself as {appName}, but book requests are set to Talearr. Switch them to Chaptarr, or point this server at a Talearr instance.',
+  switchToTalearr: 'Switch to Talearr',
   switchToChaptarr: 'Switch to Chaptarr',
   switchingService: 'Switching…',
   serviceSwitched: 'Book requests are now sent to {service}.',
@@ -154,14 +154,14 @@ const messages = defineMessages('components.Settings.ChaptarrModal', {
   bundlesSkipped: 'skipped',
   failRejectedOn: 'marked failed',
   failRejectedOff: 'left in the queue',
-  talearrMetadataProblem: 'TaleArr reports a metadata server problem',
+  talearrMetadataProblem: 'Talearr reports a metadata server problem',
 });
 
 interface ChaptarrModalProps {
   chaptarr: ChaptarrSettings | null;
-  // The book service the server is set up for, Chaptarr or TaleArr
+  // The book service the server is set up for, Chaptarr or Talearr
   service?: ChaptarrBookService;
-  // Whether the test may offer to switch between Chaptarr and TaleArr
+  // Whether the test may offer to switch between Chaptarr and Talearr
   canSwitchService?: boolean;
   onSwitchService?: (service: ChaptarrBookService) => Promise<void>;
   onClose: () => void;
@@ -353,7 +353,7 @@ const ChaptarrModal = ({
           addToast(
             intl.formatMessage(messages.toastChaptarrTestSuccess, {
               service: response.data.isTalearr
-                ? 'TaleArr'
+                ? 'Talearr'
                 : response.data.isChaptarr === false
                   ? (response.data.appName ?? 'Readarr')
                   : 'Chaptarr',

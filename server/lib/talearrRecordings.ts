@@ -32,12 +32,12 @@ import { transactionSettled } from '@server/utils/transactionSettled';
 import type { EntityManager } from 'typeorm';
 import { In, IsNull, Not } from 'typeorm';
 
-const LABEL = 'TaleArr Recordings';
+const LABEL = 'Talearr Recordings';
 
-// The name TaleArr keeps as the source of a recording request
+// The name Talearr keeps as the source of a recording request
 export const RECORDING_REQUESTED_BY = 'allseerr';
 
-// The book pages and the app wait this long for TaleArr at most
+// The book pages and the app wait this long for Talearr at most
 const LOOKUP_TIMEOUT_MS = 8_000;
 
 const LIVE_STATUSES = [MediaStatus.AVAILABLE, MediaStatus.PARTIALLY_AVAILABLE];
@@ -53,7 +53,7 @@ export interface BookRecordingSummary {
   asin: string | null;
   hasFiles: boolean;
   monitored: boolean;
-  // AVAILABLE with files, PROCESSING while TaleArr looks for them
+  // AVAILABLE with files, PROCESSING while Talearr looks for them
   status: MediaStatus;
 }
 
@@ -83,17 +83,17 @@ export type RecordingOptionReason = 'have' | 'none' | 'requested';
 
 export interface RecordingOption {
   available: boolean;
-  // Why the option is closed: the recording is there already, TaleArr
+  // Why the option is closed: the recording is there already, Talearr
   // knows no such edition, or it was requested already
   reason?: RecordingOptionReason;
 }
 
 export type BookRecordingsUnsupportedReason =
-  // TaleArr is not the book service
+  // Talearr is not the book service
   | 'service'
-  // The audiobook is not available in TaleArr yet
+  // The audiobook is not available in Talearr yet
   | 'unavailable'
-  // TaleArr could not be reached
+  // Talearr could not be reached
   | 'unreachable'
   // The server has no recordings route, such as stock Chaptarr
   | 'unsupported';
@@ -118,7 +118,7 @@ export interface BookRecordingsResponse {
 
 export interface RecordingTarget {
   server: ChaptarrSettings;
-  // TaleArr's id of the book's audiobook
+  // Talearr's id of the book's audiobook
   bookId: number;
 }
 
@@ -180,7 +180,7 @@ export const isSameRecording = (
 };
 
 /**
- * The TaleArr server and book a recording of a book is asked for on: the
+ * The Talearr server and book a recording of a book is asked for on: the
  * server holding the book's audiobook, once that is available
  */
 export const getRecordingTarget = (
@@ -272,7 +272,7 @@ const closedOptions = (): BookRecordingsResponse['options'] => ({
 });
 
 /**
- * Which recordings a user could still ask for, from what TaleArr has and
+ * Which recordings a user could still ask for, from what Talearr has and
  * knows and what was requested already
  */
 export const getRecordingOptions = (
@@ -354,9 +354,9 @@ const canUserRequest = (user: User): boolean =>
   });
 
 /**
- * The recordings of a book's audiobook in TaleArr, the editions that could
+ * The recordings of a book's audiobook in Talearr, the editions that could
  * become one, the recording requests made for it and what the user may
- * still ask for. TaleArr is asked each time, so the answer is current.
+ * still ask for. Talearr is asked each time, so the answer is current.
  */
 export const getBookRecordings = async (
   media: Media | null | undefined,
@@ -399,7 +399,7 @@ export const getBookRecordings = async (
       { timeoutMs }
     );
   } catch (e) {
-    logger.debug('Could not read the recordings of a book from TaleArr', {
+    logger.debug('Could not read the recordings of a book from Talearr', {
       label: LABEL,
       mediaId: media?.id,
       bookId: target.bookId,
@@ -429,7 +429,7 @@ export const getBookRecordings = async (
 };
 
 /**
- * Keeps what TaleArr answered on the request without running the request
+ * Keeps what Talearr answered on the request without running the request
  * subscriber again, which would send the request a second time
  */
 const rememberRecording = async (
@@ -484,7 +484,7 @@ const failRecordingRequest = async (
     });
   }
 
-  logger.warn(`TaleArr did not add the recording: ${reason}`, {
+  logger.warn(`Talearr did not add the recording: ${reason}`, {
     label: LABEL,
     requestId: entity.id,
     mediaId: entity.media?.id,
@@ -508,11 +508,11 @@ const describeRefusal = (
     ? 'no edition fits the request'
     : result.status === 'ambiguous'
       ? 'several editions fit the request'
-      : 'TaleArr refused the request');
+      : 'Talearr refused the request');
 
 /**
- * Sends an approved recording request to TaleArr's recordings route, with
- * the request id as TaleArr's external reference. When several editions
+ * Sends an approved recording request to Talearr's recordings route, with
+ * the request id as Talearr's external reference. When several editions
  * fit equally well, the first of them is asked for by its edition, as the
  * book page would pick it.
  */
@@ -536,8 +536,8 @@ export const sendRecordingToTalearr = async (
         failRecordingRequest(
           entity,
           isTalearrService(getSettings().bookService)
-            ? 'the audiobook is not available in TaleArr'
-            : 'TaleArr is not the book service'
+            ? 'the audiobook is not available in Talearr'
+            : 'Talearr is not the book service'
         )
       )
     );
@@ -548,8 +548,8 @@ export const sendRecordingToTalearr = async (
 };
 
 /**
- * Sends a recording request to TaleArr on the server's queue and keeps
- * what TaleArr answers. Writes back only once `settled` resolves, such as
+ * Sends a recording request to Talearr on the server's queue and keeps
+ * what Talearr answers. Writes back only once `settled` resolves, such as
  * when the transaction that saved the request has ended.
  */
 const dispatchRecording = (
@@ -607,7 +607,7 @@ const dispatchRecording = (
       if (!result.recording?.bookId) {
         await failRecordingRequest(
           entity,
-          'TaleArr did not answer with the recording'
+          'Talearr did not answer with the recording'
         );
         return;
       }
@@ -618,7 +618,7 @@ const dispatchRecording = (
         kind === 'narrator' ? narrator : null
       );
 
-      logger.info('TaleArr added the recording', {
+      logger.info('Talearr added the recording', {
         label: LABEL,
         requestId: entity.id,
         mediaId: media.id,
@@ -640,7 +640,7 @@ const dispatchRecording = (
     });
 
   runInBackground(sent);
-  logger.info('Sent recording request to TaleArr', {
+  logger.info('Sent recording request to Talearr', {
     label: LABEL,
     requestId: entity.id,
     mediaId: media.id,
@@ -650,7 +650,7 @@ const dispatchRecording = (
 
 /**
  * Completes the recording requests whose recordings have files now, from
- * the books a TaleArr scan read. A recording TaleArr no longer has fails
+ * the books a Talearr scan read. A recording Talearr no longer has fails
  * its request, which an admin can retry to add it again.
  */
 export const syncRecordingRequests = async (
@@ -690,7 +690,7 @@ export const syncRecordingRequests = async (
       if (!book) {
         await failRecordingRequest(
           request,
-          'TaleArr no longer has the recording'
+          'Talearr no longer has the recording'
         );
       } else if (getBookFileCount(book) > 0) {
         await completeRecordingRequest(request.id);
@@ -708,12 +708,12 @@ export const syncRecordingRequests = async (
   return completed;
 };
 
-// How long to wait before each new look at a book whose editions TaleArr
+// How long to wait before each new look at a book whose editions Talearr
 // is still resolving
 const DEFAULT_FACTS_PENDING_DELAYS_MS = [5_000, 15_000, 45_000];
 let factsPendingDelaysMs = DEFAULT_FACTS_PENDING_DELAYS_MS;
 
-// Audiobook requests whose abridged recording still waits for TaleArr's
+// Audiobook requests whose abridged recording still waits for Talearr's
 // facts after the retries, by request id. Each gets one more look on the
 // next scan of its server, then is dropped.
 const awaitingScan = new Map<number, RecordingTarget>();
@@ -724,9 +724,9 @@ const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
- * One look at the editions TaleArr knows of a book, asking for the abridged
+ * One look at the editions Talearr knows of a book, asking for the abridged
  * recording when one fits. Answers FACTS_PENDING, asking for nothing, when
- * TaleArr has not resolved the book's editions yet.
+ * Talearr has not resolved the book's editions yet.
  */
 const attemptAbridgedRecording = async (
   parent: MediaRequest,
@@ -748,7 +748,7 @@ const attemptAbridgedRecording = async (
       target.bookId
     );
   } catch (e) {
-    logger.warn('Could not read the recordings of a book from TaleArr', {
+    logger.warn('Could not read the recordings of a book from Talearr', {
       label: LABEL,
       requestId: parent.id,
       bookId: target.bookId,
@@ -761,7 +761,7 @@ const attemptAbridgedRecording = async (
     return FACTS_PENDING;
   }
 
-  // Read after TaleArr answers, so a request made meanwhile counts
+  // Read after Talearr answers, so a request made meanwhile counts
   const requests = await requestRepository.find({
     where: { media: { id: media.id }, recording: Not(IsNull()) },
   });
@@ -770,7 +770,7 @@ const attemptAbridgedRecording = async (
     : { available: false, reason: 'none' as const };
 
   if (!option.available) {
-    logger.info('Not asking TaleArr for the abridged recording', {
+    logger.info('Not asking Talearr for the abridged recording', {
       label: LABEL,
       requestId: parent.id,
       mediaId: media.id,
@@ -800,7 +800,7 @@ const attemptAbridgedRecording = async (
     { listeners: false }
   );
 
-  logger.info('Asking TaleArr for the abridged recording too', {
+  logger.info('Asking Talearr for the abridged recording too', {
     label: LABEL,
     requestId: parent.id,
     recordingRequestId: linked.id,
@@ -829,7 +829,7 @@ const findStandingParent = async (
 };
 
 /**
- * Looks at the book again a few times, with growing waits, while TaleArr
+ * Looks at the book again a few times, with growing waits, while Talearr
  * resolves its editions. Still pending after that, the book gets one more
  * look on the next scan of its server.
  */
@@ -850,7 +850,7 @@ const retryAbridgedRecording = async (
         return;
       }
     } catch (e) {
-      logger.warn('Could not ask TaleArr for the abridged recording', {
+      logger.warn('Could not ask Talearr for the abridged recording', {
         label: LABEL,
         requestId: parentId,
         errorMessage: e instanceof Error ? e.message : String(e),
@@ -861,18 +861,18 @@ const retryAbridgedRecording = async (
 
   awaitingScan.set(parentId, target);
   logger.info(
-    'TaleArr is still resolving the editions of the book, looking again on the next scan',
+    'Talearr is still resolving the editions of the book, looking again on the next scan',
     { label: LABEL, requestId: parentId, bookId: target.bookId }
   );
 };
 
 /**
- * Asks TaleArr for the abridged recording of an audiobook it was just sent,
+ * Asks Talearr for the abridged recording of an audiobook it was just sent,
  * as a recording request of its own linked to the audiobook request: same
  * requester, approved with it and not counted against the quota again. It
  * then reads, completes and notifies like any abridged recording request.
- * Nothing is asked for when TaleArr knows no abridged edition, keeps one
- * already, or one was requested already. While TaleArr is still resolving
+ * Nothing is asked for when Talearr knows no abridged edition, keeps one
+ * already, or one was requested already. While Talearr is still resolving
  * the book's editions, it looks again in the background and answers
  * undefined for now.
  */
@@ -887,7 +887,7 @@ export const requestAbridgedRecording = async (
   }
 
   logger.debug(
-    'TaleArr is still resolving the editions of the book, looking again shortly',
+    'Talearr is still resolving the editions of the book, looking again shortly',
     { label: LABEL, requestId: parent.id, bookId: target.bookId }
   );
   runInBackground(retryAbridgedRecording(parent.id, target));
@@ -896,7 +896,7 @@ export const requestAbridgedRecording = async (
 };
 
 /**
- * The last look at the books whose editions TaleArr was still resolving
+ * The last look at the books whose editions Talearr was still resolving
  * after the retries, on a scan of their server. Each book is looked at once
  * more and then dropped, asked for or not.
  */
@@ -927,12 +927,12 @@ export const checkAbridgedRecordingsAwaitingScan = async (
           FACTS_PENDING
       ) {
         logger.info(
-          'TaleArr has still not resolved the editions of the book, not asking for the abridged recording',
+          'Talearr has still not resolved the editions of the book, not asking for the abridged recording',
           { label: LABEL, requestId: parentId, bookId: target.bookId }
         );
       }
     } catch (e) {
-      logger.warn('Could not ask TaleArr for the abridged recording', {
+      logger.warn('Could not ask Talearr for the abridged recording', {
         label: LABEL,
         requestId: parentId,
         errorMessage: e instanceof Error ? e.message : String(e),

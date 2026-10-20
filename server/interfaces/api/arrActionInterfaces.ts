@@ -70,7 +70,7 @@ export interface ArrRelease {
   // The arr would grab it by itself
   approved: boolean;
   rejections: string[];
-  // TaleArr only: short labels of the rejections, such as "Language"
+  // Talearr only: short labels of the rejections, such as "Language"
   rejectionLabels?: string[];
   customFormatScore?: number;
   releaseGroup?: string;

@@ -36,9 +36,9 @@ const messages = defineMessages(
     narrator: 'Another Narrator',
     narratordescription: 'The same book read by someone else',
     edition: 'Specific Edition',
-    editiondescription: 'Pick one of the audiobook editions TaleArr knows',
+    editiondescription: 'Pick one of the audiobook editions Talearr knows',
     have: 'Already in the library',
-    none: 'TaleArr knows no such edition',
+    none: 'Talearr knows no such edition',
     requested: 'Already requested',
     narratorlabel: 'Narrator',
     editionlabel: 'Edition',
@@ -49,11 +49,11 @@ const messages = defineMessages(
     runtimeminutes: '{minutes}m',
     requestadmin: 'This request will be approved automatically.',
     needsapproval:
-      'TaleArr is asked for the recording once the request is approved.',
+      'Talearr is asked for the recording once the request is approved.',
     requestSuccess:
       'Requested another recording of <strong>{title}</strong>. It is waiting for approval.',
     requestApproved:
-      'Requested another recording of <strong>{title}</strong>. TaleArr is looking for it.',
+      'Requested another recording of <strong>{title}</strong>. Talearr is looking for it.',
     requesterror: 'Something went wrong while submitting the request.',
   }
 );
@@ -70,7 +70,7 @@ interface RecordingRequestModalProps {
 }
 
 /**
- * Asks TaleArr for another recording of an audiobook the library has: the
+ * Asks Talearr for another recording of an audiobook the library has: the
  * unabridged reading, a reading by another narrator or a picked edition.
  * The request is approved like a book request.
  */

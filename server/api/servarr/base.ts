@@ -99,7 +99,7 @@ export interface ServarrRelease {
     | string
     | { [key: string]: unknown; reason?: string; message?: string }
   )[];
-  // Chaptarr explains each rejection, and TaleArr adds a short label such
+  // Chaptarr explains each rejection, and Talearr adds a short label such
   // as "Language" or "Pack" and the check that rejected it
   rejectionDetails?: {
     [key: string]: unknown;

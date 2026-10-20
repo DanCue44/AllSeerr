@@ -231,9 +231,9 @@ export interface NoBookEndsStatus {
     defaultFormat: 'ebook' | 'audiobook' | 'both';
     quota: NoBookEndsQuota | null;
     // Whether other recordings of an audiobook can be requested, which
-    // only TaleArr offers
+    // only Talearr offers
     recordings: boolean;
-    // TaleArr only: the Audiobook Versions setting, and the version an
+    // Talearr only: the Audiobook Versions setting, and the version an
     // audiobook request picks first when the requester may choose one
     audiobookVersions?: AudiobookVersionsMode;
     defaultAudiobookVersion?: AudiobookVersion;
@@ -312,7 +312,7 @@ export const getNoBookEndsStatus = async (
       canManage: canManageRequests,
     },
     downloads: {
-      // Only a Chaptarr or TaleArr queue can be read for stuck downloads
+      // Only a Chaptarr or Talearr queue can be read for stuck downloads
       canManage: canManageRequests && usesChaptarr(settings.bookService),
     },
     audiobookshelf: {

@@ -164,7 +164,7 @@ const ArrActions = ({
         : mediaType === 'music'
           ? 'Lidarr'
           : isTalearrService(currentSettings.bookService)
-            ? 'TaleArr'
+            ? 'Talearr'
             : 'Chaptarr');
 
   const targetName = (() => {

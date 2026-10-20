@@ -62,7 +62,7 @@ export interface PublicSettingsResponse {
   allowCurrentSeasonRequests: boolean;
   defaultBookFormat: BookFormatChoice;
   bookLanguage: BookLanguage;
-  // TaleArr only, the Audiobook Versions setting in effect
+  // Talearr only, the Audiobook Versions setting in effect
   audiobookVersions?: AudiobookVersionsMode;
   enableSpecialEpisodes: boolean;
   cacheImages: boolean;

@@ -232,8 +232,8 @@ describe('GET /nobookends/item/:absItemId', () => {
     assert.strictEqual(searchCalls, 0);
   });
 
-  // Answers the item of a book whose audiobook TaleArr has, with the
-  // recordings and editions TaleArr knows
+  // Answers the item of a book whose audiobook Talearr has, with the
+  // recordings and editions Talearr knows
   const getItemWithTalearr = async (
     view: Awaited<ReturnType<ChaptarrAPI['getTalearrRecordings']>>
   ) => {
@@ -241,7 +241,7 @@ describe('GET /nobookends/item/:absItemId', () => {
     settings.chaptarr = [
       {
         id: 0,
-        name: 'TaleArr',
+        name: 'Talearr',
         hostname: 'talearr',
         port: 8789,
         apiKey: 'key',
@@ -283,7 +283,7 @@ describe('GET /nobookends/item/:absItemId', () => {
     }
   };
 
-  it('adds the recordings of the audiobook with TaleArr', async () => {
+  it('adds the recordings of the audiobook with Talearr', async () => {
     const res = await getItemWithTalearr({
       recordings: [
         {
@@ -343,7 +343,7 @@ describe('GET /nobookends/item/:absItemId', () => {
     assert.strictEqual(res.body.canRequestUnabridged, false);
   });
 
-  it('offers neither when TaleArr knows no other edition', async () => {
+  it('offers neither when Talearr knows no other edition', async () => {
     const res = await getItemWithTalearr({
       recordings: [
         {

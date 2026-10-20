@@ -916,7 +916,7 @@ export class MediaRequest {
     }
 
     // The version is kept only where the requester may pick one: an
-    // audiobook on TaleArr with the setting at `requester`. Anywhere else
+    // audiobook on Talearr with the setting at `requester`. Anywhere else
     // it is ignored, so clients may always send it.
     const audiobookVersion =
       isAudiobook &&
@@ -1053,7 +1053,7 @@ export class MediaRequest {
 
   /**
    * Another recording of an audiobook that is already available, such as
-   * the unabridged reading of a book the library has abridged. Only TaleArr
+   * the unabridged reading of a book the library has abridged. Only Talearr
    * keeps more than one recording of a book. The request needs approval
    * the way a book request does, counts against the book quota and leaves
    * the book's own audiobook status alone.
@@ -1081,7 +1081,7 @@ export class MediaRequest {
 
     if (!isTalearrService(getSettings().bookService)) {
       throw new InvalidRecordingRequestError(
-        'Other recordings can only be requested from TaleArr.'
+        'Other recordings can only be requested from Talearr.'
       );
     }
 
@@ -1135,7 +1135,7 @@ export class MediaRequest {
 
     if (!media || !target) {
       throw new InvalidRecordingRequestError(
-        'The audiobook has to be available in TaleArr before another recording can be requested.'
+        'The audiobook has to be available in Talearr before another recording can be requested.'
       );
     }
 
@@ -1358,27 +1358,27 @@ export class MediaRequest {
   @Column({ type: 'text', nullable: true })
   public declineReason?: string | null;
 
-  // Audiobooks on TaleArr only: the request is for another recording of an
+  // Audiobooks on Talearr only: the request is for another recording of an
   // audiobook that is already available, such as the unabridged reading.
-  // Null for every other request. A recording request is sent to TaleArr's
+  // Null for every other request. A recording request is sent to Talearr's
   // recordings route instead of the usual book request and is completed by
   // the files of its own recording, not by the book's audiobook status.
   @Column({ type: 'varchar', nullable: true })
   public recording?: BookRecordingKind | null;
 
-  // The narrator asked for, or the narrator of the recording TaleArr picked
+  // The narrator asked for, or the narrator of the recording Talearr picked
   @Column({ type: 'varchar', nullable: true })
   public recordingNarrator?: string | null;
 
-  // TaleArr's id of the edition picked for an edition request
+  // Talearr's id of the edition picked for an edition request
   @Column({ type: 'integer', nullable: true })
   public recordingEditionId?: number | null;
 
-  // TaleArr's book id of the recording once TaleArr has added it
+  // Talearr's book id of the recording once Talearr has added it
   @Column({ type: 'integer', nullable: true })
   public recordingBookId?: number | null;
 
-  // Audiobooks on TaleArr only: the version the requester picked when the
+  // Audiobooks on Talearr only: the version the requester picked when the
   // Audiobook Versions setting lets them, unabridged, abridged or both.
   // Null for every other request, which follows the setting.
   @Column({ type: 'varchar', nullable: true })

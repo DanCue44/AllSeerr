@@ -1438,7 +1438,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     if (
       entity.status !== MediaRequestStatus.APPROVED ||
       entity.type !== MediaType.BOOK ||
-      // Only TaleArr keeps other recordings of a book
+      // Only Talearr keeps other recordings of a book
       entity.recording
     ) {
       return;
@@ -1613,7 +1613,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       return;
     }
 
-    // Another recording of an audiobook goes to TaleArr's recordings route
+    // Another recording of an audiobook goes to Talearr's recordings route
     if (entity.recording) {
       return sendRecordingToTalearr(entity, manager);
     }
@@ -1712,9 +1712,9 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
             settings.main.bookLanguage
           );
 
-      // TaleArr only: the readings of the audiobook asked for. The grab
+      // Talearr only: the readings of the audiobook asked for. The grab
       // policy of the book is set before it is searched for, and the
-      // abridged recording asked for once the book is in TaleArr.
+      // abridged recording asked for once the book is in Talearr.
       const audiobookVersion = getRequestAudiobookVersion(entity);
       let abridgedRecording = false;
       const prepareSearch = audiobookVersion
@@ -1790,7 +1790,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
                 bookId: result.bookId,
               }).catch((e) => {
                 logger.warn(
-                  'Could not ask TaleArr for the abridged recording',
+                  'Could not ask Talearr for the abridged recording',
                   {
                     label: 'Media Request',
                     requestId: entity.id,
@@ -1800,7 +1800,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
               });
             } else if (!result.bookId) {
               logger.info(
-                'TaleArr is still importing the author, the book follows the global grab policy',
+                'Talearr is still importing the author, the book follows the global grab policy',
                 {
                   label: 'Media Request',
                   requestId: entity.id,

@@ -169,7 +169,7 @@ describe('book recordings', () => {
     );
   });
 
-  it('only looks recordings up with TaleArr and an audiobook', () => {
+  it('only looks recordings up with Talearr and an audiobook', () => {
     assert.strictEqual(
       canHaveRecordings('talearr', MediaStatus.AVAILABLE),
       true

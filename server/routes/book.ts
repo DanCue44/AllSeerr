@@ -200,9 +200,9 @@ bookRoutes.get<{ id: string }>('/:id/ebook', async (req, res, next) => {
 });
 
 /**
- * The recordings TaleArr keeps of the book's audiobook, the editions that
+ * The recordings Talearr keeps of the book's audiobook, the editions that
  * could become one and the recording requests made for it. Answers with
- * supported false, and why, when the book service is not TaleArr or the
+ * supported false, and why, when the book service is not Talearr or the
  * audiobook is not available there.
  */
 bookRoutes.get<{ id: string }>('/:id/recordings', async (req, res, next) => {

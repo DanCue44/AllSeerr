@@ -29,7 +29,7 @@ import useSWR from 'swr';
 
 const messages = defineMessages('components.BookRecordings', {
   recordings: 'Recordings',
-  fromtalearr: 'From TaleArr',
+  fromtalearr: 'From Talearr',
   primary: 'In the library',
   abridged: 'Abridged',
   unabridged: 'Unabridged',
@@ -89,9 +89,9 @@ interface BookRecordingsProps {
 }
 
 /**
- * The recordings TaleArr keeps of a book's audiobook, the recording
+ * The recordings Talearr keeps of a book's audiobook, the recording
  * requests made for it and a way to ask for another one. Only shown with
- * TaleArr as the book service once the audiobook is in the library.
+ * Talearr as the book service once the audiobook is in the library.
  */
 const BookRecordings = ({
   olId,

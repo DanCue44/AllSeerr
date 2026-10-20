@@ -905,7 +905,7 @@ describe('arr actions for Chaptarr', () => {
     );
   });
 
-  it('names TaleArr and shows its rejection labels only when it is the book service', async () => {
+  it('names Talearr and shows its rejection labels only when it is the book service', async () => {
     handlers['chaptarr GET /release'] = () => ({
       releases: [
         {
@@ -938,7 +938,7 @@ describe('arr actions for Chaptarr', () => {
         .get(`/media/${media.id}/arr/releases`)
         .query({ bookFormat: 'ebook' });
 
-      assert.strictEqual(info.body.serviceName, 'TaleArr');
+      assert.strictEqual(info.body.serviceName, 'Talearr');
       assert.deepStrictEqual(talearr.body.results[0].rejectionLabels, [
         'Language',
       ]);

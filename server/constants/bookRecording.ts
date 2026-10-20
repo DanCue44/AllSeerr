@@ -1,7 +1,7 @@
 /**
- * The recordings of an audiobook a user can ask TaleArr for once the
+ * The recordings of an audiobook a user can ask Talearr for once the
  * audiobook is available: the unabridged or abridged reading, a reading by
- * another narrator, or one edition picked from the list TaleArr knows.
+ * another narrator, or one edition picked from the list Talearr knows.
  */
 export type BookRecordingKind =
   | 'unabridged'
@@ -26,7 +26,7 @@ export const isBookRecordingKind = (
 export const MAX_RECORDING_NARRATOR_LENGTH = 200;
 
 /**
- * Whether TaleArr reads a recording as abridged, unabridged or does not know
+ * Whether Talearr reads a recording as abridged, unabridged or does not know
  */
 export type BookRecordingAbridged = 'abridged' | 'unabridged' | 'unknown';
 

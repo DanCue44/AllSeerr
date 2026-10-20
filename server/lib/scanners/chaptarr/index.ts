@@ -213,8 +213,8 @@ class ChaptarrScanner
 
   /**
    * Completes the requests for other recordings of audiobooks whose
-   * recordings TaleArr has files for now, and asks for the abridged
-   * recordings that waited for TaleArr to resolve their books
+   * recordings Talearr has files for now, and asks for the abridged
+   * recordings that waited for Talearr to resolve their books
    */
   private async syncRecordings(serverIds: number[]): Promise<void> {
     try {
@@ -229,7 +229,7 @@ class ChaptarrScanner
       });
     }
 
-    // The abridged recordings that waited for TaleArr to resolve a book
+    // The abridged recordings that waited for Talearr to resolve a book
     await checkAbridgedRecordingsAwaitingScan(serverIds);
   }
 

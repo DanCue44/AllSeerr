@@ -7,7 +7,7 @@ import {
 } from '@server/constants/audiobookVersion';
 
 describe('audiobook versions', () => {
-  it('applies with TaleArr only, both when not set', () => {
+  it('applies with Talearr only, both when not set', () => {
     assert.strictEqual(getAudiobookVersionsMode('talearr', undefined), 'both');
     assert.strictEqual(getAudiobookVersionsMode('talearr', 'nonsense'), 'both');
     assert.strictEqual(

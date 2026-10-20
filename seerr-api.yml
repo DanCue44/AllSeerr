@@ -41,8 +41,8 @@ tags:
       - `GET /nobookends/item/{absItemId}` for the book of an Audiobookshelf library item
       - `GET /book/{bookId}` for a book, its status per format (`mediaInfo.status` for the ebook, `mediaInfo.statusAudio` for the audiobook) and its Audiobookshelf item per format
       - `POST /request` with `mediaType: book` and `isAudiobook` to request a format
-      - With TaleArr (`books.recordings` in the status), `recordings`, `canRequestUnabridged`, `canRequestAbridged` and `recordingRequests` on the item, and `POST /request` with `recording: unabridged` or `recording: abridged` to ask for the unabridged recording of an abridged audiobook or the abridged recording of an unabridged one
-      - With TaleArr, `books.audiobookVersions` in the status: at `requester`, `audiobookVersion` on `POST /request` picks the unabridged reading, the abridged one or both
+      - With Talearr (`books.recordings` in the status), `recordings`, `canRequestUnabridged`, `canRequestAbridged` and `recordingRequests` on the item, and `POST /request` with `recording: unabridged` or `recording: abridged` to ask for the unabridged recording of an abridged audiobook or the abridged recording of an unabridged one
+      - With Talearr, `books.audiobookVersions` in the status: at `requester`, `audiobookVersion` on `POST /request` picks the unabridged reading, the abridged one or both
       - `GET /request?mediaType=book&requestedBy={userId}` for the user's requests, with download progress in `media.downloadStatus` (ebook) and `media.downloadStatusAudio` (audiobook)
       - `POST /issue` with `bookFormat` to report a problem with a format
       - `GET /discover/books` and `GET /discover/books/upcoming` for discovery
@@ -520,12 +520,12 @@ components:
           type: string
           enum: [chaptarr, talearr, lazylibrarian]
           example: chaptarr
-          description: Service book requests are sent to. TaleArr, a Chaptarr fork, uses the Chaptarr servers. When it is not set or not configured, Chaptarr is used when configured, otherwise LazyLibrarian.
+          description: Service book requests are sent to. Talearr, a Chaptarr fork, uses the Chaptarr servers. When it is not set or not configured, Chaptarr is used when configured, otherwise LazyLibrarian.
         audiobookVersions:
           type: string
           enum: [both, unabridged, abridged, requester]
           example: both
-          description: TaleArr only. Which readings of an audiobook an approved request asks TaleArr for. `both` (the default, also when not set) adds the audiobook as usual, so TaleArr searches for the unabridged reading, then asks for the abridged reading as a recording request of its own when TaleArr knows an abridged edition. `unabridged` follows TaleArr's global grab policy. `abridged` sets the book's grab policy in TaleArr to abridged only before the search, or asks for the abridged recording when TaleArr has no per book grab policy. `requester` lets the requester pick one of the three with `audiobookVersion` on `POST /request`.
+          description: Talearr only. Which readings of an audiobook an approved request asks Talearr for. `both` (the default, also when not set) adds the audiobook as usual, so Talearr searches for the unabridged reading, then asks for the abridged reading as a recording request of its own when Talearr knows an abridged edition. `unabridged` follows Talearr's global grab policy. `abridged` sets the book's grab policy in Talearr to abridged only before the search, or asks for the abridged recording when Talearr has no per book grab policy. `requester` lets the requester pick one of the three with `audiobookVersion` on `POST /request`.
         googleBooksApiKey:
           type: string
           example: yourapikey
@@ -1415,7 +1415,7 @@ components:
         audiobookVersions:
           type: string
           enum: [both, unabridged, abridged, requester]
-          description: The Audiobook Versions setting in effect, missing unless TaleArr is the book service. With `requester`, the book request window offers the version.
+          description: The Audiobook Versions setting in effect, missing unless Talearr is the book service. With `requester`, the book request window offers the version.
           example: both
         plexClientIdentifier:
           type: string
@@ -1536,11 +1536,11 @@ components:
               - $ref: '#/components/schemas/TvResult'
     BookRecording:
       type: object
-      description: A recording TaleArr keeps of an audiobook
+      description: A recording Talearr keeps of an audiobook
       properties:
         bookId:
           type: number
-          description: TaleArr's book id of the recording
+          description: Talearr's book id of the recording
         role:
           type: string
           enum: [primary, additional]
@@ -1570,14 +1570,14 @@ components:
           type: boolean
         status:
           type: number
-          description: 5 = `AVAILABLE` with files, 3 = `PROCESSING` while TaleArr looks for them, 1 = `UNKNOWN`
+          description: 5 = `AVAILABLE` with files, 3 = `PROCESSING` while Talearr looks for them, 1 = `UNKNOWN`
     BookRecordingCandidate:
       type: object
       description: An audiobook edition that is not a recording yet
       properties:
         editionId:
           type: number
-          description: TaleArr's id of the edition, for `recordingEditionId`
+          description: Talearr's id of the edition, for `recordingEditionId`
         narrators:
           type: array
           items:
@@ -1636,13 +1636,13 @@ components:
         reason:
           type: string
           enum: [have, none, requested]
-          description: Why the option is closed, the recording is there already, TaleArr knows no such edition or it was requested already
+          description: Why the option is closed, the recording is there already, Talearr knows no such edition or it was requested already
     BookRecordings:
       type: object
       properties:
         supported:
           type: boolean
-          description: Whether TaleArr is the book service, the audiobook is available there and TaleArr answers the recordings route
+          description: Whether Talearr is the book service, the audiobook is available there and Talearr answers the recordings route
         reason:
           type: string
           enum: [service, unavailable, unreachable, unsupported]
@@ -2734,25 +2734,25 @@ components:
           type: string
           nullable: true
           enum: [unabridged, abridged, narrator, edition, null]
-          description: Audiobooks on TaleArr only. Set when the request is for another recording of an audiobook that is already available, such as the unabridged reading. The request is sent to TaleArr's recordings route and is completed once that recording has files, not by the book's audiobook status.
+          description: Audiobooks on Talearr only. Set when the request is for another recording of an audiobook that is already available, such as the unabridged reading. The request is sent to Talearr's recordings route and is completed once that recording has files, not by the book's audiobook status.
         recordingNarrator:
           type: string
           nullable: true
-          description: Recording requests only. The narrator asked for, or the narrator of the recording TaleArr picked.
+          description: Recording requests only. The narrator asked for, or the narrator of the recording Talearr picked.
           example: Scott Brick
         recordingEditionId:
           type: number
           nullable: true
-          description: Recording requests of kind `edition` only. TaleArr's id of the edition.
+          description: Recording requests of kind `edition` only. Talearr's id of the edition.
         recordingBookId:
           type: number
           nullable: true
-          description: Recording requests only. TaleArr's book id of the recording once TaleArr has added it.
+          description: Recording requests only. Talearr's book id of the recording once Talearr has added it.
         audiobookVersion:
           type: string
           nullable: true
           enum: [unabridged, abridged, both, null]
-          description: Audiobooks on TaleArr only, with Audiobook Versions set to `requester`. The version the requester picked. Null on every other request, which follows the setting.
+          description: Audiobooks on Talearr only, with Audiobook Versions set to `requester`. The version the requester picked. Null on every other request, which follows the setting.
         monitorMode:
           type: string
           nullable: true
@@ -2914,7 +2914,7 @@ components:
             type: string
         rejectionLabels:
           type: array
-          description: TaleArr only, short labels of the rejections such as Language or Pack
+          description: Talearr only, short labels of the rejections such as Language or Pack
           items:
             type: string
         customFormatScore:
@@ -5832,10 +5832,10 @@ paths:
                     description: False for other Readarr compatible servers, which have no per format profiles and root folders
                   isTalearr:
                     type: boolean
-                    description: True when the server is TaleArr, the Chaptarr fork
+                    description: True when the server is Talearr, the Chaptarr fork
                   talearr:
                     type: object
-                    description: What TaleArr reports, only for TaleArr
+                    description: What Talearr reports, only for Talearr
                     properties:
                       version:
                         type: string
@@ -5860,7 +5860,7 @@ paths:
                             type: number
                       bookGrabPolicy:
                         type: boolean
-                        description: Whether TaleArr has a grab policy per book (`/api/v1/talearr/grabpolicy/book/{bookId}`), which Audiobook Versions uses to search for the abridged reading itself
+                        description: Whether Talearr has a grab policy per book (`/api/v1/talearr/grabpolicy/book/{bookId}`), which Audiobook Versions uses to search for the abridged reading itself
                       metadataProblem:
                         type: string
                   profiles:
@@ -10556,21 +10556,21 @@ paths:
                 recording:
                   type: string
                   enum: [unabridged, abridged, narrator, edition]
-                  description: Audiobooks on TaleArr only. Requests another recording of an audiobook that is already available in TaleArr instead of the audiobook itself, such as the unabridged reading of a book the library has abridged, or the abridged reading of one it has unabridged. `GET /book/{bookId}/recordings` lists what can be asked for. The request needs approval like a book request unless the user may auto-approve, counts against the book quota, and is refused with 400 when TaleArr is not the book service or the audiobook is not available there, and with 409 when the same recording was requested already.
+                  description: Audiobooks on Talearr only. Requests another recording of an audiobook that is already available in Talearr instead of the audiobook itself, such as the unabridged reading of a book the library has abridged, or the abridged reading of one it has unabridged. `GET /book/{bookId}/recordings` lists what can be asked for. The request needs approval like a book request unless the user may auto-approve, counts against the book quota, and is refused with 400 when Talearr is not the book service or the audiobook is not available there, and with 409 when the same recording was requested already.
                 recordingNarrator:
                   type: string
                   maxLength: 200
-                  description: Required for `recording` `narrator`. The narrator to ask TaleArr for.
+                  description: Required for `recording` `narrator`. The narrator to ask Talearr for.
                   example: Scott Brick
                 recordingEditionId:
                   type: number
                   minimum: 1
-                  description: Required for `recording` `edition`. TaleArr's id of the edition, from the candidates of `GET /book/{bookId}/recordings`.
+                  description: Required for `recording` `edition`. Talearr's id of the edition, from the candidates of `GET /book/{bookId}/recordings`.
                 audiobookVersion:
                   type: string
                   nullable: true
                   enum: [unabridged, abridged, both, null]
-                  description: Audiobooks on TaleArr only. The readings to ask for, honored when Audiobook Versions is set to `requester` (see `audiobookVersions` in the public settings and `books.audiobookVersions` in `GET /nobookends/status`) and ignored otherwise. Without one, such a request asks for both. Refused with 400 when unknown.
+                  description: Audiobooks on Talearr only. The readings to ask for, honored when Audiobook Versions is set to `requester` (see `audiobookVersions` in the public settings and `books.audiobookVersions` in `GET /nobookends/status`) and ignored otherwise. Without one, such a request asks for both. Refused with 400 when unknown.
                 serverId:
                   type: number
                 profileId:
@@ -11030,15 +11030,15 @@ paths:
                         description: Where book requests go, null while books are off
                       recordings:
                         type: boolean
-                        description: Whether other recordings of an audiobook can be requested (`recording` on `POST /request`), which only TaleArr offers
+                        description: Whether other recordings of an audiobook can be requested (`recording` on `POST /request`), which only Talearr offers
                       audiobookVersions:
                         type: string
                         enum: [both, unabridged, abridged, requester]
-                        description: TaleArr only. The Audiobook Versions setting. With `requester`, an audiobook request may pick `audiobookVersion`. With `both`, the abridged recording is asked for along with the audiobook.
+                        description: Talearr only. The Audiobook Versions setting. With `requester`, an audiobook request may pick `audiobookVersion`. With `both`, the abridged recording is asked for along with the audiobook.
                       defaultAudiobookVersion:
                         type: string
                         enum: [unabridged, abridged, both]
-                        description: TaleArr only. The version an audiobook request picks first when the requester may choose one.
+                        description: Talearr only. The version an audiobook request picks first when the requester may choose one.
                       canRequest:
                         type: boolean
                         description: Whether the user may request books
@@ -11304,18 +11304,18 @@ paths:
                     example: 1
                   recordings:
                     type: array
-                    description: TaleArr only, once the audiobook is available there and TaleArr answered. The recordings TaleArr keeps of the audiobook, the primary one first.
+                    description: Talearr only, once the audiobook is available there and Talearr answered. The recordings Talearr keeps of the audiobook, the primary one first.
                     items:
                       $ref: '#/components/schemas/BookRecording'
                   canRequestRecording:
                     type: boolean
-                    description: TaleArr only. Whether the user may request another recording now (`recording` on `POST /request`).
+                    description: Talearr only. Whether the user may request another recording now (`recording` on `POST /request`).
                   canRequestUnabridged:
                     type: boolean
-                    description: TaleArr only. Whether the user may request the unabridged recording now. False when the library has it, TaleArr knows no unabridged edition or it was requested already.
+                    description: Talearr only. Whether the user may request the unabridged recording now. False when the library has it, Talearr knows no unabridged edition or it was requested already.
                   canRequestAbridged:
                     type: boolean
-                    description: TaleArr only. Whether the user may request the abridged recording now (`recording` `abridged` on `POST /request`), such as when the library has the unabridged one. False when the library has an abridged recording, TaleArr knows no abridged edition or it was requested already. Requests without `recording` still follow TaleArr's grab policy, which picks the unabridged reading by default.
+                    description: Talearr only. Whether the user may request the abridged recording now (`recording` `abridged` on `POST /request`), such as when the library has the unabridged one. False when the library has an abridged recording, Talearr knows no abridged edition or it was requested already. Requests without `recording` still follow Talearr's grab policy, which picks the unabridged reading by default.
                   recordingRequests:
                     type: array
                     description: The recording requests made for the book, newest first
@@ -11352,7 +11352,7 @@ paths:
     get:
       summary: Get the recordings of a book's audiobook
       description: |
-        Returns the recordings TaleArr keeps of the book's audiobook (the abridged and unabridged readings, other narrators), the audiobook editions that could become one, the recording requests made for the book and what the user may still ask for. TaleArr is asked each time. With another book service, or before the audiobook is available in TaleArr, `supported` is false and `reason` says why.
+        Returns the recordings Talearr keeps of the book's audiobook (the abridged and unabridged readings, other narrators), the audiobook editions that could become one, the recording requests made for the book and what the user may still ask for. Talearr is asked each time. With another book service, or before the audiobook is available in Talearr, `supported` is false and `reason` says why.
       tags:
         - books
       parameters:
@@ -13601,14 +13601,14 @@ paths:
                     type: number
                   seedingAtRisk:
                     type: number
-                    description: Seeding torrents at risk, 0 unless TaleArr is the book service
+                    description: Seeding torrents at risk, 0 unless Talearr is the book service
         '403':
           description: Not allowed to manage requests
   /downloads/seeding:
     get:
-      summary: List what TaleArr seeds
+      summary: List what Talearr seeds
       description: |
-        The torrents TaleArr's download client seeds, or should be seeding, with the seeded time against the tracker's minimum, and the private tracker account TaleArr checks. Torrents of private trackers that will not meet the minimum, such as paused or errored ones, are `atRisk` with a `riskReason`. Answers are kept for 30 seconds. With stock Chaptarr or LazyLibrarian as the book service, or a TaleArr without seeding, the answer is `{ "supported": false }`.
+        The torrents Talearr's download client seeds, or should be seeding, with the seeded time against the tracker's minimum, and the private tracker account Talearr checks. Torrents of private trackers that will not meet the minimum, such as paused or errored ones, are `atRisk` with a `riskReason`. Answers are kept for 30 seconds. With stock Chaptarr or LazyLibrarian as the book service, or a Talearr without seeding, the answer is `{ "supported": false }`.
 
         Requires the `ADMIN` permission.
       tags:
@@ -13642,7 +13642,7 @@ paths:
                         bookId:
                           type: number
                           nullable: true
-                          description: The TaleArr book, null when TaleArr cannot match the torrent
+                          description: The Talearr book, null when Talearr cannot match the torrent
                         bookTitle:
                           type: string
                           nullable: true
@@ -13709,7 +13709,7 @@ paths:
                           nullable: true
                         mediaId:
                           type: number
-                          description: The book in AllSeerr, when it has the TaleArr book
+                          description: The book in AllSeerr, when it has the Talearr book
                         olId:
                           type: string
                   summary:
@@ -13726,7 +13726,7 @@ paths:
                   trackerAccount:
                     type: object
                     nullable: true
-                    description: Null when TaleArr checks no tracker account
+                    description: Null when Talearr checks no tracker account
                     properties:
                       userClass:
                         type: string
@@ -13752,7 +13752,7 @@ paths:
         '403':
           description: Not an admin
         '502':
-          description: TaleArr did not answer or sent an answer that cannot be read
+          description: Talearr did not answer or sent an answer that cannot be read
   /downloads/{downloadId}/search:
     post:
       summary: Search again for what a download is of

@@ -48,7 +48,7 @@ const WorksBestWith = () => {
       ),
     },
     {
-      name: 'TaleArr',
+      name: 'Talearr',
       url: 'https://talearr.com',
       host: 'talearr.com',
       description: intl.formatMessage(messages.talearrdescription),

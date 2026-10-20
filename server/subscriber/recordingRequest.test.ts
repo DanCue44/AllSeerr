@@ -38,7 +38,7 @@ import session from 'express-session';
 import request from 'supertest';
 
 const WORK_ID = 'OL66554W';
-// TaleArr's book id of the available, abridged audiobook
+// Talearr's book id of the available, abridged audiobook
 const AUDIOBOOK_ID = 3401;
 
 const sendNotificationMock = mock.method(
@@ -68,7 +68,7 @@ mock.method(OpenLibrary.prototype, 'getWorkSummary', async () => ({
   author_name: ['John Grisham'],
 }));
 
-// What TaleArr answers and what it was asked
+// What Talearr answers and what it was asked
 let addCalls: TalearrAddRecordingBody[] = [];
 let addImpl: (
   body: TalearrAddRecordingBody
@@ -102,7 +102,7 @@ mock.method(
 
 const talearrServer: ChaptarrSettings = {
   id: 0,
-  name: 'TaleArr',
+  name: 'Talearr',
   hostname: 'talearr',
   port: 8789,
   apiKey: 'test-key',
@@ -175,7 +175,7 @@ async function waitFor(check: () => Promise<boolean> | boolean) {
   assert.fail('Condition was not met in time');
 }
 
-// The library has the abridged audiobook, from TaleArr
+// The library has the abridged audiobook, from Talearr
 async function seedAvailableAudiobook(
   fields: Partial<Media> = {}
 ): Promise<Media> {
@@ -263,7 +263,7 @@ describe('recording requests', () => {
     );
   });
 
-  it('sends the approved request to TaleArr with the request id', async () => {
+  it('sends the approved request to Talearr with the request id', async () => {
     await seedAvailableAudiobook();
     await setRequester(Permission.REQUEST);
     const user = await loginAs('demo@seerr.dev');
@@ -357,7 +357,7 @@ describe('recording requests', () => {
     );
   });
 
-  it('fails when TaleArr knows no fitting edition', async () => {
+  it('fails when Talearr knows no fitting edition', async () => {
     await seedAvailableAudiobook();
     addImpl = async () => ({
       status: 'nomatch',
@@ -380,7 +380,7 @@ describe('recording requests', () => {
     assert.strictEqual((await findMedia()).statusAudio, MediaStatus.AVAILABLE);
   });
 
-  it('fails when TaleArr cannot be reached', async () => {
+  it('fails when Talearr cannot be reached', async () => {
     await seedAvailableAudiobook();
     addImpl = async () => {
       throw new Error('connect ECONNREFUSED');
@@ -395,7 +395,7 @@ describe('recording requests', () => {
     );
   });
 
-  it('completes right away when TaleArr has the recording with files', async () => {
+  it('completes right away when Talearr has the recording with files', async () => {
     await seedAvailableAudiobook();
     addImpl = async () => ({
       status: 'existing',
@@ -460,7 +460,7 @@ describe('recording requests', () => {
     assert.strictEqual(audiobook.status, 201, audiobook.body.message);
   });
 
-  it('refuses recordings unless TaleArr has the audiobook', async () => {
+  it('refuses recordings unless Talearr has the audiobook', async () => {
     const admin = await loginAs('admin@seerr.dev');
 
     // No audiobook yet
@@ -526,7 +526,7 @@ describe('recording requests', () => {
 describe('abridged recording requests', () => {
   const abridgedBody = { ...unabridgedBody, recording: 'abridged' };
 
-  it('goes through approval to TaleArr and names the abridged audiobook', async () => {
+  it('goes through approval to Talearr and names the abridged audiobook', async () => {
     // The library has the unabridged audiobook this time
     await seedAvailableAudiobook();
     addImpl = async () => ({
@@ -646,7 +646,7 @@ describe('abridged recording requests', () => {
   });
 });
 
-describe('recording requests in the TaleArr scan', () => {
+describe('recording requests in the Talearr scan', () => {
   const book = (id: number, files: number): ChaptarrBook => ({
     id,
     title: 'The Firm',
@@ -683,7 +683,7 @@ describe('recording requests in the TaleArr scan', () => {
     );
   });
 
-  it('fails a request whose recording TaleArr no longer has', async () => {
+  it('fails a request whose recording Talearr no longer has', async () => {
     await seedAvailableAudiobook();
     const admin = await loginAs('admin@seerr.dev');
     const res = await admin.post('/request').send(unabridgedBody);

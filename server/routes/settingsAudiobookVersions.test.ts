@@ -72,7 +72,7 @@ const useTalearr = () => {
   settings.chaptarr = [
     {
       id: 0,
-      name: 'TaleArr',
+      name: 'Talearr',
       hostname: 'talearr',
       port: 8789,
       apiKey: 'key',
@@ -111,7 +111,7 @@ describe('Audiobook Versions setting', () => {
     assert.strictEqual(settings.main.audiobookVersions, 'requester');
   });
 
-  it('is public with TaleArr only, both when not set', () => {
+  it('is public with Talearr only, both when not set', () => {
     useTalearr();
     settings.main.audiobookVersions = undefined;
     assert.strictEqual(settings.fullPublicSettings.audiobookVersions, 'both');

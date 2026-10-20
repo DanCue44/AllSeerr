@@ -443,14 +443,14 @@ afterEach(() => {
   getSettings().main.audiobookVersions = undefined;
 });
 
-// TaleArr's per book grab policy and recordings route, and what they were
+// Talearr's per book grab policy and recordings route, and what they were
 // asked
 let policySupported = true;
 let bookPolicies: Record<number, TalearrAbridgedPolicy | null> = {};
 let policyCalls: [number, TalearrAbridgedPolicy | null][] = [];
 let recordingAdds: TalearrAddRecordingBody[] = [];
 let recordingsView: TalearrRecordings | undefined;
-// Answers given before recordingsView, one per look, such as while TaleArr
+// Answers given before recordingsView, one per look, such as while Talearr
 // is still resolving the book
 let recordingsViews: (TalearrRecordings | undefined)[] = [];
 let recordingsLooks = 0;
@@ -501,7 +501,7 @@ mock.method(
   }
 );
 
-// TaleArr knows an abridged edition of the book
+// Talearr knows an abridged edition of the book
 const withAbridgedEdition = (): TalearrRecordings => ({
   recordings: [],
   candidates: [
@@ -534,18 +534,18 @@ beforeEach(() => {
   recordingsLooks = 0;
   resetReportedUnsupported();
   resetAbridgedRecordingsAwaitingScan();
-  // No real waits between the looks at a book TaleArr is still resolving
+  // No real waits between the looks at a book Talearr is still resolving
   setFactsPendingDelays([0, 0, 0]);
 });
 
-// TaleArr 0.15.0 and later, while it has not resolved the book's editions
+// Talearr 0.15.0 and later, while it has not resolved the book's editions
 const factsPending = (): TalearrRecordings => ({
   recordings: [],
   candidates: [],
   factsPending: true,
 });
 
-describe('audiobook versions with TaleArr', () => {
+describe('audiobook versions with Talearr', () => {
   it('defaults to both: adds the unabridged reading and asks for the abridged one', async () => {
     // Settings saved before the setting existed have no value
     getSettings().main.audiobookVersions = undefined;
@@ -619,7 +619,7 @@ describe('audiobook versions with TaleArr', () => {
     assert.deepStrictEqual(policyCalls, [[100, null]]);
   });
 
-  it('asks for nothing more when TaleArr knows no abridged edition', async () => {
+  it('asks for nothing more when Talearr knows no abridged edition', async () => {
     getSettings().main.audiobookVersions = 'both';
     recordingsView = { recordings: [], candidates: [] };
     const agent = await loginAs('admin@seerr.dev');
@@ -777,7 +777,7 @@ describe('audiobook versions with TaleArr', () => {
     const res = await requester.post('/request').send(audiobookBody);
     assert.strictEqual(res.body.status, MediaRequestStatus.PENDING);
     await settleTestBackgroundTasks();
-    // Nothing goes to TaleArr before approval
+    // Nothing goes to Talearr before approval
     assert.deepStrictEqual(recordingAdds, []);
 
     const admin = await loginAs('admin@seerr.dev');
@@ -790,13 +790,13 @@ describe('audiobook versions with TaleArr', () => {
     assert.strictEqual(linked.status, MediaRequestStatus.APPROVED);
   });
 
-  it('looks again while TaleArr resolves the book, then asks for the abridged recording', async () => {
+  it('looks again while Talearr resolves the book, then asks for the abridged recording', async () => {
     getSettings().main.audiobookVersions = 'both';
     recordingsViews = [factsPending(), factsPending()];
     const agent = await loginAs('admin@seerr.dev');
 
     const res = await agent.post('/request').send(audiobookBody);
-    // The request is answered without waiting for TaleArr's facts
+    // The request is answered without waiting for Talearr's facts
     assert.strictEqual(res.status, 201, res.body.message);
     await sentAudiobook();
     await waitFor(() => recordingAdds.length === 1);
@@ -813,7 +813,7 @@ describe('audiobook versions with TaleArr', () => {
     assert.strictEqual(recordingAdds.length, 1);
   });
 
-  it('waits for the next scan when TaleArr is still resolving the book, and looks only once more', async () => {
+  it('waits for the next scan when Talearr is still resolving the book, and looks only once more', async () => {
     getSettings().main.audiobookVersions = 'both';
     recordingsView = factsPending();
     const agent = await loginAs('admin@seerr.dev');
@@ -843,7 +843,7 @@ describe('audiobook versions with TaleArr', () => {
     assert.deepStrictEqual(await findRecordingRequests(), []);
   });
 
-  it('asks for the abridged recording on the scan once TaleArr has resolved the book', async () => {
+  it('asks for the abridged recording on the scan once Talearr has resolved the book', async () => {
     getSettings().main.audiobookVersions = 'both';
     recordingsViews = [
       factsPending(),
@@ -864,7 +864,7 @@ describe('audiobook versions with TaleArr', () => {
     assert.strictEqual((await findRecordingRequests()).length, 1);
   });
 
-  it('asks for nothing once TaleArr resolves the book without an abridged edition', async () => {
+  it('asks for nothing once Talearr resolves the book without an abridged edition', async () => {
     getSettings().main.audiobookVersions = 'both';
     recordingsViews = [factsPending()];
     recordingsView = { recordings: [], candidates: [] };
@@ -901,9 +901,9 @@ describe('audiobook versions with TaleArr', () => {
     assert.strictEqual((await findRecordingRequests()).length, 1);
   });
 
-  it('looks only once when TaleArr does not tell whether facts are pending', async () => {
+  it('looks only once when Talearr does not tell whether facts are pending', async () => {
     getSettings().main.audiobookVersions = 'both';
-    // An older TaleArr: no factsPending field at all
+    // An older Talearr: no factsPending field at all
     recordingsView = withAbridgedEdition();
     assert.ok(!('factsPending' in recordingsView));
     const agent = await loginAs('admin@seerr.dev');

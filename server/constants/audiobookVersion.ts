@@ -1,7 +1,7 @@
 import { isTalearrService } from '@server/constants/bookService';
 
 /**
- * Which readings of an audiobook a request asks TaleArr for: the
+ * Which readings of an audiobook a request asks Talearr for: the
  * unabridged one, the abridged one, or both of them
  */
 export type AudiobookVersion = 'unabridged' | 'abridged' | 'both';
@@ -38,7 +38,7 @@ export const isAudiobookVersionsMode = (
   AUDIOBOOK_VERSIONS_MODES.includes(value as AudiobookVersionsMode);
 
 /**
- * The setting in effect: it only applies with TaleArr, and an unknown
+ * The setting in effect: it only applies with Talearr, and an unknown
  * stored value counts as the default
  */
 export const getAudiobookVersionsMode = (
@@ -56,7 +56,7 @@ export const getAudiobookVersionsMode = (
 export const DEFAULT_AUDIOBOOK_VERSION: AudiobookVersion = 'both';
 
 /**
- * The version an audiobook request is sent to TaleArr with: the one the
+ * The version an audiobook request is sent to Talearr with: the one the
  * setting names, or with `requester` the one stored on the request, which
  * is both when the requester picked none
  */

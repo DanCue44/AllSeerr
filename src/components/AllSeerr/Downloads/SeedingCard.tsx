@@ -78,7 +78,7 @@ const Dotted = ({ parts }: { parts: ReactNode[] }) => (
 );
 
 /**
- * A torrent TaleArr seeds, with its seeded time against the tracker's
+ * A torrent Talearr seeds, with its seeded time against the tracker's
  * minimum and why it is at risk when it is
  */
 const SeedingCard = ({ torrent }: { torrent: SeedingTorrent }) => {

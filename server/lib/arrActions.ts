@@ -108,7 +108,7 @@ export const normalizeRelease = (
     hidden?: boolean;
     // The book service a hidden release was filtered by
     serviceName?: string;
-    // TaleArr labels every rejection, such as "Language" or "Pack"
+    // Talearr labels every rejection, such as "Language" or "Pack"
     rejectionLabels?: boolean;
   } = {}
 ): ArrRelease => {

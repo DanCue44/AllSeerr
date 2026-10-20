@@ -187,7 +187,7 @@ describe('normalizeRelease', () => {
     ]);
   });
 
-  it('adds the TaleArr rejection labels only when asked to', () => {
+  it('adds the Talearr rejection labels only when asked to', () => {
     const rejected: ServarrRelease = {
       ...chaptarrRelease,
       approved: false,
@@ -228,9 +228,9 @@ describe('normalizeRelease', () => {
     assert.deepStrictEqual(
       normalizeRelease(chaptarrRelease, {
         hidden: true,
-        serviceName: 'TaleArr',
+        serviceName: 'Talearr',
       }).rejections,
-      ['Hidden by a release filter in TaleArr']
+      ['Hidden by a release filter in Talearr']
     );
   });
 

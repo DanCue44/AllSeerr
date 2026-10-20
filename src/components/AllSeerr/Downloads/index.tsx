@@ -104,9 +104,9 @@ const Downloads = () => {
   const intl = useIntl();
   const { addToast } = useToasts();
   const { currentSettings } = useSettings();
-  // Book downloads come from Chaptarr, or TaleArr when it is the book service
+  // Book downloads come from Chaptarr, or Talearr when it is the book service
   const bookService = isTalearrService(currentSettings.bookService)
-    ? 'TaleArr'
+    ? 'Talearr'
     : 'Chaptarr';
   const [view, setView] = useState<DownloadsView>('queue');
   const [tab, setTab] = useState<DownloadTab>('all');
@@ -114,7 +114,7 @@ const Downloads = () => {
   const [removing, setRemoving] = useState<DownloadItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState<DownloadItem | null>(null);
-  // Seeding is a TaleArr extra; other book services get the unsupported
+  // Seeding is a Talearr extra; other book services get the unsupported
   // state when they open it
   const showSeeding = currentSettings.booksEnabled;
   const activeView = showSeeding ? view : 'queue';

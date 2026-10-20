@@ -41,7 +41,7 @@ const resolve = ({
   });
 
 describe('resolveBookService', () => {
-  it('resolves the settings saved before TaleArr as it did', () => {
+  it('resolves the settings saved before Talearr as it did', () => {
     assert.strictEqual(resolve({}), undefined);
     assert.strictEqual(resolve({ chaptarr: true }), 'chaptarr');
     assert.strictEqual(resolve({ lazylibrarian: true }), 'lazylibrarian');
@@ -71,7 +71,7 @@ describe('resolveBookService', () => {
     );
   });
 
-  it('picks TaleArr when it is chosen and a Chaptarr server is set up', () => {
+  it('picks Talearr when it is chosen and a Chaptarr server is set up', () => {
     assert.strictEqual(
       resolve({ bookService: 'talearr', chaptarr: true }),
       'talearr'
@@ -82,7 +82,7 @@ describe('resolveBookService', () => {
     );
   });
 
-  it('falls back like Chaptarr when TaleArr has no server yet', () => {
+  it('falls back like Chaptarr when Talearr has no server yet', () => {
     assert.strictEqual(
       resolve({ bookService: 'talearr', lazylibrarian: true }),
       'lazylibrarian'

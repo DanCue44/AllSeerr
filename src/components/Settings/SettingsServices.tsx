@@ -107,19 +107,19 @@ const messages = defineMessages('components.Settings', {
   chaptarrSettingsDescription:
     'Configure your Chaptarr server(s) below to enable ebook and audiobook requests. Approved book requests are added to Chaptarr in the requested format and searched for. You can connect multiple Chaptarr servers, but only one of them can be marked as default. Other Readarr compatible servers work too.',
   addchaptarr: 'Add Chaptarr Server',
-  talearrsettings: 'TaleArr Settings',
+  talearrsettings: 'Talearr Settings',
   talearrSettingsDescription:
-    'Configure your TaleArr server(s) below to enable ebook and audiobook requests. TaleArr is a fork of Chaptarr, so approved book requests are added the same way, and its rejection labels show in manual searches. You can connect multiple TaleArr servers, but only one of them can be marked as default.',
-  addtalearr: 'Add TaleArr Server',
+    'Configure your Talearr server(s) below to enable ebook and audiobook requests. Talearr is a fork of Chaptarr, so approved book requests are added the same way, and its rejection labels show in manual searches. You can connect multiple Talearr servers, but only one of them can be marked as default.',
+  addtalearr: 'Add Talearr Server',
   mediaTypeBook: 'book',
   bookService: 'Book Requests',
   bookServiceTip:
-    'Choose where book requests are sent. Chaptarr and TaleArr both use the servers above, so pick the one they run. Test a server to check.',
+    'Choose where book requests are sent. Chaptarr and Talearr both use the servers above, so pick the one they run. Test a server to check.',
   bookServiceSaved: 'Book requests are now sent to {service}.',
   bookServiceFailed: 'Something went wrong while saving the book service.',
   audiobookVersions: 'Audiobook Versions',
   audiobookVersionsTip:
-    'Which readings of an audiobook TaleArr is asked for when a request is approved. Both adds the unabridged reading and asks for the abridged one as a recording of its own.',
+    'Which readings of an audiobook Talearr is asked for when a request is approved. Both adds the unabridged reading and asks for the abridged one as a recording of its own.',
   audiobookVersionsBoth: 'Both',
   audiobookVersionsUnabridged: 'Unabridged',
   audiobookVersionsAbridged: 'Abridged',
@@ -321,7 +321,7 @@ const ServerInstance = ({
               <img
                 src="/companions/talearr.png"
                 srcSet="/companions/talearr.png 1x, /companions/talearr@2x.png 2x"
-                alt="TaleArr"
+                alt="Talearr"
                 width={40}
                 height={40}
                 className="h-10 w-10 flex-shrink-0"
@@ -584,14 +584,14 @@ const SettingsServices = () => {
     (chaptarr) => chaptarr.isDefault || chaptarrData.length === 1
   );
 
-  // Chaptarr and TaleArr share the servers below, so there is always a
+  // Chaptarr and Talearr share the servers below, so there is always a
   // choice once one is set up
   const showBookService = hasDefaultChaptarr;
 
   const currentBookService: BookService =
     publicData?.bookService ?? mainData?.bookService ?? 'chaptarr';
 
-  // What the Chaptarr servers are: TaleArr when it is picked, even before
+  // What the Chaptarr servers are: Talearr when it is picked, even before
   // a server is set up, otherwise Chaptarr
   const chaptarrService: ChaptarrBookService = usesChaptarr(
     publicData?.bookService
@@ -1032,7 +1032,7 @@ const SettingsServices = () => {
                   }
                 >
                   <option value="chaptarr">Chaptarr</option>
-                  <option value="talearr">TaleArr</option>
+                  <option value="talearr">Talearr</option>
                   {isLazyLibrarianConfigured && (
                     <option value="lazylibrarian">LazyLibrarian</option>
                   )}

@@ -152,7 +152,7 @@ const SERVICE_NAMES: Record<DownloadService, string> = {
   chaptarr: 'Chaptarr',
 };
 
-// Book downloads are named after the book service, Chaptarr or TaleArr
+// Book downloads are named after the book service, Chaptarr or Talearr
 const serviceName = (service: DownloadService) =>
   service === 'chaptarr'
     ? bookServiceName(getSettings().bookService)

@@ -70,7 +70,7 @@ export const getInitialRecordingChoice = (
 
 /**
  * Whether the book page offers the unabridged recording in one tap: the
- * library's audiobook is abridged and TaleArr knows an unabridged edition
+ * library's audiobook is abridged and Talearr knows an unabridged edition
  */
 export const shouldOfferUnabridged = (
   info: BookRecordingsResponse | undefined
@@ -123,7 +123,7 @@ export const getCandidateParts = (
 });
 
 /**
- * Whether the book page should look up recordings at all: TaleArr is the
+ * Whether the book page should look up recordings at all: Talearr is the
  * book service and the audiobook is in the library
  */
 export const canHaveRecordings = (

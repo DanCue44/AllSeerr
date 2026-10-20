@@ -54,7 +54,7 @@ downloadRoutes.get<never, DownloadsResponse>('/', async (_req, res, next) => {
   }
 });
 
-// The seeding torrents at risk, for the badge; TaleArr not answering only
+// The seeding torrents at risk, for the badge; Talearr not answering only
 // leaves them out of the count
 const countSeedingAtRisk = async (): Promise<number> => {
   try {
@@ -91,7 +91,7 @@ downloadRoutes.get<never, SeedingResponse>(
     try {
       return res.status(200).json(await getSeeding());
     } catch (e) {
-      return handleError(e, undefined, next, 'reading what TaleArr seeds');
+      return handleError(e, undefined, next, 'reading what Talearr seeds');
     }
   }
 );

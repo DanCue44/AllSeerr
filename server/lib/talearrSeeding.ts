@@ -16,7 +16,7 @@ import { getDefaultChaptarr, getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { In } from 'typeorm';
 
-// TaleArr asks the download client and the tracker for each answer, so it
+// Talearr asks the download client and the tracker for each answer, so it
 // is asked at most this often however many admins have the page open
 export const SEEDING_CACHE_MS = 30 * 1000;
 
@@ -97,7 +97,7 @@ const parseTrackerAccount = (raw: unknown): TrackerAccount | null =>
     : null;
 
 /**
- * Reads TaleArr's seeding answer, or undefined when it is not one. Missing
+ * Reads Talearr's seeding answer, or undefined when it is not one. Missing
  * totals are counted from the torrents.
  */
 export const parseTalearrSeeding = (
@@ -131,13 +131,13 @@ export const parseTalearrSeeding = (
       privateUnsatisfied:
         asNumber(summary.privateUnsatisfied) ?? counted.privateUnsatisfied,
     },
-    // TaleArr sends the tracker account as `mam`
+    // Talearr sends the tracker account as `mam`
     trackerAccount: parseTrackerAccount(raw.mam),
   };
 };
 
 /**
- * Adds the AllSeerr book of each torrent TaleArr matched to a book, for
+ * Adds the AllSeerr book of each torrent Talearr matched to a book, for
  * its cover and link
  */
 const linkBooks = async (
@@ -201,8 +201,8 @@ const linkBooks = async (
 };
 
 /**
- * Asks TaleArr what it seeds, unsupported when the book service is not
- * TaleArr or the TaleArr server has no seeding route yet
+ * Asks Talearr what it seeds, unsupported when the book service is not
+ * Talearr or the Talearr server has no seeding route yet
  */
 export const collectSeeding = async (): Promise<SeedingResponse> => {
   const settings = getSettings();
@@ -227,7 +227,7 @@ export const collectSeeding = async (): Promise<SeedingResponse> => {
   const seeding = parseTalearrSeeding(raw);
 
   if (!seeding) {
-    throw new Error('TaleArr sent a seeding answer AllSeerr cannot read');
+    throw new Error('Talearr sent a seeding answer AllSeerr cannot read');
   }
 
   try {
@@ -251,7 +251,7 @@ export const clearSeedingCache = (): void => {
 };
 
 /**
- * What TaleArr seeds, answered from a 30 second cache. Callers asking at
+ * What Talearr seeds, answered from a 30 second cache. Callers asking at
  * the same time share one request.
  */
 export const getSeeding = async ({

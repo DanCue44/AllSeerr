@@ -465,7 +465,7 @@ describe('GET /nobookends/status', () => {
       autoApprove: false,
       defaultFormat: 'both',
       quota: null,
-      // Only TaleArr keeps other recordings of an audiobook
+      // Only Talearr keeps other recordings of an audiobook
       recordings: false,
     });
     assert.deepStrictEqual(res.body.issues, { canCreate: false });
@@ -479,13 +479,13 @@ describe('GET /nobookends/status', () => {
     assert.strictEqual(res.body.openInNoBookEnds, true);
   });
 
-  it('tells the app the audiobook versions with TaleArr', async () => {
+  it('tells the app the audiobook versions with Talearr', async () => {
     enableBooks();
     const settings = getSettings();
     settings.chaptarr = [
       {
         id: 0,
-        name: 'TaleArr',
+        name: 'Talearr',
         hostname: 'talearr',
         port: 8789,
         apiKey: 'key',
@@ -520,7 +520,7 @@ describe('GET /nobookends/status', () => {
       const requester = await agent.get('/nobookends/status');
       assert.strictEqual(requester.body.books.audiobookVersions, 'requester');
 
-      // Only TaleArr has versions
+      // Only Talearr has versions
       settings.main.bookService = 'chaptarr';
       const chaptarr = await agent.get('/nobookends/status');
       assert.strictEqual(chaptarr.body.books.audiobookVersions, undefined);

@@ -37,14 +37,14 @@ export type MediaRequestBody = {
   // Books only, an ISO 639-1 code or 'any'. Only honored for users who
   // manage requests, everyone else requests in their own language.
   language?: string;
-  // Audiobooks on TaleArr only: asks for another recording of an audiobook
+  // Audiobooks on Talearr only: asks for another recording of an audiobook
   // that is already available instead of the audiobook itself
   recording?: BookRecordingKind;
   // The narrator a narrator recording is asked for
   recordingNarrator?: string;
-  // TaleArr's id of the edition an edition recording is asked for
+  // Talearr's id of the edition an edition recording is asked for
   recordingEditionId?: number;
-  // Audiobooks on TaleArr only, with Audiobook Versions at `requester`:
+  // Audiobooks on Talearr only, with Audiobook Versions at `requester`:
   // the unabridged reading, the abridged one or both
   audiobookVersion?: AudiobookVersion | null;
   serverId?: number;

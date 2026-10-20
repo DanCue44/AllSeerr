@@ -197,20 +197,20 @@ export type TalearrAbridgedPolicy =
   | 'abridgedOnly';
 
 /**
- * TaleArr's grab policy override for one book. Unsupported when the server
- * has no such route, as stock Chaptarr and older TaleArr do not.
+ * Talearr's grab policy override for one book. Unsupported when the server
+ * has no such route, as stock Chaptarr and older Talearr do not.
  */
 export type TalearrBookGrabPolicy =
   | { supported: false }
   | {
       supported: true;
       // The override, null when the book follows the global policy, and
-      // undefined when TaleArr does not know the book
+      // undefined when Talearr does not know the book
       abridgedPolicy?: TalearrAbridgedPolicy | null;
     };
 
 /**
- * TaleArr's grab policy, from Settings > Indexers > Grab policy
+ * Talearr's grab policy, from Settings > Indexers > Grab policy
  */
 export interface TalearrGrabPolicy {
   abridgedPolicy: TalearrAbridgedPolicy;
@@ -220,22 +220,22 @@ export interface TalearrGrabPolicy {
 }
 
 /**
- * Whether a server is TaleArr, the Chaptarr fork, and what it reports.
- * TaleArr keeps Chaptarr's app name, so it is told apart by its product
+ * Whether a server is Talearr, the Chaptarr fork, and what it reports.
+ * Talearr keeps Chaptarr's app name, so it is told apart by its product
  * name, its own version, its instance name and its grab policy route.
  */
 export interface TalearrIdentity {
   isTalearr: boolean;
-  // TaleArr's own version, apart from the Chaptarr version it is based on
+  // Talearr's own version, apart from the Chaptarr version it is based on
   version?: string;
   instanceName?: string;
   grabPolicy?: TalearrGrabPolicy;
-  // A problem with the metadata server that TaleArr's health check found
+  // A problem with the metadata server that Talearr's health check found
   metadataProblem?: string;
 }
 
 /**
- * One edition of an audiobook as TaleArr's recordings route describes it
+ * One edition of an audiobook as Talearr's recordings route describes it
  */
 export interface TalearrRecordingEdition {
   editionId: number;
@@ -253,7 +253,7 @@ export interface TalearrRecordingEdition {
 }
 
 /**
- * A recording TaleArr keeps of an audiobook: the primary one is the book
+ * A recording Talearr keeps of an audiobook: the primary one is the book
  * itself, every additional one is its own Chaptarr book entry
  */
 export interface TalearrRecording extends TalearrRecordingEdition {
@@ -275,7 +275,7 @@ export interface TalearrRecordings {
   marketplace?: string | null;
   recordings: TalearrRecording[];
   candidates: TalearrRecordingCandidate[];
-  // TaleArr 0.15.0 and later: the book's editions or Audible facts are not
+  // Talearr 0.15.0 and later: the book's editions or Audible facts are not
   // resolved yet, so the candidates may still change. Older servers leave
   // it out.
   factsPending?: boolean;
@@ -292,7 +292,7 @@ export interface TalearrAddRecordingBody {
 }
 
 /**
- * TaleArr's answer to a new recording: created or pinned (201) and existing
+ * Talearr's answer to a new recording: created or pinned (201) and existing
  * (200) carry the recording, no match (404) and ambiguous (409) the
  * candidates, invalid (400) only a message
  */
@@ -340,16 +340,16 @@ const REMOVE_AUTHOR_TIMEOUT_MS = 300_000;
 // Lookups ask Chaptarr's metadata server, which slows down a lot while
 // Chaptarr is busy refreshing an author
 const LOOKUP_TIMEOUT_MS = 30_000;
-// Telling TaleArr apart is a few small reads, a missing one is not an error
+// Telling Talearr apart is a few small reads, a missing one is not an error
 const IDENTITY_TIMEOUT_MS = 10_000;
-// TaleArr's recordings route reads its own cache of Audible facts
+// Talearr's recordings route reads its own cache of Audible facts
 const RECORDINGS_TIMEOUT_MS = 15_000;
-// TaleArr's seeding route asks the download client and the tracker
+// Talearr's seeding route asks the download client and the tracker
 const SEEDING_TIMEOUT_MS = 15_000;
-// The health check TaleArr reports metadata server problems with
+// The health check Talearr reports metadata server problems with
 const TALEARR_METADATA_CHECK = 'TalearrMetadataServerProbeCheck';
 
-// In TaleArr's enum order, for serializers that send numbers
+// In Talearr's enum order, for serializers that send numbers
 const ABRIDGED_POLICIES: TalearrAbridgedPolicy[] = [
   'unabridgedOnly',
   'preferUnabridged',
@@ -367,7 +367,7 @@ const parseAbridgedPolicy = (
       );
 
 /**
- * Whether a 404 came from a route TaleArr has, about a book it does not
+ * Whether a 404 came from a route Talearr has, about a book it does not
  * know, which answers with a message. A route the server does not have
  * answers 404 without one.
  */
@@ -375,7 +375,7 @@ const isKnownRouteNotFound = (data: unknown): boolean =>
   !!data && typeof data === 'object' && !Array.isArray(data);
 
 /**
- * Reads TaleArr's answer to the per book grab policy route
+ * Reads Talearr's answer to the per book grab policy route
  */
 export const parseTalearrBookGrabPolicy = (
   status: number,
@@ -406,7 +406,7 @@ const mentionsTalearr = (value: unknown): boolean =>
   typeof value === 'string' && value.toLowerCase().includes('talearr');
 
 /**
- * Reads a grab policy as TaleArr sends it, or undefined when the answer is
+ * Reads a grab policy as Talearr sends it, or undefined when the answer is
  * not one, such as a stock Chaptarr page for an unknown route
  */
 export const parseTalearrGrabPolicy = (
@@ -501,7 +501,7 @@ const parseTalearrCandidate = (
 });
 
 /**
- * Reads TaleArr's recordings of a book, or undefined when the answer is not
+ * Reads Talearr's recordings of a book, or undefined when the answer is not
  * one, such as the page stock Chaptarr sends for a route it does not have
  */
 export const parseTalearrRecordings = (
@@ -527,7 +527,7 @@ export const parseTalearrRecordings = (
 };
 
 /**
- * Reads TaleArr's answer to a new recording by its status code
+ * Reads Talearr's answer to a new recording by its status code
  */
 export const parseTalearrAddRecording = (
   status: number,
@@ -699,9 +699,9 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
   }
 
   /**
-   * Tells TaleArr apart from stock Chaptarr. Each sign is read on its own
+   * Tells Talearr apart from stock Chaptarr. Each sign is read on its own
    * and one that cannot be read counts as missing, so stock Chaptarr and
-   * other Readarr compatible servers are reported as not TaleArr.
+   * other Readarr compatible servers are reported as not Talearr.
    */
   public async getTalearrIdentity(): Promise<TalearrIdentity> {
     const baseUrl = (this.axios.defaults.baseURL ?? '').replace(
@@ -780,9 +780,9 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
   }
 
   /**
-   * TaleArr's recordings of the work a book belongs to, and the audiobook
+   * Talearr's recordings of the work a book belongs to, and the audiobook
    * editions that could become one. Undefined when the server has no such
-   * route, as stock Chaptarr and TaleArr before recordings do not.
+   * route, as stock Chaptarr and Talearr before recordings do not.
    */
   public async getTalearrRecordings(
     bookId: number,
@@ -800,9 +800,9 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
   }
 
   /**
-   * What TaleArr's download client seeds and whether the trackers' seeding
-   * rules are kept, as TaleArr sends it. Undefined when the server has no
-   * such route, as stock Chaptarr and older TaleArr do not.
+   * What Talearr's download client seeds and whether the trackers' seeding
+   * rules are kept, as Talearr sends it. Undefined when the server has no
+   * such route, as stock Chaptarr and older Talearr do not.
    */
   public async getTalearrSeeding(): Promise<unknown> {
     const response = await this.axios.get<unknown>('/talearr/seeding', {
@@ -816,7 +816,7 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
 
     if (response.status !== 200) {
       throw new Error(
-        `TaleArr answered the seeding request with status ${response.status}`
+        `Talearr answered the seeding request with status ${response.status}`
       );
     }
 
@@ -824,7 +824,7 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
   }
 
   /**
-   * Asks TaleArr for another recording of a book. Refusals are answered,
+   * Asks Talearr for another recording of a book. Refusals are answered,
    * not thrown, so the caller can tell a missing edition from a server that
    * could not be reached.
    */
@@ -848,7 +848,7 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
       response.status !== 409
     ) {
       throw new Error(
-        `TaleArr answered the recording request with status ${response.status}`
+        `Talearr answered the recording request with status ${response.status}`
       );
     }
 
@@ -856,7 +856,7 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
   }
 
   /**
-   * TaleArr's grab policy override for one book, such as abridged only.
+   * Talearr's grab policy override for one book, such as abridged only.
    * Answers unsupported, rather than throwing, when the server has no such
    * route.
    */
@@ -875,7 +875,7 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
   }
 
   /**
-   * Sets TaleArr's grab policy override for one book, or clears it with
+   * Sets Talearr's grab policy override for one book, or clears it with
    * null so the book follows the global policy. False when the server has
    * no such route.
    */
@@ -901,7 +901,7 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
     }
 
     throw new Error(
-      `TaleArr answered the grab policy of book ${bookId} with status ${response.status}`
+      `Talearr answered the grab policy of book ${bookId} with status ${response.status}`
     );
   }
 

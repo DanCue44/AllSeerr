@@ -57,7 +57,7 @@ const messages = defineMessages('components.RequestModal.BookRequestModal', {
   versionabridged: 'Abridged',
   versionboth: 'Both',
   versionbothtip:
-    'The abridged reading is asked for as a recording of its own, when TaleArr knows one.',
+    'The abridged reading is asked for as a recording of its own, when Talearr knows one.',
 });
 
 interface BookRequestModalProps {
@@ -127,7 +127,7 @@ const BookRequestModal = ({
     );
   }, [defaultBookFormat, canRequestEbook, canRequestAudiobook]);
 
-  // TaleArr only, when the Audiobook Versions setting lets the requester
+  // Talearr only, when the Audiobook Versions setting lets the requester
   // pick the readings of the audiobook
   const canChooseVersion =
     settings.currentSettings.audiobookVersions === 'requester';

@@ -28,24 +28,24 @@ export interface NoBookEndsItem {
   title: string | null;
   status: MediaStatus;
   statusAudio: MediaStatus;
-  // TaleArr only, once the audiobook is available there: its recordings,
+  // Talearr only, once the audiobook is available there: its recordings,
   // whether the user may ask for another one, the unabridged or abridged
   // one in particular, and the recording requests made for the book
   recordings?: BookRecordingSummary[];
   canRequestRecording?: boolean;
-  // TaleArr knows an unabridged edition and keeps no unabridged recording
+  // Talearr knows an unabridged edition and keeps no unabridged recording
   canRequestUnabridged?: boolean;
-  // TaleArr knows an abridged edition and keeps no abridged recording, so
+  // Talearr knows an abridged edition and keeps no abridged recording, so
   // the library copy is unabridged or not known to be either
   canRequestAbridged?: boolean;
   recordingRequests?: RecordingRequestSummary[];
 }
 
-// The app waits for the item, TaleArr gets a short look only
+// The app waits for the item, Talearr gets a short look only
 const RECORDINGS_TIMEOUT_MS = 5_000;
 
 /**
- * Adds TaleArr's recordings of the book to an item, when TaleArr is the
+ * Adds Talearr's recordings of the book to an item, when Talearr is the
  * book service and answers. An item without them is answered as before.
  */
 export const withNoBookEndsRecordings = async (

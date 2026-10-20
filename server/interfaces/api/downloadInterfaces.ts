@@ -141,15 +141,15 @@ export type SeedingState =
   | 'downloading';
 
 /**
- * A torrent TaleArr's download client is seeding, or should be. Bytes and
- * seconds, ISO 8601 times. Fields TaleArr does not know are null.
+ * A torrent Talearr's download client is seeding, or should be. Bytes and
+ * seconds, ISO 8601 times. Fields Talearr does not know are null.
  */
 export interface SeedingTorrent {
   // The hash in the download client
   downloadId: string;
   // The release name in the client
   title: string;
-  // Null when TaleArr cannot match the torrent to a book
+  // Null when Talearr cannot match the torrent to a book
   bookId: number | null;
   bookTitle: string | null;
   authorName: string | null;
@@ -171,7 +171,7 @@ export interface SeedingTorrent {
   riskReason: string | null;
   addedAt: string | null;
   completedAt: string | null;
-  // Added by AllSeerr: the book in AllSeerr, when it has the TaleArr book
+  // Added by AllSeerr: the book in AllSeerr, when it has the Talearr book
   mediaId?: number;
   olId?: string;
 }
@@ -184,7 +184,7 @@ export interface SeedingSummary {
 }
 
 /**
- * The private tracker account TaleArr checks, for its seeding rules
+ * The private tracker account Talearr checks, for its seeding rules
  */
 export interface TrackerAccount {
   userClass: string | null;
@@ -200,12 +200,12 @@ export interface TalearrSeeding {
   generatedAt: string | null;
   torrents: SeedingTorrent[];
   summary: SeedingSummary;
-  // Null when TaleArr checks no tracker account
+  // Null when Talearr checks no tracker account
   trackerAccount: TrackerAccount | null;
 }
 
 /**
- * Seeding is only known to TaleArr; stock Chaptarr and LazyLibrarian answer
+ * Seeding is only known to Talearr; stock Chaptarr and LazyLibrarian answer
  * unsupported
  */
 export type SeedingResponse =

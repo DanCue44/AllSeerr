@@ -20,7 +20,7 @@ import express from 'express';
 import request from 'supertest';
 
 /**
- * TaleArr is replaced by a fake axios instance that answers from the
+ * Talearr is replaced by a fake axios instance that answers from the
  * handlers below with a status, as the seeding route reads it. Nothing
  * reaches the network.
  */
@@ -73,7 +73,7 @@ mock.method(axios, 'create', (config?: { baseURL?: string }) => {
 
 const talearr = {
   id: 0,
-  name: 'TaleArr',
+  name: 'Talearr',
   hostname: 'talearr',
   port: 8790,
   apiKey: 'test-key',
@@ -217,7 +217,7 @@ describe('GET /downloads/seeding', () => {
     assert.deepStrictEqual(calls, []);
   });
 
-  it("passes TaleArr's seeding answer through with the books in AllSeerr", async () => {
+  it("passes Talearr's seeding answer through with the books in AllSeerr", async () => {
     const media = await getRepository(Media).save(
       new Media({
         mediaType: MediaType.BOOK,
@@ -283,7 +283,7 @@ describe('GET /downloads/seeding', () => {
     assert.deepStrictEqual(calls, []);
   });
 
-  it('is unsupported when TaleArr has no seeding route', async () => {
+  it('is unsupported when Talearr has no seeding route', async () => {
     handlers['talearr GET /talearr/seeding'] = () => ({ status: 404 });
     const apiKey = await admin();
 
@@ -295,7 +295,7 @@ describe('GET /downloads/seeding', () => {
     assert.deepStrictEqual(res.body, { supported: false });
   });
 
-  it('answers 502 when TaleArr fails or sends something else', async () => {
+  it('answers 502 when Talearr fails or sends something else', async () => {
     const apiKey = await admin();
 
     for (const answer of [
@@ -334,7 +334,7 @@ describe('GET /downloads/count', () => {
     });
   });
 
-  it('counts none when TaleArr does not answer', async () => {
+  it('counts none when Talearr does not answer', async () => {
     delete handlers['talearr GET /talearr/seeding'];
     const apiKey = await admin();
 
