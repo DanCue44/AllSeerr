@@ -43,6 +43,14 @@ jobs:
         with:
           persist-credentials: false
 
+      # The self-hosted runner has no Node of its own, and the JavaScript
+      # extractor needs it to read TypeScript
+      - name: Set up Node.js
+        if: matrix.language == 'javascript-typescript'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
