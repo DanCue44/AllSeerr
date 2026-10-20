@@ -240,7 +240,9 @@ const CoreApp: Omit<NextAppComponentType, 'origGetInitialProps'> = ({
                 toastOptions={{ duration: 4000 }}
                 containerStyle={{
                   zIndex: 10000,
-                  paddingTop: 'env(safe-area-inset-top)',
+                  // Toasts are absolutely positioned, so padding is ignored;
+                  // offset the container itself below the iPhone notch.
+                  top: 'calc(16px + env(safe-area-inset-top))',
                 }}
               />
             </InteractionProvider>
