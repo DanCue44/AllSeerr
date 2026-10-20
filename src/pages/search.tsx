@@ -1,4 +1,4 @@
-import AmbientSearch from '@app/components/AllSeerr/Search';
+import AmbientSearch from '@app/components/Allseerr/Search';
 import Search from '@app/components/Search';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 

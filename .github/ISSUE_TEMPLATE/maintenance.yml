@@ -60,5 +60,5 @@ body:
       label: Code of Conduct
       description: By submitting this issue, you agree to follow our Code of Conduct.
       options:
-        - label: I agree to follow AllSeerr's [Code of Conduct](https://github.com/DanCue44/AllSeerr/blob/main/CODE_OF_CONDUCT.md).
+        - label: I agree to follow Allseerr's [Code of Conduct](https://github.com/DanCue44/Allseerr/blob/main/CODE_OF_CONDUCT.md).
           required: true

@@ -1,12 +1,12 @@
 <p align="center">
-<img src="./public/allseerr-logo.png" alt="AllSeerr" width="160" style="margin: 20px 0;">
+<img src="./public/allseerr-logo.png" alt="Allseerr" width="160" style="margin: 20px 0;">
 </p>
 
-# AllSeerr
+# Allseerr
 
-**AllSeerr** is a free and open source request manager for your media library: movies, series, **music**, **books** and **audiobooks** in one place, plus a **subtitles** panel. It works with [Jellyfin](https://jellyfin.org), [Plex](https://plex.tv) and [Emby](https://emby.media/), and sends requests to [Radarr](https://radarr.video/), [Sonarr](https://sonarr.tv/), [Lidarr](https://lidarr.audio/) and Chaptarr.
+**Allseerr** is a free and open source request manager for your media library: movies, series, **music**, **books** and **audiobooks** in one place, plus a **subtitles** panel. It works with [Jellyfin](https://jellyfin.org), [Plex](https://plex.tv) and [Emby](https://emby.media/), and sends requests to [Radarr](https://radarr.video/), [Sonarr](https://sonarr.tv/), [Lidarr](https://lidarr.audio/) and Chaptarr.
 
-AllSeerr is a fork of [Seerr](https://github.com/seerr-team/seerr). It keeps everything Seerr does and adds the features below.
+Allseerr is a fork of [Seerr](https://github.com/seerr-team/seerr). It keeps everything Seerr does and adds the features below.
 
 ## Features
 
@@ -59,7 +59,7 @@ Screenshots coming soon.
 
 ## Install
 
-AllSeerr is published as a Docker image: `ghcr.io/dancue44/allseerr:latest`. It listens on port `5055` and keeps all of its data in `/app/config`. The container runs as UID 1000 and needs `--init`.
+Allseerr is published as a Docker image: `ghcr.io/dancue44/allseerr:latest`. It listens on port `5055` and keeps all of its data in `/app/config`. The container runs as UID 1000 and needs `--init`.
 
 ### Docker run
 
@@ -104,14 +104,14 @@ Then open `http://<your-server>:5055` and follow the setup wizard.
 
 ### Unraid
 
-Search for **AllSeerr** in the **Apps** tab (Community Applications) and install the template.
+Search for **Allseerr** in the **Apps** tab (Community Applications) and install the template.
 
 More options (PostgreSQL, Windows, building from source, reverse proxies) are in the [docs](./docs).
 
 ## Migrating from Seerr, Overseerr or Jellyseerr
 
 1. **Back up first.** Stop the old container and copy its config folder.
-2. Start AllSeerr with the copy mounted at `/app/config`. AllSeerr migrates the database and settings forward on first start, so your users, requests and settings carry over.
+2. Start Allseerr with the copy mounted at `/app/config`. Allseerr migrates the database and settings forward on first start, so your users, requests and settings carry over.
 3. Going back to Seerr (or Overseerr or Jellyseerr) **on the same database is not supported**, so keep the backup until you are sure.
 
 See the [migration guide](./docs/migration-guide.mdx) for details.
@@ -124,7 +124,7 @@ See the [migration guide](./docs/migration-guide.mdx) for details.
 | `main` | Every change merged to `main` between releases (amd64). |
 | `develop` | Testing builds of upcoming changes (amd64). |
 
-AllSeerr versions are the Seerr release they are based on plus an AllSeerr revision, for example `3.5.0.2`. See [update channels](./docs/getting-started/update-channels.mdx).
+Allseerr versions are the Seerr release they are based on plus an Allseerr revision, for example `3.5.0.2`. See [update channels](./docs/getting-started/update-channels.mdx).
 
 ## Supported services
 
@@ -141,13 +141,13 @@ AllSeerr versions are the Seerr release they are based on plus an AllSeerr revis
 
 ## Outbound connections and privacy
 
-AllSeerr has **no telemetry, analytics or tracking**. It talks to your own services (media server, Radarr, Sonarr, Lidarr, Chaptarr, LazyLibrarian, Audiobookshelf, Bazarr, Tautulli) and to the public services below, only for the features that need them:
+Allseerr has **no telemetry, analytics or tracking**. It talks to your own services (media server, Radarr, Sonarr, Lidarr, Chaptarr, LazyLibrarian, Audiobookshelf, Bazarr, Tautulli) and to the public services below, only for the features that need them:
 
 | Service | When |
 |---|---|
 | **TMDB** (`api.themoviedb.org`, `image.tmdb.org`) | Always: movie and series metadata, search and images. Browsers load TMDB images directly unless image caching is enabled. |
 | **plex.tv** (`plex.tv`, `discover.provider.plex.tv`) | When you use Plex: sign in with Plex, server discovery and Plex watchlists. |
-| **GitHub** (`api.github.com`) | When **Version Check** is enabled (the default): checks for new AllSeerr releases. |
+| **GitHub** (`api.github.com`) | When **Version Check** is enabled (the default): checks for new Allseerr releases. |
 | **MusicBrainz** (`musicbrainz.org`) | Music features: search, albums, track lists, artists and artist summaries (MusicBrainz serves the Wikipedia extract). |
 | **Cover Art Archive** (`coverartarchive.org`, `archive.org`) | Music features: album covers. |
 | **TheAudioDB** (`www.theaudiodb.com`) | Music features: artist images and biographies, with the free public key. |
@@ -162,21 +162,21 @@ AllSeerr has **no telemetry, analytics or tracking**. It talks to your own servi
 | **Google** (`www.google.com`) | Only when an HTTP(S) proxy is configured: a connection test through the proxy. |
 | **Notification services** | Only the agents you enable (Discord, Slack, Telegram, Pushover, Pushbullet, Gotify, ntfy, webhooks, your SMTP server, browser push services). |
 
-MusicBrainz and OpenLibrary see requests identified as `AllSeerr/<version>` with a link to this repository, as their usage policies ask. No user data is sent to the metadata services. Cloudflare's IP ranges, used to recognize Plex addresses behind Cloudflare, are built in and are never downloaded.
+MusicBrainz and OpenLibrary see requests identified as `Allseerr/<version>` with a link to this repository, as their usage policies ask. No user data is sent to the metadata services. Cloudflare's IP ranges, used to recognize Plex addresses behind Cloudflare, are built in and are never downloaded.
 
 ## Support
 
-Report bugs and ask for features at [github.com/DanCue44/AllSeerr/issues](https://github.com/DanCue44/AllSeerr/issues). Please do not report AllSeerr problems to the Seerr team.
+Report bugs and ask for features at [github.com/DanCue44/Allseerr/issues](https://github.com/DanCue44/Allseerr/issues). Please do not report Allseerr problems to the Seerr team.
 
 ## About this project
 
-AllSeerr started as a fork of Seerr that I built for my own use, with the help of AI. Many people have asked for music and book support, and I felt bad keeping all of this to myself, so I decided to share it. I will maintain it and keep improving it as I have time.
+Allseerr started as a fork of Seerr that I built for my own use, with the help of AI. Many people have asked for music and book support, and I felt bad keeping all of this to myself, so I decided to share it. I will maintain it and keep improving it as I have time.
 
 See [ROADMAP.md](./ROADMAP.md) for what is done and what is planned.
 
 ## Credits
 
-Based on [Seerr](https://github.com/seerr-team/seerr) by the Seerr team, MIT licensed. Seerr brought together [Overseerr](https://github.com/sct/overseerr) and Jellyseerr. AllSeerr is not affiliated with or endorsed by the Seerr team.
+Based on [Seerr](https://github.com/seerr-team/seerr) by the Seerr team, MIT licensed. Seerr brought together [Overseerr](https://github.com/sct/overseerr) and Jellyseerr. Allseerr is not affiliated with or endorsed by the Seerr team.
 
 Music metadata comes from MusicBrainz, Cover Art Archive, TheAudioDB and ListenBrainz, and book metadata from OpenLibrary. Thank you to all of these projects.
 

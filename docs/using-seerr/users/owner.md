@@ -1,12 +1,12 @@
 ---
 title: Owner Account
-description: Your owner account is the primary account for managing AllSeerr.
+description: Your owner account is the primary account for managing Allseerr.
 sidebar_position: 1
 ---
 
 # Owner Account
 
-The user account created during AllSeerr setup is the "Owner" account, which cannot be deleted or modified by other users. This account's credentials are used to authenticate with your media server and configure AllSeerr settings.
+The user account created during Allseerr setup is the "Owner" account, which cannot be deleted or modified by other users. This account's credentials are used to authenticate with your media server and configure Allseerr settings.
 
 :::note
 In case of Jellyfin/Emby, the owner account is also used for API access to your media server. This account should have a valid authentication token for your media server.

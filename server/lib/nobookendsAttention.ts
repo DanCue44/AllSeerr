@@ -44,7 +44,7 @@ export interface NoBookEndsAttentionItem {
   reason: string | null;
   // Why it counts as stuck, such as importblocked or warning
   state: string;
-  // When AllSeerr first saw it stuck
+  // When Allseerr first saw it stuck
   since: string;
   // The release in the download client
   downloadTitle: string;

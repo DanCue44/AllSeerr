@@ -82,7 +82,7 @@ const getNoBookEndsConnectFragment = ({
 
 /**
  * Sets NoBookEnds up in one tap: the Audiobookshelf server to sign in to,
- * and the AllSeerr server with the personal key it requests books with. The
+ * and the Allseerr server with the personal key it requests books with. The
  * values go in the fragment, which browsers never send, so the key does not
  * reach the NoBookEnds site or its logs when the app is not installed.
  */
@@ -93,7 +93,7 @@ export const getNoBookEndsConnectUrl = (
 
 /**
  * The same values as the connect link, for the app's own scheme. The app
- * opens AllSeerr in a sign in window that closes when it reaches this URL.
+ * opens Allseerr in a sign in window that closes when it reaches this URL.
  */
 export const getNoBookEndsAppConnectUrl = (
   params: NoBookEndsConnectParams
@@ -150,11 +150,11 @@ export const isPrivateHost = (hostname: string): boolean => {
 };
 
 /**
- * The AllSeerr address the app connects to: the Application URL, or the
- * address AllSeerr was opened at when that is reachable from anywhere.
+ * The Allseerr address the app connects to: the Application URL, or the
+ * address Allseerr was opened at when that is reachable from anywhere.
  * Undefined when neither is, and the Application URL must be set first.
  */
-export const getNoBookEndsAllSeerrUrl = (request: {
+export const getNoBookEndsAllseerrUrl = (request: {
   protocol: string;
   hostname: string;
   host?: string;

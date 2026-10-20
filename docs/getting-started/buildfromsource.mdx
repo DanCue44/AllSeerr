@@ -1,6 +1,6 @@
 ---
 title: Build From Source (Advanced)
-description: Install AllSeerr by building from source
+description: Install Allseerr by building from source
 sidebar_position: 2
 ---
 # Build from Source (Advanced)
@@ -24,9 +24,9 @@ import TabItem from '@theme/TabItem';
 ```bash
 sudo mkdir -p /opt/allseerr && cd /opt/allseerr
 ```
-2. Clone the AllSeerr repository and checkout the main branch:
+2. Clone the Allseerr repository and checkout the main branch:
 ```bash
-git clone https://github.com/DanCue44/AllSeerr.git .
+git clone https://github.com/DanCue44/Allseerr.git .
 git checkout main
 ```
 3. Install the dependencies:
@@ -37,26 +37,26 @@ CYPRESS_INSTALL_BINARY=0 pnpm install --frozen-lockfile
 ```bash
 pnpm build
 ```
-5. Start AllSeerr:
+5. Start Allseerr:
 ```bash
 pnpm start
 ```
 
 :::info
-You can now access AllSeerr by visiting `http://localhost:5055` in your web browser.
+You can now access Allseerr by visiting `http://localhost:5055` in your web browser.
 :::
 
 #### Extending the installation
 <Tabs groupId="unix-extensions" queryString>
   <TabItem value="linux" label="Linux">
-To run AllSeerr as a systemd service:
+To run Allseerr as a systemd service:
 1. create the environment file at `/etc/allseerr/allseerr.conf`:
 ```bash
-## AllSeerr's default port is 5055, if you want to use both, change this.
+## Allseerr's default port is 5055, if you want to use both, change this.
 ## specify on which port to listen
 PORT=5055
 
-## specify on which interface to listen, by default AllSeerr listens on all interfaces
+## specify on which interface to listen, by default Allseerr listens on all interfaces
 #HOST=127.0.0.1
 
 ## Uncomment if you want to force Node.js to resolve IPv4 before IPv6 (advanced users only)
@@ -71,7 +71,7 @@ Copy the path to node, it should be something like `/usr/bin/node`.
 3. Create the systemd service file at `/etc/systemd/system/allseerr.service`, using either `sudo systemctl edit allseerr` or `sudo nano /etc/systemd/system/allseerr.service`:
 ```bash
 [Unit]
-Description=AllSeerr Service
+Description=Allseerr Service
 Wants=network-online.target
 After=network-online.target
 
@@ -97,7 +97,7 @@ sudo systemctl start allseerr
 ```
   </TabItem>
   <TabItem value="macos" label="macOS">
-To run AllSeerr as a launchd service:
+To run Allseerr as a launchd service:
 1. Find the path to node:
 ```bash
 which node
@@ -150,12 +150,12 @@ sudo lauchctl load
 ```
   </TabItem>
   <TabItem value="pm2" label="PM2">
-To run AllSeerr as a PM2 service:
+To run Allseerr as a PM2 service:
 1. Install PM2:
 ```bash
 npm install -g pm2
 ```
-2. Start AllSeerr with PM2:
+2. Start Allseerr with PM2:
 ```bash
 NODE_ENV=production pm2 start dist/index.js --name allseerr
 ```
@@ -198,9 +198,9 @@ pm2 status allseerr
 mkdir C:\allseerr
 cd C:\allseerr
 ```
-2. Clone the AllSeerr repository and checkout the main branch:
+2. Clone the Allseerr repository and checkout the main branch:
 ```powershell
-git clone https://github.com/DanCue44/AllSeerr.git .
+git clone https://github.com/DanCue44/Allseerr.git .
 git checkout main
 ```
 3. Install the dependencies:
@@ -212,24 +212,24 @@ $env:CYPRESS_INSTALL_BINARY = 0; pnpm install --frozen-lockfile
 ```powershell
 pnpm build
 ```
-5. Start AllSeerr:
+5. Start Allseerr:
 ```powershell
 pnpm start
 ```
 
 :::tip
-You can add the environment variables to a `.env` file in the AllSeerr directory.
+You can add the environment variables to a `.env` file in the Allseerr directory.
 :::
 
 :::info
-You can now access AllSeerr by visiting `http://localhost:5055` in your web browser.
+You can now access Allseerr by visiting `http://localhost:5055` in your web browser.
 :::
 
 #### Extending the installation
 <Tabs groupId="windows-extensions" queryString>
   <TabItem value="task-scheduler" label="Task Scheduler">
-To run AllSeerr as a bat script:
-1. Create a file named `start-allseerr.bat` in the AllSeerr directory:
+To run Allseerr as a bat script:
+1. Create a file named `start-allseerr.bat` in the Allseerr directory:
 ```batch
 @echo off
 set PORT=5055
@@ -239,41 +239,41 @@ node dist/index.js
 2. Create a task in Task Scheduler:
 - Open Task Scheduler
 - Click on "Create Basic Task"
-- Name the task "AllSeerr"
+- Name the task "Allseerr"
 - Set the trigger to "When the computer starts"
 - Set the action to "Start a program"
 - Set the program/script to the path of the `start-allseerr.bat` file
-- Set the "Start in" to the AllSeerr directory.
+- Set the "Start in" to the Allseerr directory.
 - Click "Finish"
 
-Now, AllSeerr will start when the computer boots up in the background.
+Now, Allseerr will start when the computer boots up in the background.
   </TabItem>
 
   <TabItem value="nssm" label="NSSM">
-To run AllSeerr as a service:
+To run Allseerr as a service:
 1. Download the [Non-Sucking Service Manager](https://nssm.cc/download)
 2. Install NSSM:
 ```powershell
-nssm install AllSeerr "C:\Program Files\nodejs\node.exe" "C:\allseerr\dist\index.js"
-nssm set AllSeerr AppDirectory "C:\allseerr"
-nssm set AllSeerr AppEnvironmentExtra NODE_ENV=production
+nssm install Allseerr "C:\Program Files\nodejs\node.exe" "C:\allseerr\dist\index.js"
+nssm set Allseerr AppDirectory "C:\allseerr"
+nssm set Allseerr AppEnvironmentExtra NODE_ENV=production
 ```
 3. Start the service:
 ```powershell
-nssm start AllSeerr
+nssm start Allseerr
 ```
 4. To ensure the service starts on boot, run the following command:
 ```powershell
-nssm set AllSeerr Start SERVICE_AUTO_START
+nssm set Allseerr Start SERVICE_AUTO_START
 ```
   </TabItem>
   <TabItem value="pm2" label="PM2">
-To run AllSeerr as a PM2 service:
+To run Allseerr as a PM2 service:
 1. Install PM2:
 ```powershell
 npm install -g pm2
 ```
-2. Start AllSeerr with PM2:
+2. Start Allseerr with PM2:
 ```powershell
 $env:NODE_ENV = "production"; pm2 start dist/index.js --name allseerr
 ```
@@ -310,9 +310,9 @@ pm2 status allseerr
 </Tabs>
 
 ### Updating
-To update AllSeerr, navigate to the AllSeerr directory and run the following commands:
+To update Allseerr, navigate to the Allseerr directory and run the following commands:
 ```bash
 git pull
 ```
-Then, follow the steps in the installation section to rebuild and restart AllSeerr.
+Then, follow the steps in the installation section to rebuild and restart Allseerr.
 

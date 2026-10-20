@@ -1,4 +1,4 @@
-import { PillTabs } from '@app/components/AllSeerr/ListPage';
+import { PillTabs } from '@app/components/Allseerr/ListPage';
 import {
   BOOK_SUBJECTS,
   getSubjectTitle,

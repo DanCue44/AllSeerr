@@ -1,6 +1,6 @@
 ---
 title: Unraid
-description: Install AllSeerr on Unraid
+description: Install Allseerr on Unraid
 sidebar_position: 2
 ---
 
@@ -11,9 +11,9 @@ import TabItem from '@theme/TabItem';
 
 ## Community Applications (recommended)
 
-AllSeerr has a template in Unraid's Community Applications.
+Allseerr has a template in Unraid's Community Applications.
 
-1. Open the **Apps** tab and search for **AllSeerr**.
+1. Open the **Apps** tab and search for **Allseerr**.
 2. Click **Install**. The template uses the image `ghcr.io/dancue44/allseerr:latest`, port `5055` and stores its data in `/mnt/user/appdata/allseerr` (mounted at `/app/config`).
 3. Set **TZ** to your [time zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) and click **Apply**.
 4. Open the WebUI at `http://<your-unraid-ip>:5055` and follow the setup wizard.
@@ -24,12 +24,12 @@ To try the testing channel, change the repository tag from `latest` to `develop`
 
 If you prefer to add the container by hand, first choose which user the container runs as:
 
-**AllSeerr Default** (`UID 1000:1000`): runs as the image's own `node` user. This matches the image, but may break SMB share access, trigger "Fix Common Problems" warnings, and cause issues with backup plugins (such as CA Appdata Backup).
+**Allseerr Default** (`UID 1000:1000`): runs as the image's own `node` user. This matches the image, but may break SMB share access, trigger "Fix Common Problems" warnings, and cause issues with backup plugins (such as CA Appdata Backup).
 
 **Unraid Default** (`UID 99:100`): runs as Unraid's `nobody:users`. This follows Unraid conventions, but overrides the image's built-in user.
 
 <Tabs groupId="unraid-permissions" queryString>
-  <TabItem value="allseerr-default" label="AllSeerr Default">
+  <TabItem value="allseerr-default" label="Allseerr Default">
 
   ### 1. Create the config directory
 
@@ -52,9 +52,9 @@ If you prefer to add the container by hand, first choose which user the containe
 
   | Field | Value |
   |---|---|
-  | **Name** | `AllSeerr` |
+  | **Name** | `Allseerr` |
   | **Repository** | `ghcr.io/dancue44/allseerr:latest` |
-  | **Icon URL** | `https://raw.githubusercontent.com/DanCue44/AllSeerr/main/public/android-chrome-512x512.png` |
+  | **Icon URL** | `https://raw.githubusercontent.com/DanCue44/Allseerr/main/public/android-chrome-512x512.png` |
   | **WebUI** | `http://[IP]:[PORT:5055]` |
   | **Extra Parameters** | `--init --restart=unless-stopped` |
   | **Network Type** | `bridge` |
@@ -95,9 +95,9 @@ If you prefer to add the container by hand, first choose which user the containe
 
   | Field | Value |
   |---|---|
-  | **Name** | `AllSeerr` |
+  | **Name** | `Allseerr` |
   | **Repository** | `ghcr.io/dancue44/allseerr:latest` |
-  | **Icon URL** | `https://raw.githubusercontent.com/DanCue44/AllSeerr/main/public/android-chrome-512x512.png` |
+  | **Icon URL** | `https://raw.githubusercontent.com/DanCue44/Allseerr/main/public/android-chrome-512x512.png` |
   | **WebUI** | `http://[IP]:[PORT:5055]` |
   | **Extra Parameters** | `--init --restart=unless-stopped --user 99:100` |
   | **Network Type** | `bridge` |

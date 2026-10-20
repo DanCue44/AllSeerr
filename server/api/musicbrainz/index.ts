@@ -27,7 +27,7 @@ export const UUID_REGEX =
 
 // MusicBrainz asks clients to name themselves with a way to reach them
 export const getDefaultMusicBrainzUserAgent = (): string =>
-  `AllSeerr/${getAppVersion()} ( ${ALLSEERR_REPO_URL} )`;
+  `Allseerr/${getAppVersion()} ( ${ALLSEERR_REPO_URL} )`;
 
 export const headers: Record<string, string> = {
   Accept: 'application/json',

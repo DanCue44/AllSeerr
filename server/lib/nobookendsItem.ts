@@ -129,7 +129,7 @@ const toItem = (
 
 /**
  * Finds the book of an unknown item from the title and author the app
- * has: books with that title AllSeerr knows are looked up in the library
+ * has: books with that title Allseerr knows are looked up in the library
  * the way book pages do, and the item ids they turn out to have are kept.
  */
 const resolveFromHints = async (
@@ -198,7 +198,7 @@ const resolveFromHints = async (
 };
 
 /**
- * The book an Audiobookshelf library item is of, among the books AllSeerr
+ * The book an Audiobookshelf library item is of, among the books Allseerr
  * knows. Items found before are looked up in the database; with a title,
  * an unknown item is looked for in the library.
  */

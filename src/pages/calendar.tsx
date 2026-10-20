@@ -1,4 +1,4 @@
-import AmbientCalendar from '@app/components/AllSeerr/Calendar';
+import AmbientCalendar from '@app/components/Allseerr/Calendar';
 import Calendar from '@app/components/Calendar';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import type { NextPage } from 'next';

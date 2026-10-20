@@ -56,10 +56,10 @@ ARG COMMIT_TAG
 ENV NODE_ENV=production
 ENV COMMIT_TAG=${COMMIT_TAG}
 
-LABEL org.opencontainers.image.title="AllSeerr" \
+LABEL org.opencontainers.image.title="Allseerr" \
   org.opencontainers.image.description="Request management for movies, series, music, books and audiobooks, based on Seerr" \
-  org.opencontainers.image.source="https://github.com/DanCue44/AllSeerr" \
-  org.opencontainers.image.url="https://github.com/DanCue44/AllSeerr" \
+  org.opencontainers.image.source="https://github.com/DanCue44/Allseerr" \
+  org.opencontainers.image.url="https://github.com/DanCue44/Allseerr" \
   org.opencontainers.image.licenses="MIT"
 
 # tini reaps zombies and forwards signals, so the image does not depend on

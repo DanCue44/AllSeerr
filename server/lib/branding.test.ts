@@ -326,7 +326,7 @@ describe('getEmailLogo', () => {
 
   afterEach(() => {
     settings.main.applicationUrl = '';
-    settings.main.applicationTitle = 'AllSeerr';
+    settings.main.applicationTitle = 'Allseerr';
     settings.main.applicationLogoVersion = '';
     emailOptions.usePublicLogo = false;
     rmSync(brandingDirectory(), { recursive: true, force: true });

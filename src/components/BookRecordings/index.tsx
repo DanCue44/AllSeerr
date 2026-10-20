@@ -1,4 +1,4 @@
-import { Card } from '@app/components/AllSeerr/Title';
+import { Card } from '@app/components/Allseerr/Title';
 import RecordingRequestModal from '@app/components/BookRecordings/RecordingRequestModal';
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';

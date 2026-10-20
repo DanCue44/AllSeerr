@@ -21,7 +21,7 @@ const messages = defineMessages('components.Settings.NoBookEndsSyncModal', {
   configurenobookendssync: 'Configure NoBookEnds Sync',
   editnobookendssync: 'Edit NoBookEnds Sync',
   intro:
-    'NoBookEnds Sync aligns an audiobook to its EPUB, so the NoBookEnds app can highlight the words as they are read. It runs next to Audiobookshelf. AllSeerr queues each book there once it has both formats, and tells the app where to find it.',
+    'NoBookEnds Sync aligns an audiobook to its EPUB, so the NoBookEnds app can highlight the words as they are read. It runs next to Audiobookshelf. Allseerr queues each book there once it has both formats, and tells the app where to find it.',
   installLink: 'How to install NoBookEnds Sync',
   composeTitle: 'Docker Compose example',
   composeHelp:

@@ -23,7 +23,7 @@ import useSWR from 'swr';
 
 const messages = defineMessages('components.Settings.SettingsAbout', {
   about: 'About',
-  aboutseerr: 'About AllSeerr',
+  aboutseerr: 'About Allseerr',
   version: 'Version',
   totalmedia: 'Total Media',
   totalrequests: 'Total Requests',
@@ -39,7 +39,7 @@ const messages = defineMessages('components.Settings.SettingsAbout', {
   uptodate: 'Up to Date',
   versionCheckDisabled: 'Version Check Disabled',
   runningBranch:
-    'You are running a build of the <code>{branch}</code> branch of AllSeerr rather than a release.',
+    'You are running a build of the <code>{branch}</code> branch of Allseerr rather than a release.',
 });
 
 const SettingsAbout = () => {

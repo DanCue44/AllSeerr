@@ -137,7 +137,7 @@ export const parseTalearrSeeding = (
 };
 
 /**
- * Adds the AllSeerr book of each torrent Talearr matched to a book, for
+ * Adds the Allseerr book of each torrent Talearr matched to a book, for
  * its cover and link
  */
 const linkBooks = async (
@@ -227,7 +227,7 @@ export const collectSeeding = async (): Promise<SeedingResponse> => {
   const seeding = parseTalearrSeeding(raw);
 
   if (!seeding) {
-    throw new Error('Talearr sent a seeding answer AllSeerr cannot read');
+    throw new Error('Talearr sent a seeding answer Allseerr cannot read');
   }
 
   try {

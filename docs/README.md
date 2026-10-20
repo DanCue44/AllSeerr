@@ -5,9 +5,9 @@ sidebar_position: 1
 
 # Introduction
 
-Welcome to the AllSeerr documentation.
+Welcome to the Allseerr documentation.
 
-**AllSeerr** is a free and open source request manager for your media library. It is a fork of [Seerr](https://github.com/seerr-team/seerr) that adds **music**, **books** and **audiobooks** next to movies and series, plus a **subtitles** panel. It works with the media server of your choice ([Jellyfin](https://jellyfin.org), [Plex](https://plex.tv) or [Emby](https://emby.media/)) and sends requests to **[Sonarr](https://sonarr.tv/)**, **[Radarr](https://radarr.video/)**, **[Lidarr](https://lidarr.audio/)** and **Chaptarr**.
+**Allseerr** is a free and open source request manager for your media library. It is a fork of [Seerr](https://github.com/seerr-team/seerr) that adds **music**, **books** and **audiobooks** next to movies and series, plus a **subtitles** panel. It works with the media server of your choice ([Jellyfin](https://jellyfin.org), [Plex](https://plex.tv) or [Emby](https://emby.media/)) and sends requests to **[Sonarr](https://sonarr.tv/)**, **[Radarr](https://radarr.video/)**, **[Lidarr](https://lidarr.audio/)** and **Chaptarr**.
 
 ## Features
 
@@ -26,4 +26,4 @@ Everything Seerr does, plus:
 
 ## Credits
 
-AllSeerr is based on [Seerr](https://github.com/seerr-team/seerr) by the Seerr team, which brought the Overseerr and Jellyseerr projects together. Seerr is MIT licensed. AllSeerr is not affiliated with or endorsed by the Seerr team, so please report AllSeerr problems at [github.com/DanCue44/AllSeerr](https://github.com/DanCue44/AllSeerr/issues) and not to Seerr.
+Allseerr is based on [Seerr](https://github.com/seerr-team/seerr) by the Seerr team, which brought the Overseerr and Jellyseerr projects together. Seerr is MIT licensed. Allseerr is not affiliated with or endorsed by the Seerr team, so please report Allseerr problems at [github.com/DanCue44/Allseerr](https://github.com/DanCue44/Allseerr/issues) and not to Seerr.

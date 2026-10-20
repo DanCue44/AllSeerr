@@ -7,23 +7,23 @@ sidebar_position: 4
 # Services
 
 :::info
-**If you keep separate copies of non-4K and 4K movies/series in your media libraries, you will need to set up multiple Radarr/Sonarr instances and link each of them to AllSeerr.**
+**If you keep separate copies of non-4K and 4K movies/series in your media libraries, you will need to set up multiple Radarr/Sonarr instances and link each of them to Allseerr.**
 
-AllSeerr checks these linked servers to determine whether or not media has already been requested or is available, so two servers of each type are required _if you keep separate non-4K and 4K copies of movies/series._
+Allseerr checks these linked servers to determine whether or not media has already been requested or is available, so two servers of each type are required _if you keep separate non-4K and 4K copies of movies/series._
 
 **If you only maintain one copy of media, you can instead simply set up one server and set the "Quality Profile" setting on a per-request basis.**
 
-Lidarr does not use AllSeerr's 4K split workflow. Configure one or more Lidarr servers based on your music library setup.
+Lidarr does not use Allseerr's 4K split workflow. Configure one or more Lidarr servers based on your music library setup.
 :::
 
 :::tip
-This page covers the settings Radarr, Sonarr and Lidarr share. The services AllSeerr adds have their own pages: [Lidarr (Music)](/using-seerr/services/lidarr), [Chaptarr (Books and Audiobooks)](/using-seerr/services/chaptarr), [LazyLibrarian](/using-seerr/services/lazylibrarian), [Audiobookshelf](/using-seerr/services/audiobookshelf) and [Bazarr (Subtitles)](/using-seerr/services/bazarr).
+This page covers the settings Radarr, Sonarr and Lidarr share. The services Allseerr adds have their own pages: [Lidarr (Music)](/using-seerr/services/lidarr), [Chaptarr (Books and Audiobooks)](/using-seerr/services/chaptarr), [LazyLibrarian](/using-seerr/services/lazylibrarian), [Audiobookshelf](/using-seerr/services/audiobookshelf) and [Bazarr (Subtitles)](/using-seerr/services/bazarr).
 :::
 
 ### Radarr/Sonarr/Lidarr Settings
 
 :::warning
-**Only v3 & V4 Radarr/Sonarr servers are supported!** If your Radarr/Sonarr server is still running v2, you will need to upgrade in order to add it to AllSeerr.
+**Only v3 & V4 Radarr/Sonarr servers are supported!** If your Radarr/Sonarr server is still running v2, you will need to upgrade in order to add it to Allseerr.
 :::
 
 #### Default Server
@@ -44,7 +44,7 @@ Enter a friendly name for the Radarr/Sonarr/Lidarr server.
 
 #### Hostname or IP Address
 
-If you have AllSeerr installed on the same network as Radarr/Sonarr/Lidarr, you can set this to the local IP address of your server. Otherwise, this should be set to a valid hostname (e.g., `radarr.myawesomeserver.com`).
+If you have Allseerr installed on the same network as Radarr/Sonarr/Lidarr, you can set this to the local IP address of your server. Otherwise, this should be set to a valid hostname (e.g., `radarr.myawesomeserver.com`).
 
 #### Port
 
@@ -52,7 +52,7 @@ This value should be set to the port that your Radarr/Sonarr/Lidarr server liste
 
 #### Use SSL
 
-Enable this setting to connect to Radarr/Sonarr/Lidarr via HTTPS rather than HTTP. Self-signed certificates are not trusted by default, but you can configure AllSeerr to accept them. See [Self-Signed Certificates](/using-seerr/advanced/self-signed-certificates) for details.
+Enable this setting to connect to Radarr/Sonarr/Lidarr via HTTPS rather than HTTP. Self-signed certificates are not trusted by default, but you can configure Allseerr to accept them. See [Self-Signed Certificates](/using-seerr/advanced/self-signed-certificates) for details.
 
 #### API Key
 
@@ -62,7 +62,7 @@ You can locate the required API keys in Radarr/Sonarr/Lidarr in **Settings &rarr
 
 #### URL Base
 
-If you have configured a URL base for your Radarr/Sonarr/Lidarr server, you _must_ enter it here in order for AllSeerr to connect to those services.
+If you have configured a URL base for your Radarr/Sonarr/Lidarr server, you _must_ enter it here in order for Allseerr to connect to those services.
 
 You can verify whether or not you have a URL base configured in your Radarr/Sonarr/Lidarr server at **Settings &rarr; General &rarr; Host**. (Note that a restart of your server is required if you modify this setting.)
 

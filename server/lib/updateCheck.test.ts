@@ -52,7 +52,7 @@ describe('checkForUpdate', () => {
   });
 
   describe('release builds', () => {
-    it('reports a newer AllSeerr release', async () => {
+    it('reports a newer Allseerr release', async () => {
       const { api, calls } = source({
         releases: [release('v3.5.0.2'), release('v3.5.0.1')],
       });

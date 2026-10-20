@@ -1,4 +1,4 @@
-import AmbientTvDetails from '@app/components/AllSeerr/TvDetails';
+import AmbientTvDetails from '@app/components/Allseerr/TvDetails';
 import TvDetails from '@app/components/TvDetails';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { getHostAndPort } from '@app/utils/urlHelper';

@@ -114,7 +114,7 @@ interface PWAHeaderProps {
 }
 
 const PWAHeader = ({
-  applicationTitle = 'AllSeerr',
+  applicationTitle = 'Allseerr',
   logoVersion,
 }: PWAHeaderProps) => {
   return (

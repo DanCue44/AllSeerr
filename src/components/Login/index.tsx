@@ -6,7 +6,7 @@ import {
   authCard,
   authHeading,
   authPage,
-} from '@app/components/AllSeerr/Auth';
+} from '@app/components/Allseerr/Auth';
 import AppLogo from '@app/components/Common/AppLogo';
 import Button from '@app/components/Common/Button';
 import ImageFader from '@app/components/Common/ImageFader';

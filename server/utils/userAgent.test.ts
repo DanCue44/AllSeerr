@@ -43,7 +43,7 @@ class TestExternalAPI extends ExternalAPI {
 
 describe('outbound user agent', () => {
   it('identifies the application by name and version', () => {
-    assert.match(getUserAgent(), /^AllSeerr\/.+$/);
+    assert.match(getUserAgent(), /^Allseerr\/.+$/);
   });
 
   it('is sent by clients built on ExternalAPI', async () => {
@@ -66,7 +66,7 @@ describe('outbound user agent', () => {
   it('adds the project link for services that ask for contact details', () => {
     assert.equal(
       getContactUserAgent(),
-      `${getUserAgent()} (+https://github.com/DanCue44/AllSeerr)`
+      `${getUserAgent()} (+https://github.com/DanCue44/Allseerr)`
     );
   });
 

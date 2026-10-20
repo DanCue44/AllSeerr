@@ -1,6 +1,6 @@
 import useSettings from '@app/hooks/useSettings';
 
-export const DEFAULT_APPLICATION_TITLE = 'AllSeerr';
+export const DEFAULT_APPLICATION_TITLE = 'Allseerr';
 export const DEFAULT_LOGO = '/allseerr-logo.png';
 
 export type BrandingIconName =

@@ -93,7 +93,7 @@ describe('getEmailLayoutLocals', () => {
   it('greets by name and links to the notification settings', () => {
     const locals = getEmailLayoutLocals({
       intl,
-      applicationTitle: 'AllSeerr',
+      applicationTitle: 'Allseerr',
       applicationUrl: 'https://requests.example.com',
       recipientName: 'dan.c',
       recipientEmail: 'robin@example.com',
@@ -104,8 +104,8 @@ describe('getEmailLayoutLocals', () => {
       locals.manageNotificationsUrl,
       'https://requests.example.com/profile/settings/notifications/email'
     );
-    assert.equal(locals.labels.viewInApp, 'View in AllSeerr');
-    assert.equal(locals.labels.sentBy, 'Sent by AllSeerr');
+    assert.equal(locals.labels.viewInApp, 'View in Allseerr');
+    assert.equal(locals.labels.sentBy, 'Sent by Allseerr');
   });
 
   it('falls back to a generic greeting and leaves out links without a URL', () => {
@@ -125,7 +125,7 @@ describe('getEmailLayoutLocals', () => {
   it('can leave out the notification settings link', () => {
     const locals = getEmailLayoutLocals({
       intl,
-      applicationTitle: 'AllSeerr',
+      applicationTitle: 'Allseerr',
       applicationUrl: 'https://requests.example.com',
       manageNotifications: false,
     });
@@ -143,7 +143,7 @@ describe('email templates', () => {
   });
   const layout = getEmailLayoutLocals({
     intl,
-    applicationTitle: 'AllSeerr',
+    applicationTitle: 'Allseerr',
     applicationUrl: 'https://requests.example.com',
     recipientName: 'Robin',
     recipientEmail: 'robin@example.com',
@@ -159,7 +159,7 @@ describe('email templates', () => {
       path.join(templates, 'media-request/html'),
       {
         ...layout,
-        applicationTitle: 'AllSeerr',
+        applicationTitle: 'Allseerr',
         applicationUrl: 'https://requests.example.com',
         body: 'Your request for the following movie was declined:',
         mediaName: 'Dune: Part Two',
@@ -174,7 +174,7 @@ describe('email templates', () => {
     assert.match(html, /Hi Robin,/);
     assert.match(html, /Oct 12, 2026 at 3:04/);
     assert.match(html, /Already in 1080p/);
-    assert.match(html, /View in AllSeerr/);
+    assert.match(html, /View in Allseerr/);
     assert.match(html, /bgcolor="#202124"/);
     assert.match(html, /bgcolor="#ec703e"/);
     assert.match(html, /profile\/settings\/notifications\/email/);
@@ -184,7 +184,7 @@ describe('email templates', () => {
   it('renders a request like the Pushover message, poster and all', async () => {
     const locals = {
       ...layout,
-      applicationTitle: 'AllSeerr',
+      applicationTitle: 'Allseerr',
       applicationUrl: 'https://requests.example.com',
       event: 'Movie Request Approved',
       body: 'Your request for the following movie has been approved:',
@@ -217,7 +217,7 @@ describe('email templates', () => {
     assert.match(text, /Requested By: jsmith\nRequest Status: Processing/);
     assert.match(
       text,
-      /View in AllSeerr: https:\/\/requests\.example\.com\/movie\/9909/
+      /View in Allseerr: https:\/\/requests\.example\.com\/movie\/9909/
     );
     assert.doesNotMatch(html + text, /\u2014/);
   });
@@ -227,7 +227,7 @@ describe('email templates', () => {
       path.join(templates, 'media-request/html'),
       {
         ...layout,
-        applicationTitle: 'AllSeerr',
+        applicationTitle: 'Allseerr',
         applicationUrl: '',
         body: 'Your request to remove the following book was approved:',
         mediaName: 'Dune by Frank Herbert (1965)',
@@ -240,13 +240,13 @@ describe('email templates', () => {
 
     assert.equal(html.match(/Requested By/g)?.length, 1);
     assert.match(html, /by Frank Herbert/);
-    assert.doesNotMatch(html, /View in AllSeerr/);
+    assert.doesNotMatch(html, /View in Allseerr/);
   });
 
   it('keeps the light mode media query and swaps the wordmark', async () => {
     const html = await email.render(path.join(templates, 'test-email/html'), {
       ...layout,
-      applicationTitle: 'AllSeerr',
+      applicationTitle: 'Allseerr',
       applicationUrl: 'https://requests.example.com',
       body: 'Test body',
       logoUrl: 'https://requests.example.com/logo_full.png',
@@ -272,7 +272,7 @@ describe('email templates', () => {
   it('sends one wordmark when there is no light variant', async () => {
     const html = await email.render(path.join(templates, 'test-email/html'), {
       ...layout,
-      applicationTitle: 'AllSeerr',
+      applicationTitle: 'Allseerr',
       applicationUrl: 'https://requests.example.com',
       body: 'Test body',
       logoUrl: 'https://requests.example.com/logo.png',
@@ -286,11 +286,11 @@ describe('email templates', () => {
     const base = {
       ...getEmailLayoutLocals({
         intl,
-        applicationTitle: 'AllSeerr',
+        applicationTitle: 'Allseerr',
         applicationUrl: '',
         recipientName: 'Robin',
       }),
-      applicationTitle: 'AllSeerr',
+      applicationTitle: 'Allseerr',
       applicationUrl: '',
     };
     const cases: [string, Record<string, unknown>][] = [

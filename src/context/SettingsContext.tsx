@@ -11,7 +11,7 @@ export interface SettingsContextProps {
 
 const defaultSettings: PublicSettingsResponse = {
   initialized: false,
-  applicationTitle: 'AllSeerr',
+  applicationTitle: 'Allseerr',
   applicationUrl: '',
   applicationLogoVersion: '',
   accentColor: DEFAULT_ACCENT_COLOR,

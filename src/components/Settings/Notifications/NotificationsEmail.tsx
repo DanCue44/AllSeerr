@@ -23,9 +23,9 @@ const messages = defineMessages('components.Settings.Notifications', {
   validationSmtpPortRequired: 'You must provide a valid port number',
   agentenabled: 'Enable Agent',
   embedPoster: 'Embed Poster',
-  usePublicLogo: 'Use public AllSeerr logo instead of instance logo',
+  usePublicLogo: 'Use public Allseerr logo instead of instance logo',
   usePublicLogoTip:
-    'If your AllSeerr instance is not publicly accessible, enable this option so email clients outside your network can display the AllSeerr logo. The image will be pulled from the public AllSeerr GitHub repository.',
+    'If your Allseerr instance is not publicly accessible, enable this option so email clients outside your network can display the Allseerr logo. The image will be pulled from the public Allseerr GitHub repository.',
   userEmailRequired: 'Require user email',
   emailsender: 'Sender Address',
   smtpHost: 'SMTP Host',

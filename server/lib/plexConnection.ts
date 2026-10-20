@@ -179,7 +179,7 @@ export const testPlexConnection = async (
         ok: false,
         address,
         url,
-        message: `Plex at ${url} did not accept the Plex token (401). Sign in to AllSeerr with the Plex account that owns the server.`,
+        message: `Plex at ${url} did not accept the Plex token (401). Sign in to Allseerr with the Plex account that owns the server.`,
         reason: 'unauthorized',
         attempts: [],
       };

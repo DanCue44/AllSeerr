@@ -4,12 +4,12 @@ import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs';
 import { themes as prismThemes } from 'prism-react-renderer';
 
 const config: Config = {
-  title: 'AllSeerr',
+  title: 'Allseerr',
   tagline: 'One Stop Solution for all your media request needs',
   favicon: 'img/favicon.ico',
 
   url: 'https://dancue44.github.io',
-  baseUrl: '/AllSeerr/',
+  baseUrl: '/Allseerr/',
   trailingSlash: true,
 
   future: {
@@ -19,7 +19,7 @@ const config: Config = {
   },
 
   organizationName: 'DanCue44',
-  projectName: 'AllSeerr',
+  projectName: 'Allseerr',
   deploymentBranch: 'gh-pages',
 
   onBrokenLinks: 'throw',
@@ -43,7 +43,7 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           routeBasePath: '/',
           path: '../docs',
-          editUrl: 'https://github.com/DanCue44/AllSeerr/edit/main/docs/',
+          editUrl: 'https://github.com/DanCue44/Allseerr/edit/main/docs/',
           docItemComponent: '@theme/ApiItem',
           async sidebarItemsGenerator({
             defaultSidebarItemsGenerator,
@@ -81,7 +81,7 @@ const config: Config = {
               groupPathsBy: 'tag',
             },
             downloadUrl:
-              'https://raw.githubusercontent.com/DanCue44/AllSeerr/refs/heads/main/seerr-api.yml',
+              'https://raw.githubusercontent.com/DanCue44/Allseerr/refs/heads/main/seerr-api.yml',
             hideSendButton: true,
           } satisfies OpenApiPlugin.Options,
         },
@@ -112,7 +112,7 @@ const config: Config = {
     },
     navbar: {
       logo: {
-        alt: 'AllSeerr',
+        alt: 'Allseerr',
         src: 'img/logo_full.svg',
       },
       items: [
@@ -127,7 +127,7 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://github.com/DanCue44/AllSeerr',
+          href: 'https://github.com/DanCue44/Allseerr',
           label: 'GitHub',
           position: 'right',
         },
@@ -158,7 +158,7 @@ const config: Config = {
             },
             {
               label: 'GitHub',
-              href: 'https://github.com/DanCue44/AllSeerr',
+              href: 'https://github.com/DanCue44/Allseerr',
             },
           ],
         },
@@ -167,12 +167,12 @@ const config: Config = {
           items: [
             {
               label: 'Github Discussions',
-              href: 'https://github.com/DanCue44/AllSeerr/discussions',
+              href: 'https://github.com/DanCue44/Allseerr/discussions',
             },
           ],
         },
       ],
-      copyright: `AllSeerr, based on Seerr. Built with Docusaurus.`,
+      copyright: `Allseerr, based on Seerr. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.shadesOfPurple,

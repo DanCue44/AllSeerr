@@ -16,7 +16,7 @@ import { IsNull, Not } from 'typeorm';
 /**
  * NoBookEnds Sync is a separate server that aligns an Audiobookshelf
  * audiobook to the EPUB of the same book, so the NoBookEnds app can
- * highlight the words being read. AllSeerr knows when both formats of a
+ * highlight the words being read. Allseerr knows when both formats of a
  * book are in the library, and queues the pair there right away instead
  * of waiting for the Sync server's own library poll.
  */

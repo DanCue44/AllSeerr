@@ -1,4 +1,4 @@
-import UserAvatar from '@app/components/AllSeerr/RequestList/UserAvatar';
+import UserAvatar from '@app/components/Allseerr/RequestList/UserAvatar';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import Modal from '@app/components/Common/Modal';

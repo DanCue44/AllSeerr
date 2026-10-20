@@ -1,19 +1,19 @@
-# Contributing to AllSeerr
+# Contributing to Allseerr
 
-AllSeerr is a fork of [Seerr](https://github.com/seerr-team/seerr) that adds music, books and
+Allseerr is a fork of [Seerr](https://github.com/seerr-team/seerr) that adds music, books and
 audiobooks. Bug reports, ideas and pull requests are welcome at
-[DanCue44/AllSeerr](https://github.com/DanCue44/AllSeerr).
+[DanCue44/Allseerr](https://github.com/DanCue44/Allseerr).
 
 Problems that also happen in plain Seerr are best reported
 [upstream](https://github.com/seerr-team/seerr/issues), where they help everyone.
 
 ## Before You Start
 
-- Search the [issues](https://github.com/DanCue44/AllSeerr/issues) first, and open one before a
+- Search the [issues](https://github.com/DanCue44/Allseerr/issues) first, and open one before a
   large change so the direction can be agreed before you write the code.
 - Keep pull requests focused on one change.
 - Security problems go through
-  [private vulnerability reporting](https://github.com/DanCue44/AllSeerr/security/advisories/new),
+  [private vulnerability reporting](https://github.com/DanCue44/Allseerr/security/advisories/new),
   never public issues. See [SECURITY.md](SECURITY.md).
 
 ## Development
@@ -22,8 +22,8 @@ You need [Node.js](https://nodejs.org/en/download/) 22, [pnpm](https://pnpm.io/i
 [Git](https://git-scm.com/downloads).
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/AllSeerr.git
-cd AllSeerr
+git clone https://github.com/YOUR_USERNAME/Allseerr.git
+cd Allseerr
 git switch -c your-branch main
 pnpm install
 pnpm dev
@@ -70,7 +70,7 @@ DB_TYPE="postgres" DB_USER=postgres DB_PASS=postgres pnpm migration:generate ser
 
 ## UI Text Style
 
-AllSeerr follows Seerr's UI text style:
+Allseerr follows Seerr's UI text style:
 
 1. Be concise and clear.
 2. Use the Oxford comma where appropriate.

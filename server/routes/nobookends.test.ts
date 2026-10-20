@@ -143,7 +143,7 @@ describe('NoBookEnds connect link', () => {
     assert.strictEqual(me.body.id, userId);
   });
 
-  it('falls back to a public address AllSeerr was opened at', async () => {
+  it('falls back to a public address Allseerr was opened at', async () => {
     enableBooks();
     getSettings().main.applicationUrl = '';
     const { agent, userId } = await loginAs('demo@seerr.dev');

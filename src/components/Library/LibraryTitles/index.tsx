@@ -1,7 +1,7 @@
 import {
   listPageMessages,
   PillSelect,
-} from '@app/components/AllSeerr/ListPage';
+} from '@app/components/Allseerr/ListPage';
 import ListView from '@app/components/Common/ListView';
 import PageTitle from '@app/components/Common/PageTitle';
 import LibraryLayout, {

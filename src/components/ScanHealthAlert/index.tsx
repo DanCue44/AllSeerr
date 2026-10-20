@@ -8,7 +8,7 @@ import useSWR from 'swr';
 const messages = defineMessages('components.ScanHealthAlert', {
   scansFailing: '{service} scans are failing: {reason}.',
   lastSuccess: 'Last success: {time}',
-  lastSuccessNever: 'Last success: none since AllSeerr started',
+  lastSuccessNever: 'Last success: none since Allseerr started',
   openSettings: 'Open {service} settings',
 });
 

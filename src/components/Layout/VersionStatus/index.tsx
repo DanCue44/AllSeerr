@@ -11,7 +11,7 @@ import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 const messages = defineMessages('components.Layout.VersionStatus', {
-  appname: 'AllSeerr',
+  appname: 'Allseerr',
   localbuild: 'Local build',
   outofdate: 'Out of Date',
 });
@@ -38,7 +38,7 @@ const VersionStatus = ({ onClick }: VersionStatusProps) => {
     data.commitTag === 'local'
       ? intl.formatMessage(messages.localbuild)
       : data.commitTag.slice(0, 7);
-  // Older builds report develop-<commit> instead of an AllSeerr version, and
+  // Older builds report develop-<commit> instead of an Allseerr version, and
   // release builds are tagged with the version itself
   const version = data.version.startsWith('develop-')
     ? commit

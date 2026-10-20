@@ -38,7 +38,7 @@ const messages = defineMessages('components.Settings', {
   plex: 'Plex',
   plexsettings: 'Plex Settings',
   plexsettingsDescription:
-    'Configure the settings for your Plex server. AllSeerr scans your Plex libraries to determine content availability.',
+    'Configure the settings for your Plex server. Allseerr scans your Plex libraries to determine content availability.',
   serverpreset: 'Server',
   serverLocal: 'local',
   serverRemote: 'remote',
@@ -68,8 +68,8 @@ const messages = defineMessages('components.Settings', {
   connectionNonstandardPort:
     "{host} did not answer on port {port}. If it points to a reverse proxy or a CDN, use https on port 443 or Plex's local address.",
   connectionUnauthorized:
-    'Plex did not accept the Plex token. Sign in to AllSeerr with the Plex account that owns the server.',
-  connectionSuggestion: 'AllSeerr connected to {url} instead.',
+    'Plex did not accept the Plex token. Sign in to Allseerr with the Plex account that owns the server.',
+  connectionSuggestion: 'Allseerr connected to {url} instead.',
   connectionNoSuggestion:
     'No other address on this host answered. Check that Plex is running, or use its local address.',
   useSuggestion: 'Use {url}',
@@ -77,12 +77,12 @@ const messages = defineMessages('components.Settings', {
   enablessl: 'Use SSL',
   plexlibraries: 'Plex Libraries',
   plexlibrariesDescription:
-    'The libraries AllSeerr scans for titles. Set up and save your Plex connection settings, then click the button below if no libraries are listed.',
+    'The libraries Allseerr scans for titles. Set up and save your Plex connection settings, then click the button below if no libraries are listed.',
   scanning: 'Syncing…',
   scan: 'Sync Libraries',
   manualscan: 'Manual Library Scan',
   manualscanDescription:
-    "Normally, this will only be run once every 24 hours. AllSeerr will check your Plex server's recently added more aggressively. If this is your first time configuring Plex, a one-time full manual library scan is recommended!",
+    "Normally, this will only be run once every 24 hours. Allseerr will check your Plex server's recently added more aggressively. If this is your first time configuring Plex, a one-time full manual library scan is recommended!",
   notrunning: 'Not Running',
   currentlibrary: 'Current Library: {name}',
   librariesRemaining: 'Libraries Remaining: {count}',
@@ -95,7 +95,7 @@ const messages = defineMessages('components.Settings', {
     'Optionally direct users to the web app on your server instead of https://app.plex.tv/desktop',
   tautulliSettings: 'Tautulli Settings',
   tautulliSettingsDescription:
-    'Optionally configure the settings for your Tautulli server. AllSeerr fetches watch history data for your Plex media from Tautulli.',
+    'Optionally configure the settings for your Tautulli server. Allseerr fetches watch history data for your Plex media from Tautulli.',
   urlBase: 'URL Base',
   tautulliApiKey: 'API Key',
   externalUrl: 'External URL',

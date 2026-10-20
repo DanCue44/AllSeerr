@@ -2,7 +2,7 @@ import {
   ambientGrid,
   listPageMessages,
   PillSelect,
-} from '@app/components/AllSeerr/ListPage';
+} from '@app/components/Allseerr/ListPage';
 import LibraryTitles from '@app/components/Library/LibraryTitles';
 import SpaceLayout, { spaceMessages } from '@app/components/Space';
 import TitleCard from '@app/components/TitleCard';

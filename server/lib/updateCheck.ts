@@ -1,6 +1,6 @@
 import type { GitHubRelease, GithubCommit } from '@server/api/github';
 import {
-  compareAllSeerrVersions,
+  compareAllseerrVersions,
   isReleaseTag,
 } from '@server/utils/allseerrVersion';
 
@@ -16,7 +16,7 @@ export interface UpdateStatus {
 
 /**
  * Release builds (tagged with their version, such as v3.5.0.2) compare their
- * version with the newest AllSeerr release. Other builds (tagged with the
+ * version with the newest Allseerr release. Other builds (tagged with the
  * commit they were built from) count how far behind the branch they are,
  * -1 when the commit is not among the recent ones. Local builds skip it.
  */
@@ -40,7 +40,7 @@ export const checkForUpdate = async (
 
     if (
       latest &&
-      compareAllSeerrVersions(latest.tag_name, currentVersion) > 0
+      compareAllseerrVersions(latest.tag_name, currentVersion) > 0
     ) {
       status.updateAvailable = true;
     }

@@ -8,9 +8,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
 
-export const DEFAULT_APPLICATION_TITLE = 'AllSeerr';
+export const DEFAULT_APPLICATION_TITLE = 'Allseerr';
 
-// AllSeerr logo for mail clients that cannot reach this server, a PNG since
+// Allseerr logo for mail clients that cannot reach this server, a PNG since
 // many of them do not show SVG images
 const PUBLIC_ASSET_URL = `https://raw.githubusercontent.com/${ALLSEERR_REPO}/refs/heads/${ALLSEERR_BRANCH}/public`;
 export const PUBLIC_LOGO_URL = `${PUBLIC_ASSET_URL}/logo_full.png`;

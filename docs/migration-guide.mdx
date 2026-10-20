@@ -5,24 +5,24 @@ title: Migration guide
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-AllSeerr can take over an existing **Seerr**, **Overseerr** or **Jellyseerr** instance. Point AllSeerr at a copy of the old config folder and it migrates the database and settings forward the first time it starts. Your users, requests, issues, watchlists and settings carry over.
+Allseerr can take over an existing **Seerr**, **Overseerr** or **Jellyseerr** instance. Point Allseerr at a copy of the old config folder and it migrates the database and settings forward the first time it starts. Your users, requests, issues, watchlists and settings carry over.
 
 :::danger
-**Back up first.** AllSeerr migrates the database forward and adds its own tables and columns. Going back to Seerr (or Overseerr or Jellyseerr) on the same database is **not supported**. Keep a backup of the old config folder, or better, run AllSeerr on a copy of it, so you can return to the old app if you need to.
+**Back up first.** Allseerr migrates the database forward and adds its own tables and columns. Going back to Seerr (or Overseerr or Jellyseerr) on the same database is **not supported**. Keep a backup of the old config folder, or better, run Allseerr on a copy of it, so you can return to the old app if you need to.
 
 See [Backups](/using-seerr/backups) for how to back up properly, including PostgreSQL databases.
 :::
 
 ## Before you start
 
-- The AllSeerr image runs as the `node` user (UID 1000) and has no init process of its own, so add `--init` (Docker CLI) or `init: true` (Compose).
+- The Allseerr image runs as the `node` user (UID 1000) and has no init process of its own, so add `--init` (Docker CLI) or `init: true` (Compose).
 - The config folder must be writable by UID 1000. If it came from an image that ran as root or another user, fix the ownership:
 
 ```bash
 docker run --rm -v /path/to/appdata/config:/data alpine chown -R 1000:1000 /data
 ```
 
-- If you use PostgreSQL, keep the same `DB_*` environment variables. Back up the database with `pg_dump` before AllSeerr connects to it, or point AllSeerr at a restored copy. See [Configuring Databases](/extending-seerr/database-config).
+- If you use PostgreSQL, keep the same `DB_*` environment variables. Back up the database with `pg_dump` before Allseerr connects to it, or point Allseerr at a restored copy. See [Configuring Databases](/extending-seerr/database-config).
 
 ## Docker
 
@@ -31,7 +31,7 @@ docker run --rm -v /path/to/appdata/config:/data alpine chown -R 1000:1000 /data
    ```bash
    cp -a /path/to/appdata/seerr /path/to/appdata/allseerr
    ```
-3. Start AllSeerr on the copy:
+3. Start Allseerr on the copy:
 
 <Tabs groupId="docker-methods" queryString>
   <TabItem value="docker-compose" label="Docker Compose">
@@ -74,25 +74,25 @@ docker run --rm -v /path/to/appdata/config:/data alpine chown -R 1000:1000 /data
 </Tabs>
 
 4. Check the container logs to confirm the migrations finished, then sign in as usual.
-5. Once you are happy with AllSeerr, remove the old container. Keep the old config folder (or a backup of it) for a while.
+5. Once you are happy with Allseerr, remove the old container. Keep the old config folder (or a backup of it) for a while.
 
 ## Unraid
 
 1. In the Unraid **Docker** tab, stop your Seerr, Overseerr or Jellyseerr container. Do not remove it or delete its appdata folder yet.
-2. Copy its appdata folder into a new AllSeerr folder (replace `seerr` with `overseerr` or `jellyseerr` as needed):
+2. Copy its appdata folder into a new Allseerr folder (replace `seerr` with `overseerr` or `jellyseerr` as needed):
    ```bash
    cp -a /mnt/user/appdata/seerr /mnt/user/appdata/allseerr
    ```
-3. Install AllSeerr from Community Applications, or follow the [manual installation](/getting-started/third-parties/unraid#manual-installation), and point `/app/config` at `/mnt/user/appdata/allseerr`. If you install by hand, set the folder's ownership as described there.
-4. Start AllSeerr and check its logs to confirm the migration completed.
+3. Install Allseerr from Community Applications, or follow the [manual installation](/getting-started/third-parties/unraid#manual-installation), and point `/app/config` at `/mnt/user/appdata/allseerr`. If you install by hand, set the folder's ownership as described there.
+4. Start Allseerr and check its logs to confirm the migration completed.
 5. Once everything works, remove the old container.
 
 ## Build From Source
 
-Install AllSeerr from scratch by following [Build From Source](/getting-started/buildfromsource), restore a copy of your old config folder as described in [Backups](/using-seerr/backups), and start AllSeerr.
+Install Allseerr from scratch by following [Build From Source](/getting-started/buildfromsource), restore a copy of your old config folder as described in [Backups](/using-seerr/backups), and start Allseerr.
 
 ## After migrating
 
 - Your movie and series setup keeps working as before. Music, books and subtitles stay hidden until you add a [Lidarr](/using-seerr/services/lidarr), [Chaptarr](/using-seerr/services/chaptarr) or [Bazarr](/using-seerr/services/bazarr) server.
 - Users see the new Ambient interface. They can switch back to the classic one from the user menu, and the [guided tour](/using-seerr/features/guided-tour) opens once for each user.
-- The application title stays what it was in the old settings (for example "Seerr"). New installs default to **AllSeerr**. You can change the name and upload a logo under [Custom Branding](/using-seerr/features/custom-branding).
+- The application title stays what it was in the old settings (for example "Seerr"). New installs default to **Allseerr**. You can change the name and upload a logo under [Custom Branding](/using-seerr/features/custom-branding).

@@ -1,4 +1,4 @@
-import AmbientMovieDetails from '@app/components/AllSeerr/MovieDetails';
+import AmbientMovieDetails from '@app/components/Allseerr/MovieDetails';
 import MovieDetails from '@app/components/MovieDetails';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { getHostAndPort } from '@app/utils/urlHelper';

@@ -10,7 +10,7 @@ import logger from '@server/logger';
 import { runInBackground } from '@server/utils/backgroundTasks';
 
 // Audiobookshelf only fetches an author's photo and bio when the author is
-// matched, which an admin does by hand. AllSeerr matches the authors of the
+// matched, which an admin does by hand. Allseerr matches the authors of the
 // books it finds in the library, one at a time with a pause in between, so
 // Audnexus and Audiobookshelf are not flooded.
 
@@ -197,7 +197,7 @@ const matchItemAuthors = async (
 };
 
 /**
- * Matches the authors of library items AllSeerr just learned about, in the
+ * Matches the authors of library items Allseerr just learned about, in the
  * background, when an admin API key is set. Authors with a photo are left
  * alone, and an author or item checked recently is not checked again.
  */

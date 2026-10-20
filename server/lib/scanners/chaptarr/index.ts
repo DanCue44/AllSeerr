@@ -313,7 +313,7 @@ class ChaptarrScanner
    * Books available from before Chaptarr (downloaded through LazyLibrarian,
    * say) have no Chaptarr ids, and Chaptarr's metadata has no OpenLibrary
    * work id to find them by. A few of them are matched by title and author
-   * each scan, so their files can be managed from AllSeerr. A book that
+   * each scan, so their files can be managed from Allseerr. A book that
    * cannot be matched is tried again a day later.
    */
   private async linkUnlinkedBooks(

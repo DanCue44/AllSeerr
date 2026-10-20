@@ -1,7 +1,7 @@
 import {
   listPageMessages,
   pillControl,
-} from '@app/components/AllSeerr/ListPage';
+} from '@app/components/Allseerr/ListPage';
 import Header from '@app/components/Common/Header';
 import PageTitle from '@app/components/Common/PageTitle';
 import SettingsTabs from '@app/components/Common/SettingsTabs';

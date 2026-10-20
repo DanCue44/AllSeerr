@@ -594,7 +594,7 @@
 }
 
 /*
- * AllSeerr Ambient: Seerr's shared form and settings classes drawn in the
+ * Allseerr Ambient: Seerr's shared form and settings classes drawn in the
  * Ambient design. Only applies while a palette is set on <html>, so the
  * classic interface is unchanged. :where() keeps each selector at the same
  * specificity as the stock rule it restyles: these come later so they win

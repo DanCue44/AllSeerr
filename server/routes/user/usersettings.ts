@@ -18,7 +18,7 @@ import {
   parseRatingLimit,
 } from '@server/lib/contentRatingLimit';
 import {
-  getNoBookEndsAllSeerrUrl,
+  getNoBookEndsAllseerrUrl,
   getNoBookEndsAppConnectUrl,
   getNoBookEndsConnectUrl,
   isNoBookEndsAvailable,
@@ -1002,7 +1002,7 @@ interface NoBookEndsConnection {
   // When the newest device connected
   createdAt?: Date | null;
   devices: NoBookEndsDeviceResponse[];
-  // No Application URL is set and AllSeerr was opened at a home address,
+  // No Application URL is set and Allseerr was opened at a home address,
   // which the app could not reach away from home
   applicationUrlMissing: boolean;
 }
@@ -1039,7 +1039,7 @@ userSettingsRoutes.get<{ id: string }, NoBookEndsConnection>(
         connected: devices.length > 0 || !!user.nobookendsKeyHash,
         createdAt: devices[0]?.createdAt ?? legacyCreatedAt,
         devices,
-        applicationUrlMissing: !getNoBookEndsAllSeerrUrl(
+        applicationUrlMissing: !getNoBookEndsAllseerrUrl(
           noBookEndsRequest(req)
         ),
       });
@@ -1077,13 +1077,13 @@ userSettingsRoutes.post<
       });
     }
 
-    const allseerrUrl = getNoBookEndsAllSeerrUrl(noBookEndsRequest(req));
+    const allseerrUrl = getNoBookEndsAllseerrUrl(noBookEndsRequest(req));
 
     if (!allseerrUrl) {
       return next({
         status: 400,
         message:
-          'Set the Application URL in the General settings first, so the app can reach AllSeerr away from home.',
+          'Set the Application URL in the General settings first, so the app can reach Allseerr away from home.',
       });
     }
 

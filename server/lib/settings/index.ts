@@ -602,7 +602,7 @@ class Settings {
       vapidPublic: '',
       main: {
         apiKey: '',
-        applicationTitle: 'AllSeerr',
+        applicationTitle: 'Allseerr',
         applicationUrl: '',
         applicationLogoVersion: '',
         accentColor: DEFAULT_ACCENT_COLOR,

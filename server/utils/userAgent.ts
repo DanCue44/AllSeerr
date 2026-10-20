@@ -3,7 +3,7 @@ import { getAppVersion } from '@server/utils/appVersion';
 import type { InternalAxiosRequestConfig } from 'axios';
 import axios from 'axios';
 
-const USER_AGENT = `AllSeerr/${getAppVersion()}`;
+const USER_AGENT = `Allseerr/${getAppVersion()}`;
 
 export const getUserAgent = (): string => {
   return USER_AGENT;

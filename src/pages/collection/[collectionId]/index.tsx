@@ -1,4 +1,4 @@
-import AmbientCollectionDetails from '@app/components/AllSeerr/CollectionDetails';
+import AmbientCollectionDetails from '@app/components/Allseerr/CollectionDetails';
 import CollectionDetails from '@app/components/CollectionDetails';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { getHostAndPort } from '@app/utils/urlHelper';

@@ -24,10 +24,10 @@ export const getCommitTag = (): string => {
 export const isReleaseBuild = (): boolean => isReleaseTag(commitTag);
 
 /**
- * AllSeerr versions follow the Seerr release they are based on plus an
- * AllSeerr revision: 3.5.0.1, 3.5.0.2, then 3.5.1.1 after moving to 3.5.1.
+ * Allseerr versions follow the Seerr release they are based on plus an
+ * Allseerr revision: 3.5.0.1, 3.5.0.2, then 3.5.1.1 after moving to 3.5.1.
  */
-export const getAllSeerrVersion = (): string | undefined => {
+export const getAllseerrVersion = (): string | undefined => {
   if (!existsSync(ALLSEERR_VERSION_PATH)) {
     return undefined;
   }
@@ -38,7 +38,7 @@ export const getAllSeerrVersion = (): string | undefined => {
 };
 
 export const getAppVersion = (): string => {
-  const allseerrVersion = getAllSeerrVersion();
+  const allseerrVersion = getAllseerrVersion();
 
   if (allseerrVersion) {
     return allseerrVersion;

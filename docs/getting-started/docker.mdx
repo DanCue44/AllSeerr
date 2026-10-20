@@ -1,6 +1,6 @@
 ---
 title: Docker (Recommended)
-description: Install AllSeerr using Docker
+description: Install Allseerr using Docker
 sidebar_position: 1
 ---
 # Docker
@@ -12,7 +12,7 @@ Refer to [Configuring Databases](/extending-seerr/database-config#postgresql-opt
 :::
 
 :::info
-The AllSeerr image is published on the GitHub Container Registry as `ghcr.io/dancue44/allseerr`, with these tags:
+The Allseerr image is published on the GitHub Container Registry as `ghcr.io/dancue44/allseerr`, with these tags:
 
 - `latest`: the stable channel, built from the `main` branch. Use this unless you want to help test.
 - `develop`: the testing channel, with changes that have not reached `latest` yet (use with caution).
@@ -22,7 +22,7 @@ See [Update Channels](/getting-started/update-channels) for details.
 
 ## Unix (Linux, macOS)
 :::warning
-Be sure to replace `/path/to/appdata/config` in the below examples with a valid host directory path. If this volume mount is not configured correctly, your AllSeerr settings/data will not be persisted when the container is recreated (e.g., when updating the image or rebooting your machine).
+Be sure to replace `/path/to/appdata/config` in the below examples with a valid host directory path. If this volume mount is not configured correctly, your Allseerr settings/data will not be persisted when the container is recreated (e.g., when updating the image or rebooting your machine).
 
     The `TZ` environment variable value should also be set to the [TZ database name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) of your time zone!
 
@@ -84,7 +84,7 @@ docker run -d ...
 ```
 
 :::tip
-You may alternatively use a third-party updating mechanism, such as [Watchtower](https://github.com/containrrr/watchtower) or [Ouroboros](https://github.com/pyouroboros/ouroboros), to keep AllSeerr up-to-date automatically.
+You may alternatively use a third-party updating mechanism, such as [Watchtower](https://github.com/containrrr/watchtower) or [Ouroboros](https://github.com/pyouroboros/ouroboros), to keep Allseerr up-to-date automatically.
 
 You could also use [diun](https://github.com/crazy-max/diun) to receive notifications when a new image is available.
 :::
@@ -154,7 +154,7 @@ Please refer to the [Docker Desktop for Windows user manual](https://docs.docker
 **WSL2 will need to be installed to prevent DB corruption!** Please see the [Docker Desktop WSL 2 backend documentation](https://docs.docker.com/docker-for-windows/wsl/) for instructions on how to enable WSL2. The commands below will only work with WSL2 installed!
 :::
 
-First, create a volume to store the configuration data for AllSeerr using using either the Docker CLI:
+First, create a volume to store the configuration data for Allseerr using using either the Docker CLI:
 ```bash
 docker volume create allseerr-data
 ```
@@ -165,7 +165,7 @@ or the Docker Desktop app:
 3. Click on the "Create a volume" in the center of the page. Or if you have other volumes already, click on the "Create" button on the top right of the page.
 4. Enter a name for the volume (example: `allseerr-data`) and hit "Create"
 
-Then, create and start the AllSeerr container:
+Then, create and start the Allseerr container:
 <Tabs groupId="docker-methods" queryString>
   <TabItem value="docker-cli" label="Docker CLI (PowerShell)">
 ```powershell

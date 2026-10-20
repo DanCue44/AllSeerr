@@ -1,5 +1,5 @@
 import Spinner from '@app/assets/spinner.svg';
-import { pillSecondaryCollapse } from '@app/components/AllSeerr/Title/styles';
+import { pillSecondaryCollapse } from '@app/components/Allseerr/Title/styles';
 import Button from '@app/components/Common/Button';
 import Tooltip from '@app/components/Common/Tooltip';
 import useToasts from '@app/hooks/useToasts';

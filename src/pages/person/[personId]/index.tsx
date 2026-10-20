@@ -1,4 +1,4 @@
-import AmbientPersonDetails from '@app/components/AllSeerr/PersonDetails';
+import AmbientPersonDetails from '@app/components/Allseerr/PersonDetails';
 import PersonDetails from '@app/components/PersonDetails';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import type { NextPage } from 'next';

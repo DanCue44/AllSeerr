@@ -7,7 +7,7 @@ export const INTERFACE_COOKIE = 'allseerr-interface';
 // The Ambient interface is the default; the classic one stays selectable
 export const DEFAULT_INTERFACE_STYLE: InterfaceStyle = 'ambient';
 
-// Charcoal, the gray picked for AllSeerr
+// Charcoal, the gray picked for Allseerr
 export const AMBIENT_PALETTE = 'charcoal';
 
 export const parseInterfaceStyle = (cookie?: string): InterfaceStyle => {

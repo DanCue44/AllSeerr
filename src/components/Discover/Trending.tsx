@@ -2,7 +2,7 @@ import {
   AmbientPageHeader,
   listPageMessages,
   PillSelect,
-} from '@app/components/AllSeerr/ListPage';
+} from '@app/components/Allseerr/ListPage';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import PageTitle from '@app/components/Common/PageTitle';

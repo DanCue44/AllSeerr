@@ -3,19 +3,19 @@
 ## Reporting a Vulnerability
 
 Please report security problems privately through GitHub's
-[private vulnerability reporting](https://github.com/DanCue44/AllSeerr/security/advisories/new)
+[private vulnerability reporting](https://github.com/DanCue44/Allseerr/security/advisories/new)
 ("Report a vulnerability" on the Security tab of
-[DanCue44/AllSeerr](https://github.com/DanCue44/AllSeerr)).
+[DanCue44/Allseerr](https://github.com/DanCue44/Allseerr)).
 
 **Do not report vulnerabilities in public issues or discussions.**
 
-If the problem is in code AllSeerr shares with [Seerr](https://github.com/seerr-team/seerr) and
+If the problem is in code Allseerr shares with [Seerr](https://github.com/seerr-team/seerr) and
 also affects plain Seerr, report it to Seerr through
 [their security policy](https://github.com/seerr-team/seerr/security/policy) as well.
 
 ## What to Include
 
-- The AllSeerr version (Settings, About) and how it is installed
+- The Allseerr version (Settings, About) and how it is installed
 - The affected code (file paths, or a link to a tag, branch or commit)
 - Any configuration needed to reproduce it
 - Step-by-step reproduction, with a proof of concept if you have one
@@ -28,7 +28,7 @@ of the report.
 
 You will get a reply once the report has been read, and updates as a fix is prepared. Issues are
 disclosed in a coordinated way through a
-[GitHub security advisory](https://github.com/DanCue44/AllSeerr/security/advisories) once a fixed
+[GitHub security advisory](https://github.com/DanCue44/Allseerr/security/advisories) once a fixed
 release is out, crediting the reporter unless they ask not to be named. Please do not disclose the
 issue publicly before then.
 
@@ -40,4 +40,4 @@ reporting.
 ## Third-Party Dependencies
 
 Report vulnerabilities in a dependency to that project's maintainers. You are welcome to tell us
-too, so AllSeerr can update or work around it.
+too, so Allseerr can update or work around it.

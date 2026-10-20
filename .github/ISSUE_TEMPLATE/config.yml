@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: 💬 Questions and support
-    url: https://github.com/DanCue44/AllSeerr/discussions
-    about: Ask questions and discuss AllSeerr with other users
+    url: https://github.com/DanCue44/Allseerr/discussions
+    about: Ask questions and discuss Allseerr with other users
   - name: 🔒 Report a security vulnerability
-    url: https://github.com/DanCue44/AllSeerr/security/advisories/new
+    url: https://github.com/DanCue44/Allseerr/security/advisories/new
     about: Report security problems privately, never in a public issue

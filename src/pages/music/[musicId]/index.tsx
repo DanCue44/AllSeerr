@@ -1,4 +1,4 @@
-import AmbientMusicDetails from '@app/components/AllSeerr/MusicDetails';
+import AmbientMusicDetails from '@app/components/Allseerr/MusicDetails';
 import MusicDetails from '@app/components/MusicDetails';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { getHostAndPort } from '@app/utils/urlHelper';

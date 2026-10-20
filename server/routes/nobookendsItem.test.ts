@@ -374,14 +374,14 @@ describe('GET /nobookends/item/:absItemId', () => {
     assert.strictEqual(res.body.title, null);
   });
 
-  it('answers 404 for items of books AllSeerr does not know', async () => {
+  it('answers 404 for items of books Allseerr does not know', async () => {
     await saveBook();
     const agent = await login();
 
     const res = await agent.get(`/nobookends/item/${EBOOK_ITEM}`);
     assert.strictEqual(res.status, 404);
 
-    // A title of a book AllSeerr does not know finds nothing either
+    // A title of a book Allseerr does not know finds nothing either
     olDocs = [{ key: '/works/OL9999999W', title: TITLE }];
     const hinted = await agent
       .get(`/nobookends/item/${EBOOK_ITEM}`)

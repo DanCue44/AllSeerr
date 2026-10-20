@@ -1,5 +1,5 @@
-import BrandingHead from '@app/components/AllSeerr/BrandingHead';
-import InterfaceLayout from '@app/components/AllSeerr/Layout/InterfaceLayout';
+import BrandingHead from '@app/components/Allseerr/BrandingHead';
+import InterfaceLayout from '@app/components/Allseerr/Layout/InterfaceLayout';
 import LoadingBar from '@app/components/LoadingBar';
 import ServiceWorkerSetup from '@app/components/ServiceWorkerSetup';
 import StatusChecker from '@app/components/StatusChecker';

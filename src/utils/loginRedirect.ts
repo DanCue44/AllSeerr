@@ -1,6 +1,6 @@
 /**
  * Where sign in may send the user back to. Only pages that are opened from
- * outside AllSeerr and need a signed in user are allowed, so a crafted link
+ * outside Allseerr and need a signed in user are allowed, so a crafted link
  * can never send someone elsewhere after they sign in.
  */
 const NEXT_PATH_PREFIXES = ['/nobookends/'];

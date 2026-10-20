@@ -620,7 +620,7 @@ const unique = <T>(values: (T | undefined)[]): T[] => [
 ];
 
 /**
- * Looks up the media in AllSeerr each download is of: by the arr ids the
+ * Looks up the media in Allseerr each download is of: by the arr ids the
  * media was linked with first, then by TMDB, TVDB, MusicBrainz or work id,
  * and adds the media ids, the target of the arr actions and the requester
  */
@@ -814,7 +814,7 @@ const getTarget = (
 };
 
 /**
- * One arr's downloads, linked to the media in AllSeerr. Fails when the arr
+ * One arr's downloads, linked to the media in Allseerr. Fails when the arr
  * does not answer; a failed media lookup only leaves the links out.
  */
 export const loadServerDownloads = async (
@@ -983,7 +983,7 @@ const findDownload = async (
 
 /**
  * Starts a new search in the arr for what a download is of: the movie, the
- * episodes, the album or the book. Books in AllSeerr are readied first the
+ * episodes, the album or the book. Books in Allseerr are readied first the
  * way the admin search action does.
  */
 const searchFor = async (

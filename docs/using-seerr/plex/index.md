@@ -1,12 +1,12 @@
 ---
 title: Overview
-description: Learn about AllSeerr's Plex integration features
+description: Learn about Allseerr's Plex integration features
 sidebar_position: 1
 ---
 
 # Plex Features Overview
 
-AllSeerr provides integration features that connect with your Plex media server to automate media management tasks.
+Allseerr provides integration features that connect with your Plex media server to automate media management tasks.
 
 ## Available Features
 
@@ -16,12 +16,12 @@ AllSeerr provides integration features that connect with your Plex media server 
 ## Prerequisites
 
 :::info Authentication Required
-To use any Plex integration features, you must have logged into AllSeerr at least once with your Plex account.
+To use any Plex integration features, you must have logged into Allseerr at least once with your Plex account.
 :::
 
 **Requirements:**
 - Plex account with access to the configured Plex server
-- AllSeerr configured with Plex as the media server
+- Allseerr configured with Plex as the media server
 - User authentication via Plex login
 - Appropriate user permissions for specific features
 

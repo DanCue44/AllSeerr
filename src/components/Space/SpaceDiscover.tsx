@@ -1,4 +1,4 @@
-import FeaturedHero from '@app/components/AllSeerr/FeaturedHero';
+import FeaturedHero from '@app/components/Allseerr/FeaturedHero';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import { BookSubjectSliders } from '@app/components/Discover/DiscoverBooks';
 import { MusicGenreSliders } from '@app/components/Discover/DiscoverMusic';

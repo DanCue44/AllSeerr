@@ -334,7 +334,7 @@ export const isEditionInLanguage = (
 export interface ChaptarrLanguageTags {
   // The tag of the requested language, missing for any language
   tagId?: number;
-  // Every language tag AllSeerr manages, including the requested one
+  // Every language tag Allseerr manages, including the requested one
   managedTagIds: number[];
 }
 
@@ -344,7 +344,7 @@ const sameTerms = (a: string[] = [], b: string[] = []): boolean =>
 /**
  * Makes sure Chaptarr has the tag and the release profile of a language.
  * The profile applies to the authors carrying the tag. Chaptarr release
- * profiles have no name, so AllSeerr knows its profile by having only the
+ * profiles have no name, so Allseerr knows its profile by having only the
  * language tag. A profile whose terms are out of date is updated; one an
  * admin disabled stays disabled. Nothing is set up for any language, but
  * the language tags are still returned so they can be taken off an author.
@@ -422,7 +422,7 @@ export const ensureChaptarrLanguage = async (
 
 /**
  * The tags of an author for a format with the language tag in place of any
- * other language tag. Tags AllSeerr does not manage are kept.
+ * other language tag. Tags Allseerr does not manage are kept.
  */
 export const withLanguageTag = (
   tags: number[],

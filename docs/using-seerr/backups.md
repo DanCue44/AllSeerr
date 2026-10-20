@@ -4,12 +4,12 @@ description: Understand which data you should back up.
 sidebar_position: 4
 ---
 
-# Which data does AllSeerr save and where?
+# Which data does Allseerr save and where?
 
 ## Settings  
 
-All configurations from the **Settings** panel in the AllSeerr web UI are saved, including integrations with Radarr, Sonarr, Lidarr, Jellyfin, Plex, and notification settings.  
-These settings are stored in the `settings.json` file located in the AllSeerr data folder.
+All configurations from the **Settings** panel in the Allseerr web UI are saved, including integrations with Radarr, Sonarr, Lidarr, Jellyfin, Plex, and notification settings.  
+These settings are stored in the `settings.json` file located in the Allseerr data folder.
 
 ## User Data  
 
@@ -19,8 +19,8 @@ Apart from the settings, all other data, including user accounts, media requests
 
 #### SQLite
 
-If your backup system uses filesystem snapshots (such as Kubernetes with Volsync), you can directly back up the AllSeerr data folder.  
-Otherwise, you need to stop the AllSeerr application and back up the `config` folder.
+If your backup system uses filesystem snapshots (such as Kubernetes with Volsync), you can directly back up the Allseerr data folder.  
+Otherwise, you need to stop the Allseerr application and back up the `config` folder.
 
 For advanced users, it's possible to back up the database without stopping the application by using the [SQLite CLI](https://www.sqlite.org/download.html). Run the following command to create a backup:  
 
@@ -32,7 +32,7 @@ Then, copy the `/tmp/seerr_dump.sqlite3.bak` file to your desired backup locatio
 
 #### PostgreSQL
 
-You can back up the `config` folder and dump the PostgreSQL database without stopping the AllSeerr application.
+You can back up the `config` folder and dump the PostgreSQL database without stopping the Allseerr application.
 
 Install [postgresql-client](https://www.postgresql.org/download/) and run the following command to create a backup (just replace the placeholders):
 
@@ -60,10 +60,10 @@ After restoring your `db/db.sqlite3` file and, optionally, the `settings.json` f
 ├── db
 │   └── db.sqlite3
 ├── logs             <-- Optional
-└── settings.json    <-- Optional (required if you want to avoid reconfiguring AllSeerr)
+└── settings.json    <-- Optional (required if you want to avoid reconfiguring Allseerr)
 ```
 
-Once the files are restored, start the AllSeerr application.
+Once the files are restored, start the Allseerr application.
 
 #### PostgreSQL
 
@@ -87,7 +87,7 @@ Optionally, restore the `settings.json` file. The `config` folder structure shou
 .
 ├── cache            <-- Optional
 ├── logs             <-- Optional
-└── settings.json    <-- Optional (required if you want to avoid reconfiguring AllSeerr)
+└── settings.json    <-- Optional (required if you want to avoid reconfiguring Allseerr)
 ```
 
-Once the database and files are restored, start the AllSeerr application.
+Once the database and files are restored, start the Allseerr application.

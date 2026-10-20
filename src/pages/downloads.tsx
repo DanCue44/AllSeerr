@@ -1,4 +1,4 @@
-import Downloads from '@app/components/AllSeerr/Downloads';
+import Downloads from '@app/components/Allseerr/Downloads';
 import useRouteGuard from '@app/hooks/useRouteGuard';
 import { Permission } from '@server/lib/permissions';
 import type { NextPage } from 'next';

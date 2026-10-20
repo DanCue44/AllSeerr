@@ -1,4 +1,4 @@
-import FeaturedHero from '@app/components/AllSeerr/FeaturedHero';
+import FeaturedHero from '@app/components/Allseerr/FeaturedHero';
 import Discover from '@app/components/Discover';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import type { NextPage } from 'next';

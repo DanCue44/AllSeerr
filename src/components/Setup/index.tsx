@@ -5,7 +5,7 @@ import {
   AuthBackdrop,
   authCard,
   authPage,
-} from '@app/components/AllSeerr/Auth';
+} from '@app/components/Allseerr/Auth';
 import AppDataWarning from '@app/components/AppDataWarning';
 import Alert from '@app/components/Common/Alert';
 import AppLogo from '@app/components/Common/AppLogo';
@@ -31,7 +31,7 @@ import useSWR, { mutate } from 'swr';
 import SetupLogin from './SetupLogin';
 
 const messages = defineMessages('components.Setup', {
-  welcome: 'Welcome to AllSeerr',
+  welcome: 'Welcome to Allseerr',
   subtitle: 'Get started by choosing your media server',
   configjellyfin: 'Configure Jellyfin',
   configplex: 'Configure Plex',

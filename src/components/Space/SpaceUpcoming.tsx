@@ -1,4 +1,4 @@
-import { ambientGrid } from '@app/components/AllSeerr/ListPage';
+import { ambientGrid } from '@app/components/Allseerr/ListPage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import { getUpcomingRange } from '@app/components/Discover/ComingUpSlider';
 import UpcomingCard, {

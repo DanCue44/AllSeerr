@@ -286,7 +286,7 @@ describe('queueAuthorMatchForItems', () => {
     assert.deepStrictEqual(calls, []);
   });
 
-  it('runs when AllSeerr learns the items of a book', async () => {
+  it('runs when Allseerr learns the items of a book', async () => {
     const media = await getRepository(Media).save(
       new Media({
         olId: 'OL1234567W',

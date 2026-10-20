@@ -1,6 +1,6 @@
 ---
 title: General
-description: Configure global and default settings for AllSeerr.
+description: Configure global and default settings for Allseerr.
 sidebar_position: 1
 ---
 
@@ -8,7 +8,7 @@ sidebar_position: 1
 
 ## API Key
 
-This is your AllSeerr API key, which can be used to integrate AllSeerr with third-party applications. Do **not** share this key publicly, as it can be used to gain administrator access!
+This is your Allseerr API key, which can be used to integrate Allseerr with third-party applications. Do **not** share this key publicly, as it can be used to gain administrator access!
 
 If you need to generate a new API key for any reason, simply click the button to the right of the text box.
 
@@ -16,17 +16,17 @@ If you want to set the API key, rather than letting it be randomly generated, yo
 
 ## Application Title, Logo and Accent Color
 
-Give AllSeerr your own name, a square logo and an accent color. See [Custom Branding](/using-seerr/features/custom-branding) for details, including why phones keep the old name and logo until the app is added to the home screen again.
+Give Allseerr your own name, a square logo and an accent color. See [Custom Branding](/using-seerr/features/custom-branding) for details, including why phones keep the old name and logo until the app is added to the home screen again.
 
 ## Application URL
 
-Set this to the externally-accessible URL of your AllSeerr instance.
+Set this to the externally-accessible URL of your Allseerr instance.
 
 You must configure this setting in order to enable password reset and generation emails.
 
 ## Enable Image Caching
 
-When enabled, AllSeerr will proxy and cache images from pre-configured sources (such as TMDB). This can use a significant amount of disk space.
+When enabled, Allseerr will proxy and cache images from pre-configured sources (such as TMDB). This can use a significant amount of disk space.
 
 Images are saved in the `config/cache/images` and stale images are cleared out every 24 hours.
 
@@ -34,7 +34,7 @@ You should enable this if you are having issues with loading images directly fro
 
 ## Display Language
 
-Set the default display language for AllSeerr. Users can override this setting in their user settings.
+Set the default display language for Allseerr. Users can override this setting in their user settings.
 
 ## Discover Region, Discover Language & Streaming Region
 
@@ -109,6 +109,6 @@ Optional. Used to check whether books have ebook editions. Without a key, ebook 
 
 ## Version Check
 
-When enabled, AllSeerr checks GitHub for new versions and tells admins when an update is available. See [Update Channels](/getting-started/update-channels).
+When enabled, Allseerr checks GitHub for new versions and tells admins when an update is available. See [Update Channels](/getting-started/update-channels).
 
 This setting is **enabled** by default.

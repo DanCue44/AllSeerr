@@ -6,9 +6,9 @@ sidebar_position: 2
 
 # Chaptarr (Books and Audiobooks)
 
-Chaptarr is a fork of Readarr that keeps ebooks and audiobooks as separate books. AllSeerr uses it to fetch both formats. Adding a Chaptarr server turns on books in AllSeerr: the Books space in the navigation, book and author pages, books in search and the book rows on the home page.
+Chaptarr is a fork of Readarr that keeps ebooks and audiobooks as separate books. Allseerr uses it to fetch both formats. Adding a Chaptarr server turns on books in Allseerr: the Books space in the navigation, book and author pages, books in search and the book rows on the home page.
 
-In AllSeerr a book is **one title with two formats**. Users choose **Ebook**, **Audiobook** or **Both** when requesting, and each format has its own status, approval and notifications. Book metadata (search, covers, authors, subjects) comes from [OpenLibrary](https://openlibrary.org), so no API key is needed.
+In Allseerr a book is **one title with two formats**. Users choose **Ebook**, **Audiobook** or **Both** when requesting, and each format has its own status, approval and notifications. Book metadata (search, covers, authors, subjects) comes from [OpenLibrary](https://openlibrary.org), so no API key is needed.
 
 :::tip
 Chaptarr is the recommended book service. [LazyLibrarian](/using-seerr/services/lazylibrarian) still works as a legacy option, but it cannot delete files on removal and does not track the two formats as well.
@@ -16,7 +16,7 @@ Chaptarr is the recommended book service. [LazyLibrarian](/using-seerr/services/
 
 ## Prepare Chaptarr first
 
-AllSeerr adds authors and books to Chaptarr, but Chaptarr does the searching and downloading. Set it up so it works on its own before connecting AllSeerr.
+Allseerr adds authors and books to Chaptarr, but Chaptarr does the searching and downloading. Set it up so it works on its own before connecting Allseerr.
 
 ### Root folders
 
@@ -47,7 +47,7 @@ Go to **Settings &rarr; Services** and click **Add Chaptarr Server**.
 |---|---|
 | **Default Server** | Check this for the server book requests go to. One Chaptarr server must be the default. |
 | **Server Name** | Any name, for example `Chaptarr`. |
-| **Hostname or IP Address** | The address AllSeerr can reach Chaptarr on, for example `192.168.1.10`. |
+| **Hostname or IP Address** | The address Allseerr can reach Chaptarr on, for example `192.168.1.10`. |
 | **Port** | The port Chaptarr listens on (see **Settings &rarr; General** in Chaptarr). |
 | **Use SSL** | Only if Chaptarr is served over HTTPS. |
 | **API Key** | Chaptarr: **Settings &rarr; General &rarr; Security &rarr; API Key**. |
@@ -63,7 +63,7 @@ Other Readarr compatible servers can be added here too. Readarr keeps only one c
 
 ## What happens on a request
 
-When a book request is approved, AllSeerr:
+When a book request is approved, Allseerr:
 
 1. Adds the author to Chaptarr if needed, with only the requested book monitored, and turns on monitoring for the requested format on that author (Chaptarr only grabs a format automatically when the author is monitored for it).
 2. Links the book Chaptarr already has, or adds it.
@@ -77,19 +77,19 @@ Admins can also search again, grab a specific release or replace a file from the
 
 Set the default language for book requests in **Settings &rarr; General &rarr; Book Language**. Users can pick their own language in their profile settings, and managers can pick another one when requesting. **Any Language** downloads whichever language is found.
 
-To keep downloads in the chosen language, AllSeerr manages a tag and a release profile in Chaptarr for each language:
+To keep downloads in the chosen language, Allseerr manages a tag and a release profile in Chaptarr for each language:
 
-- Tags are named `allseerr-lang-<code>`, for example `allseerr-lang-en` or `allseerr-lang-es`, and are put on the authors AllSeerr adds.
+- Tags are named `allseerr-lang-<code>`, for example `allseerr-lang-en` or `allseerr-lang-es`, and are put on the authors Allseerr adds.
 - Each tag has a release profile. For English, releases that name another language are rejected. For other languages, releases must name the language.
 
-Do not rename these tags. You can leave the release profiles alone; AllSeerr updates them when needed.
+Do not rename these tags. You can leave the release profiles alone; Allseerr updates them when needed.
 
 ## Other book settings
 
 In **Settings &rarr; General**:
 
 - **Default Book Format**: the format preselected in the request dialog (Ebook, Audiobook or Both).
-- **Google Books API Key**: lets AllSeerr check whether a book has an ebook edition. See [Google Books](/using-seerr/services/google-books).
+- **Google Books API Key**: lets Allseerr check whether a book has an ebook edition. See [Google Books](/using-seerr/services/google-books).
 - When both Chaptarr and LazyLibrarian are configured, choose which one book requests go to in **Settings &rarr; Services**.
 
 Audiobook editions are checked in the public Audible catalog, which also gives narrators and length. The Audible store follows your **Discover Region**.

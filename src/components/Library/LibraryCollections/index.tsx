@@ -1,4 +1,4 @@
-import { CollectionBanner } from '@app/components/AllSeerr/Title';
+import { CollectionBanner } from '@app/components/Allseerr/Title';
 import ListView from '@app/components/Common/ListView';
 import PageTitle from '@app/components/Common/PageTitle';
 import LibraryLayout, {

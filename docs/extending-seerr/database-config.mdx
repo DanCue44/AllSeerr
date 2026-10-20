@@ -1,11 +1,11 @@
 ---
 title: Configuring the Database (Advanced)
-description: Configure the database for AllSeerr
+description: Configure the database for Allseerr
 sidebar_position: 2
 ---
 # Configuring the Database
 
-AllSeerr supports SQLite and PostgreSQL. The database connection can be configured using the following environment variables:
+Allseerr supports SQLite and PostgreSQL. The database connection can be configured using the following environment variables:
 
 ## SQLite Options
 
@@ -95,9 +95,9 @@ DB_SSL_CERT_FILE= # (optional) Path to certificate chain in pem format for the p
 
 ### Migrating from SQLite to PostgreSQL
 
-1. Set up your PostgreSQL database and configure AllSeerr to use it
-2. Run AllSeerr to create the tables in the PostgreSQL database
-3. Stop AllSeerr
+1. Set up your PostgreSQL database and configure Allseerr to use it
+2. Run Allseerr to create the tables in the PostgreSQL database
+3. Stop Allseerr
 4. Run the following command to export the data from the SQLite database and import it into the PostgreSQL database:
 
 :::info
@@ -116,7 +116,7 @@ import TabItem from '@theme/TabItem';
 <Tabs>
 <TabItem value="docker" label="Using pgloader Container (Recommended)" default>
 
-**Recommended method**: Use the pgloader container even for standalone AllSeerr installations. This avoids building from source and ensures compatibility.
+**Recommended method**: Use the pgloader container even for standalone Allseerr installations. This avoids building from source and ensures compatibility.
 
 ```bash
 # For standalone installations (no Docker network needed)
@@ -171,4 +171,4 @@ Once pgloader is built, run the migration:
 </TabItem>
 </Tabs>
 
-5. Start AllSeerr
+5. Start Allseerr

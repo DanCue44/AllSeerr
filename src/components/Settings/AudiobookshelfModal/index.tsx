@@ -46,7 +46,7 @@ const messages = defineMessages('components.Settings.AudiobookshelfModal', {
     'Available books offer to open in the NoBookEnds app, which reads and listens through Audiobookshelf. Needs an API key to find the book.',
   adminApiKey: 'Admin API Key',
   adminApiKeyHelp:
-    'Optional. Only used to match authors, so Audiobookshelf fetches their photos and bios when AllSeerr finds their books. Needs the API token of an Audiobookshelf user allowed to update (an admin), as a read only key cannot match. Never sent to users. Without it, authors are not matched.',
+    'Optional. Only used to match authors, so Audiobookshelf fetches their photos and bios when Allseerr finds their books. Needs the API token of an Audiobookshelf user allowed to update (an admin), as a read only key cannot match. Never sent to users. Without it, authors are not matched.',
   adminApiKeySaved: 'A key is saved. Leave this empty to keep it.',
   authorMatchRegion: 'Author Match Region',
   authorMatchRegionHelp:

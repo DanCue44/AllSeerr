@@ -7,7 +7,7 @@ import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
 import { DocumentTextIcon } from '@heroicons/react/24/outline';
 import { ALLSEERR_REPO } from '@server/constants/repository';
-import { isSameAllSeerrVersion } from '@server/utils/allseerrVersion';
+import { isSameAllseerrVersion } from '@server/utils/allseerrVersion';
 import dynamic from 'next/dynamic';
 import { Fragment, useState } from 'react';
 import { FormattedRelativeTime, useIntl } from 'react-intl';
@@ -23,7 +23,7 @@ const ReactMarkdown = dynamic<any>(() => import('react-markdown'), {
 const messages = defineMessages('components.Settings.SettingsAbout.Releases', {
   releases: 'Releases',
   releasedataMissing: 'Release data is currently unavailable.',
-  noreleases: 'No AllSeerr releases have been published yet.',
+  noreleases: 'No Allseerr releases have been published yet.',
   versionChangelog: '{version} Changelog',
   viewongithub: 'View on GitHub',
   latestversion: 'Latest',
@@ -108,7 +108,7 @@ const Release = ({ currentVersion, release, isLatest }: ReleaseProps) => {
             {intl.formatMessage(messages.latestversion)}
           </Badge>
         )}
-        {isSameAllSeerrVersion(release.tag_name, currentVersion) && (
+        {isSameAllseerrVersion(release.tag_name, currentVersion) && (
           <Badge badgeType="primary">
             {intl.formatMessage(messages.currentversion)}
           </Badge>

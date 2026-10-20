@@ -37,7 +37,7 @@ const messages = defineMessages('components.Settings.SettingsMain', {
   general: 'General',
   generalsettings: 'General Settings',
   generalsettingsDescription:
-    'Configure global and default settings for AllSeerr.',
+    'Configure global and default settings for Allseerr.',
   apikey: 'API Key',
   apikeyCopied: 'Copied API key to clipboard.',
   applicationTitle: 'Application Title',

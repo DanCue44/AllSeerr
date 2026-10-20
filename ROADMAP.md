@@ -1,8 +1,8 @@
-# AllSeerr roadmap
+# Allseerr roadmap
 
-AllSeerr is a fork of [Seerr](https://github.com/seerr-team/seerr) (MIT) that extends it from movies and series to **music**, **books** and **audiobooks**, and adds a **subtitles** panel backed by Bazarr. The goal is that every new feature looks and behaves like the existing movie and series features, and that AllSeerr keeps up with Seerr.
+Allseerr is a fork of [Seerr](https://github.com/seerr-team/seerr) (MIT) that extends it from movies and series to **music**, **books** and **audiobooks**, and adds a **subtitles** panel backed by Bazarr. The goal is that every new feature looks and behaves like the existing movie and series features, and that Allseerr keeps up with Seerr.
 
-This page lists what is done, what is planned, and how AllSeerr stays in step with Seerr. Ideas and bug reports are welcome at [github.com/DanCue44/AllSeerr/issues](https://github.com/DanCue44/AllSeerr/issues).
+This page lists what is done, what is planned, and how Allseerr stays in step with Seerr. Ideas and bug reports are welcome at [github.com/DanCue44/Allseerr/issues](https://github.com/DanCue44/Allseerr/issues).
 
 ## Done
 
@@ -53,24 +53,24 @@ This page lists what is done, what is planned, and how AllSeerr stays in step wi
 - **Dedicated permissions per media type and format.** Seerr's permission bitmask is full, so music and books use the general **Auto-Approve** permission for automatic approval. Separate Auto-Approve Music, Auto-Approve Books and per-format book permissions need a second permissions column or a small permission table.
 - **Book request limits per format**, if there is demand for them.
 - **Screenshots and more documentation** for the new features.
-- **Translations** of the new strings. AllSeerr strings fall back to English where a translation is missing.
+- **Translations** of the new strings. Allseerr strings fall back to English where a translation is missing.
 
 Larger ideas are tracked as issues. Open one if there is something you would like to see.
 
 ## Staying in step with Seerr
 
-- AllSeerr merges Seerr's `develop` branch regularly (at least monthly), so Seerr's fixes, security updates and translations keep flowing into AllSeerr.
-- AllSeerr code lives in **new files and folders** wherever possible (for example `server/api/servarr/lidarr.ts`, `server/api/servarr/chaptarr.ts`, `server/api/bazarr`, `src/components/BookDetails`). Changes to Seerr's own files are kept small and additive (an extra `case`, an extra route) so merges stay cheap.
+- Allseerr merges Seerr's `develop` branch regularly (at least monthly), so Seerr's fixes, security updates and translations keep flowing into Allseerr.
+- Allseerr code lives in **new files and folders** wherever possible (for example `server/api/servarr/lidarr.ts`, `server/api/servarr/chaptarr.ts`, `server/api/bazarr`, `src/components/BookDetails`). Changes to Seerr's own files are kept small and additive (an extra `case`, an extra route) so merges stay cheap.
 - Music follows Seerr's own music support preview where it fits, so that a future Seerr music release can be merged with as little friction as possible.
-- Database changes come as one migration per database, in `server/migration/sqlite` and `server/migration/postgres`. A database migrated by AllSeerr cannot be used by Seerr again.
+- Database changes come as one migration per database, in `server/migration/sqlite` and `server/migration/postgres`. A database migrated by Allseerr cannot be used by Seerr again.
 
 ## Versioning
 
-An AllSeerr version is the Seerr release it is based on plus an AllSeerr revision: `3.5.0.1`, `3.5.0.2`, and back to `.1` when moving to a new Seerr release (`3.5.1.1`). Both numbers live in `allseerr.json`, not in `package.json`, so merges from Seerr never conflict on them.
+An Allseerr version is the Seerr release it is based on plus an Allseerr revision: `3.5.0.1`, `3.5.0.2`, and back to `.1` when moving to a new Seerr release (`3.5.1.1`). Both numbers live in `allseerr.json`, not in `package.json`, so merges from Seerr never conflict on them.
 
 ## Contributing
 
-AllSeerr follows Seerr's conventions:
+Allseerr follows Seerr's conventions:
 
 - Conventional Commits (`feat(music): ...`, `fix(books): ...`), pnpm, ESLint and Prettier through the Husky hooks.
 - `pnpm i18n:extract` after changing interface strings, with `defineMessages('components.X')`.

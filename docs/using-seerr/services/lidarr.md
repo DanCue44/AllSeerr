@@ -6,7 +6,7 @@ sidebar_position: 1
 
 # Lidarr (Music)
 
-Adding a [Lidarr](https://lidarr.audio/) server turns on music in AllSeerr: the Music space in the navigation, album and artist pages, music in search and the music rows on the home page. Users request **albums**; AllSeerr adds the artist to Lidarr if needed and monitors only the albums that were requested.
+Adding a [Lidarr](https://lidarr.audio/) server turns on music in Allseerr: the Music space in the navigation, album and artist pages, music in search and the music rows on the home page. Users request **albums**; Allseerr adds the artist to Lidarr if needed and monitors only the albums that were requested.
 
 Music metadata comes from public sources, not from Lidarr: [MusicBrainz](https://musicbrainz.org) for search, albums, track lists and artists, [Cover Art Archive](https://coverartarchive.org) for album covers, [TheAudioDB](https://www.theaudiodb.com) for artist images and biographies, and [ListenBrainz](https://listenbrainz.org) for popular albums, new releases and similar artists. No accounts or API keys are needed for any of them.
 
@@ -18,7 +18,7 @@ Go to **Settings &rarr; Services** and click **Add Lidarr Server**.
 |---|---|
 | **Default Server** | Check this for the server requests go to. At least one Lidarr server must be the default. |
 | **Server Name** | Any name, for example `Lidarr`. |
-| **Hostname or IP Address** | The address AllSeerr can reach Lidarr on, for example `192.168.1.10` or `lidarr` on a shared Docker network. |
+| **Hostname or IP Address** | The address Allseerr can reach Lidarr on, for example `192.168.1.10` or `lidarr` on a shared Docker network. |
 | **Port** | Lidarr's port, `8686` by default. |
 | **Use SSL** | Only if Lidarr is served over HTTPS. |
 | **API Key** | Lidarr: **Settings &rarr; General &rarr; Security &rarr; API Key**. |
@@ -27,9 +27,9 @@ Go to **Settings &rarr; Services** and click **Add Lidarr Server**.
 Click **Test** to load Lidarr's profiles, folders and tags, then pick:
 
 - **Quality Profile**, **Metadata Profile** and **Root Folder** for new requests. The metadata profile decides which release types Lidarr keeps for an artist (albums, EPs, singles and so on), so make sure it includes the types users will request.
-- **Tags** (optional) to add to every artist AllSeerr sends. **Tag Requests** also adds a tag with the requester's user ID and name.
+- **Tags** (optional) to add to every artist Allseerr sends. **Tag Requests** also adds a tag with the requester's user ID and name.
 - **External URL** (optional) for links to Lidarr on album pages when the hostname above is not reachable from outside your network.
-- **Enable Scan** (recommended) so AllSeerr knows which albums Lidarr already has.
+- **Enable Scan** (recommended) so Allseerr knows which albums Lidarr already has.
 - **Enable Automatic Search** to have Lidarr search as soon as a request is approved.
 
 Lidarr does not use the 4K split that Radarr and Sonarr have. Add more than one Lidarr server only if you really keep separate music libraries.

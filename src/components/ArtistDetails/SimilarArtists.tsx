@@ -1,4 +1,4 @@
-import { RailHeader } from '@app/components/AllSeerr/Title';
+import { RailHeader } from '@app/components/Allseerr/Title';
 import Header from '@app/components/Common/Header';
 import Slider from '@app/components/Slider';
 import MusicTitleCard from '@app/components/TitleCard/MusicTitleCard';

@@ -1,6 +1,6 @@
 ---
 title: Deleting Users
-description: Delete users from AllSeerr.
+description: Delete users from Allseerr.
 sidebar_position: 4
 ---
 

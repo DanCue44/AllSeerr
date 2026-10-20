@@ -6,7 +6,7 @@ sidebar_position: 3
 
 # LazyLibrarian (Legacy)
 
-AllSeerr can send book requests to [LazyLibrarian](https://lazylibrarian.gitlab.io) instead of [Chaptarr](/using-seerr/services/chaptarr). It is kept for existing setups. New setups should use Chaptarr.
+Allseerr can send book requests to [LazyLibrarian](https://lazylibrarian.gitlab.io) instead of [Chaptarr](/using-seerr/services/chaptarr). It is kept for existing setups. New setups should use Chaptarr.
 
 :::warning LazyLibrarian has fewer features than Chaptarr
 Approved book removals cannot delete files, because LazyLibrarian has no way to do that through its API. The book only stops being searched for, and its file stays on disk until it is deleted in LazyLibrarian, which may then find it again. Chaptarr deletes the files and tracks ebooks and audiobooks separately.
@@ -18,7 +18,7 @@ Go to **Settings &rarr; Services** and click **Configure LazyLibrarian**.
 
 | Setting | What to enter |
 |---|---|
-| **Hostname or IP Address** | The address AllSeerr can reach LazyLibrarian on, for example `192.168.1.10`. |
+| **Hostname or IP Address** | The address Allseerr can reach LazyLibrarian on, for example `192.168.1.10`. |
 | **Port** | LazyLibrarian's port, `5299` by default. |
 | **Use SSL** | Only if LazyLibrarian is served over HTTPS. |
 | **URL Base** | Only if LazyLibrarian runs under a web root (`http_root` in its config), for example `/lazylibrarian`. |

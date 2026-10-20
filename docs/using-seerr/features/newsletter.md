@@ -6,7 +6,7 @@ sidebar_position: 3
 
 # Newsletter
 
-AllSeerr can email your users a **Recently Added** newsletter: a list of the movies and series that became available since the last one, with posters and links to their pages.
+Allseerr can email your users a **Recently Added** newsletter: a list of the movies and series that became available since the last one, with posters and links to their pages.
 
 ## Turning it on
 

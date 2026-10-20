@@ -1,4 +1,4 @@
-import AmbientBookDetails from '@app/components/AllSeerr/BookDetails';
+import AmbientBookDetails from '@app/components/Allseerr/BookDetails';
 import BookDetails from '@app/components/BookDetails';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { getHostAndPort } from '@app/utils/urlHelper';

@@ -65,7 +65,7 @@ const pushoverSettings = (types: number): NotificationAgentPushover => ({
 beforeEach(() => {
   posts.length = 0;
   getSettings().main.applicationUrl = 'https://allseerr.example.com';
-  getSettings().main.applicationTitle = 'AllSeerr';
+  getSettings().main.applicationTitle = 'Allseerr';
 });
 
 describe('Download Needs Attention notification type', () => {
@@ -228,7 +228,7 @@ describe('Download Needs Attention in the agents', () => {
       scan.locals.actionUrl,
       'https://allseerr.example.com/settings/plex'
     );
-    assert.equal(scan.locals.actionLabel, 'Open AllSeerr Settings');
+    assert.equal(scan.locals.actionLabel, 'Open Allseerr Settings');
   });
 });
 

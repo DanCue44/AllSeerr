@@ -1,12 +1,12 @@
 ---
 title: Metadata Providers
-description: Configure the metadata providers AllSeerr uses for TV, anime, and music.
+description: Configure the metadata providers Allseerr uses for TV, anime, and music.
 sidebar_position: 8
 ---
 
 # Metadata Providers
 
-AllSeerr fetches descriptive metadata (titles, descriptions, posters, release dates,
+Allseerr fetches descriptive metadata (titles, descriptions, posters, release dates,
 external IDs, etc.) from a number of third-party providers. The
 **Settings → Metadata Providers** page lets administrators pick which provider
 is used for each media type and configure the connection details for the
@@ -53,8 +53,8 @@ rate-limited endpoints.
 metadata (artist, release group, and recording identifiers, release dates,
 relationships, and the Wikipedia summary shown on artist pages).
 
-AllSeerr identifies itself to MusicBrainz with the User-Agent
-`AllSeerr/<version>`. This is derived from the running build automatically and is
+Allseerr identifies itself to MusicBrainz with the User-Agent
+`Allseerr/<version>`. This is derived from the running build automatically and is
 not user-configurable.
 
 ## Saving and Testing

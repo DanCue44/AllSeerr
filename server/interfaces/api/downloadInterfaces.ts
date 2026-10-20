@@ -36,7 +36,7 @@ export interface DownloadItem {
   id: string;
   service: DownloadService;
   serverId: number;
-  // The arr as it is set up in AllSeerr, such as "4K Radarr"
+  // The arr as it is set up in Allseerr, such as "4K Radarr"
   serverName: string;
   is4k: boolean;
   mediaType: DownloadMediaType;
@@ -80,7 +80,7 @@ export interface DownloadItem {
   seeders?: number;
   leechers?: number;
   posterUrl?: string;
-  // The media in AllSeerr, when the download is of one
+  // The media in Allseerr, when the download is of one
   mediaId?: number;
   tmdbId?: number;
   tvdbId?: number;
@@ -171,7 +171,7 @@ export interface SeedingTorrent {
   riskReason: string | null;
   addedAt: string | null;
   completedAt: string | null;
-  // Added by AllSeerr: the book in AllSeerr, when it has the Talearr book
+  // Added by Allseerr: the book in Allseerr, when it has the Talearr book
   mediaId?: number;
   olId?: string;
 }

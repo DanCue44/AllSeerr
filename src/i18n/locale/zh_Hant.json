@@ -741,7 +741,7 @@
   "components.Settings.Notifications.encryption": "加密方式",
   "components.Settings.Notifications.NotificationsPushover.userTokenTip": "您 30 個字符的<UsersGroupsLink>使用者或群組識別碼</UsersGroupsLink>",
   "components.Settings.Notifications.NotificationsPushbullet.accessTokenTip": "從您的<PushbulletSettingsLink>帳號設定</PushbulletSettingsLink>取得 API 令牌",
-  "components.Settings.Notifications.NotificationsPushover.accessTokenTip": "建立一個 AllSeerr 專用的<ApplicationRegistrationLink>應用程式</ApplicationRegistrationLink>",
+  "components.Settings.Notifications.NotificationsPushover.accessTokenTip": "建立一個 Allseerr 專用的<ApplicationRegistrationLink>應用程式</ApplicationRegistrationLink>",
   "components.Settings.Notifications.NotificationsSlack.webhookUrlTip": "創建一個「<WebhookLink>Incoming Webhook</WebhookLink>」整合",
   "components.Settings.Notifications.webhookUrlTip": "在您的伺服器裡建立一個 <DiscordWebhookLink>webhook</DiscordWebhookLink>",
   "components.Settings.Notifications.botApiTip": "建立一個 Jellyseerr 專用的<CreateBotLink>機器人</CreateBotLink>",

@@ -217,7 +217,7 @@ describe('GET /downloads/seeding', () => {
     assert.deepStrictEqual(calls, []);
   });
 
-  it("passes Talearr's seeding answer through with the books in AllSeerr", async () => {
+  it("passes Talearr's seeding answer through with the books in Allseerr", async () => {
     const media = await getRepository(Media).save(
       new Media({
         mediaType: MediaType.BOOK,

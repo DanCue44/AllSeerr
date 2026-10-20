@@ -6,7 +6,7 @@ sidebar_position: 4
 
 # Audiobookshelf
 
-[Audiobookshelf](https://www.audiobookshelf.org) is a self-hosted server for audiobooks and ebooks. AllSeerr does not download anything through it. It only links to it: once a book is available, its page shows **Read in Audiobookshelf** and **Listen in Audiobookshelf** buttons.
+[Audiobookshelf](https://www.audiobookshelf.org) is a self-hosted server for audiobooks and ebooks. Allseerr does not download anything through it. It only links to it: once a book is available, its page shows **Read in Audiobookshelf** and **Listen in Audiobookshelf** buttons.
 
 ## Settings
 
@@ -23,17 +23,17 @@ Without an API key, you can still enter the library IDs by hand. A library ID is
 
 ## A read-only user and API key
 
-The API key is only used by the AllSeerr server to list libraries and find books. It is never sent to users. Still, give it as little access as possible by creating a dedicated user:
+The API key is only used by the Allseerr server to list libraries and find books. It is never sent to users. Still, give it as little access as possible by creating a dedicated user:
 
 1. In Audiobookshelf, open **Settings &rarr; Users** and click **Add User**.
 2. Name it, for example `allseerr`, set the account type to **User**, and give it a password.
 3. Turn off the permissions it does not need: **Can Download**, **Can Update**, **Can Delete** and **Can Upload**.
 4. Give it access to the ebook and audiobook libraries (or all libraries), then save.
 5. Open the new user in **Settings &rarr; Users** and copy its **API Token**. (Newer Audiobookshelf versions can also create a key under **Settings &rarr; API Keys**; assign it to this user.)
-6. Paste the token into **API Key** in AllSeerr, click **Test**, pick the libraries and save.
+6. Paste the token into **API Key** in Allseerr, click **Test**, pick the libraries and save.
 
 ## How links are matched
 
-With an API key, AllSeerr looks for the book in the chosen library by title, author and edition, and links straight to it. When it cannot find a match (or no key is set), the button opens a title search in the library instead.
+With an API key, Allseerr looks for the book in the chosen library by title, author and edition, and links straight to it. When it cannot find a match (or no key is set), the button opens a title search in the library instead.
 
 Ebook links use the **Ebook Library**, and audiobook links use the **Audiobook Library**.

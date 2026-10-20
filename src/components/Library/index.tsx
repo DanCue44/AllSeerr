@@ -2,7 +2,7 @@ import {
   AmbientPageHeader,
   listPageMessages,
   PillTabs,
-} from '@app/components/AllSeerr/ListPage';
+} from '@app/components/Allseerr/ListPage';
 import Header from '@app/components/Common/Header';
 import type { SettingsRoute } from '@app/components/Common/SettingsTabs';
 import SettingsTabs from '@app/components/Common/SettingsTabs';

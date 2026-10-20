@@ -2,7 +2,7 @@ import {
   authHeading,
   authInput,
   authPrimary,
-} from '@app/components/AllSeerr/Auth';
+} from '@app/components/Allseerr/Auth';
 import Alert from '@app/components/Common/Alert';
 import Button from '@app/components/Common/Button';
 import SensitiveInput from '@app/components/Common/SensitiveInput';

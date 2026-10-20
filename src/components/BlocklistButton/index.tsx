@@ -1,4 +1,4 @@
-import { pillIcon } from '@app/components/AllSeerr/Title/styles';
+import { pillIcon } from '@app/components/Allseerr/Title/styles';
 import BlocklistModal from '@app/components/BlocklistModal';
 import Button from '@app/components/Common/Button';
 import Tooltip from '@app/components/Common/Tooltip';

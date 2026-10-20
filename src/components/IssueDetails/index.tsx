@@ -1,4 +1,4 @@
-import UserAvatar from '@app/components/AllSeerr/RequestList/UserAvatar';
+import UserAvatar from '@app/components/Allseerr/RequestList/UserAvatar';
 import ArrActions from '@app/components/ArrActions';
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';

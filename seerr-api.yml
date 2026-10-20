@@ -53,9 +53,9 @@ tags:
       - `GET /media/{mediaId}/arr?bookFormat=` for what can be done to a format in its arr
       - `POST /media/{mediaId}/arr/search` to search again, `GET /media/{mediaId}/arr/releases` to list releases, `POST /media/{mediaId}/arr/grab` to grab one and `POST /media/{mediaId}/arr/replace` to replace the file
 
-      To connect, the app opens the AllSeerr page `/nobookends/connect?device={name}` in a sign in window. It asks the user to sign in when needed, then to confirm, and sends the app to `nobookends://connect#abs=...&allseerr=...&key=asu_...` with the same values as a connect link, or to `nobookends://connect#error=cancelled`, `#error=unavailable` (books or Audiobookshelf are not set up) or `#error=no_app_url` (no address that works away from home). Each device gets its own key. Without a key `GET /nobookends/status` answers 403, which tells the app the address is an AllSeerr that supports NoBookEnds.
+      To connect, the app opens the Allseerr page `/nobookends/connect?device={name}` in a sign in window. It asks the user to sign in when needed, then to confirm, and sends the app to `nobookends://connect#abs=...&allseerr=...&key=asu_...` with the same values as a connect link, or to `nobookends://connect#error=cancelled`, `#error=unavailable` (books or Audiobookshelf are not set up) or `#error=no_app_url` (no address that works away from home). Each device gets its own key. Without a key `GET /nobookends/status` answers 403, which tells the app the address is an Allseerr that supports NoBookEnds.
 
-      When an admin set up NoBookEnds Sync, the status carries its public address in `nobookendsSync.url`. The app fetches Listen and Read alignments from there with the user's Audiobookshelf token. AllSeerr queues each book on the Sync server, at user priority, once it has both an audiobook and an ebook in Audiobookshelf.
+      When an admin set up NoBookEnds Sync, the status carries its public address in `nobookendsSync.url`. The app fetches Listen and Read alignments from there with the user's Audiobookshelf token. Allseerr queues each book on the Sync server, at user priority, once it has both an audiobook and an ebook in Audiobookshelf.
   - name: other
     description: Endpoints related to other TMDB data
   - name: person
@@ -515,7 +515,7 @@ components:
               any,
             ]
           example: en
-          description: ISO 639-1 code of the language books are requested in, unless a user sets their own. `any` takes whichever language is found. With Chaptarr, AllSeerr keeps a tag and a release profile for each requested language.
+          description: ISO 639-1 code of the language books are requested in, unless a user sets their own. `any` takes whichever language is found. With Chaptarr, Allseerr keeps a tag and a release profile for each requested language.
         bookService:
           type: string
           enum: [chaptarr, talearr, lazylibrarian]
@@ -944,7 +944,7 @@ components:
           example: 'https://sync.example.com'
         internalUrl:
           type: string
-          description: Optional. Address AllSeerr reaches the Sync server at, when the public one does not work from the AllSeerr server. Falls back to url.
+          description: Optional. Address Allseerr reaches the Sync server at, when the public one does not work from the Allseerr server. Falls back to url.
           example: 'http://NoBookEnds-Sync:8000'
         adminTokenSet:
           type: boolean
@@ -1358,7 +1358,7 @@ components:
           example: false
         applicationTitle:
           type: string
-          example: AllSeerr
+          example: Allseerr
         applicationLogoVersion:
           type: string
           example: 3f2a9c81d4e7
@@ -4209,8 +4209,8 @@ components:
 paths:
   /status:
     get:
-      summary: Get AllSeerr status
-      description: Returns the current AllSeerr status in a JSON object. updateAvailable and commitsBehind are omitted when checkUpdateAvailable is false.
+      summary: Get Allseerr status
+      description: Returns the current Allseerr status in a JSON object. updateAvailable and commitsBehind are omitted when checkUpdateAvailable is false.
       security: []
       tags:
         - public
@@ -8606,14 +8606,14 @@ paths:
                           example: '2026-10-19T06:00:00.000Z'
                   applicationUrlMissing:
                     type: boolean
-                    description: True when no Application URL is set and AllSeerr was opened at a home address (localhost, a private IP or a local name), which the app could not reach away from home. A connect link can only be made once the Application URL is set.
+                    description: True when no Application URL is set and Allseerr was opened at a home address (localhost, a private IP or a local name), which the app could not reach away from home. A connect link can only be made once the Application URL is set.
                     example: false
     post:
       summary: Connect NoBookEnds on a device
       description: |
         Creates a personal API key for the NoBookEnds app on one more device and returns it with a link that sets the app up in one tap, and the app URL that `/nobookends/connect` hands the key back to the app with. The key is only returned once. Devices connected before keep working; past 10 devices the oldest are removed. It is separate from the key at `/user/{userId}/settings/api-key`, which it never replaces.
 
-        Only the user themselves can create it, and books and Audiobookshelf must be set up. The AllSeerr address in the link is the Application URL, or the address of this request when none is set and it is a public address.
+        Only the user themselves can create it, and books and Audiobookshelf must be set up. The Allseerr address in the link is the Application URL, or the address of this request when none is set and it is a public address.
       tags:
         - users
         - nobookends
@@ -8650,7 +8650,7 @@ paths:
                     example: '2026-10-13T05:00:00.000Z'
                   connectUrl:
                     type: string
-                    description: Opens the app, or its site when it is not installed. The Audiobookshelf address (`abs`), the AllSeerr address (`allseerr`) and the key (`key`) are URL-encoded parameters in the fragment, which browsers never send to the site.
+                    description: Opens the app, or its site when it is not installed. The Audiobookshelf address (`abs`), the Allseerr address (`allseerr`) and the key (`key`) are URL-encoded parameters in the fragment, which browsers never send to the site.
                     example: 'https://nobookends.com/open/connect#abs=https%3A%2F%2Fbooks.example.com&allseerr=https%3A%2F%2Fallseerr.example.com&key=asu_6p1x...'
                   appUrl:
                     type: string
@@ -8676,10 +8676,10 @@ paths:
                         description: When the app last used the key, saved at most about once an hour
                         example: '2026-10-19T06:00:00.000Z'
         '400':
-          description: Books or Audiobookshelf are not set up, or no Application URL is set and AllSeerr was opened at a home address
+          description: Books or Audiobookshelf are not set up, or no Application URL is set and Allseerr was opened at a home address
     delete:
       summary: Disconnect NoBookEnds
-      description: Revokes the NoBookEnds keys of every device, which signs the app out of AllSeerr everywhere. Requires `MANAGE_USERS` permission if revoking another user's keys.
+      description: Revokes the NoBookEnds keys of every device, which signs the app out of Allseerr everywhere. Requires `MANAGE_USERS` permission if revoking another user's keys.
       tags:
         - users
         - nobookends
@@ -10989,7 +10989,7 @@ paths:
   /nobookends/status:
     get:
       summary: Get what NoBookEnds may offer
-      description: Returns the AllSeerr version and which features the NoBookEnds app may offer the signed in user, so it can hide what is turned off or not allowed. Works with the personal key from the connect link.
+      description: Returns the Allseerr version and which features the NoBookEnds app may offer the signed in user, so it can hide what is turned off or not allowed. Works with the personal key from the connect link.
       tags:
         - nobookends
       responses:
@@ -11007,7 +11007,7 @@ paths:
                     type: string
                   applicationTitle:
                     type: string
-                    example: AllSeerr
+                    example: Allseerr
                   user:
                     type: object
                     properties:
@@ -11146,7 +11146,7 @@ paths:
                         mediaId:
                           type: number
                           nullable: true
-                          description: AllSeerr media ID, for the `/media/{mediaId}/arr` actions. Null when the book is not in AllSeerr.
+                          description: Allseerr media ID, for the `/media/{mediaId}/arr` actions. Null when the book is not in Allseerr.
                           example: 42
                         olId:
                           type: string
@@ -11176,7 +11176,7 @@ paths:
                         since:
                           type: string
                           format: date-time
-                          description: When AllSeerr first saw the download stuck
+                          description: When Allseerr first saw the download stuck
                         downloadTitle:
                           type: string
                           description: Name of the release in the download client
@@ -11192,7 +11192,7 @@ paths:
     post:
       summary: Remove a stuck book download and search again
       description: |
-        Removes the download from Chaptarr's queue and its download client, blocklists its release unless `blocklist=false`, then starts a new automatic search for the book's format (as `POST /media/{mediaId}/arr/search` does when the book is in AllSeerr). The removal stands when the search cannot be started; `searchError` then says why.
+        Removes the download from Chaptarr's queue and its download client, blocklists its release unless `blocklist=false`, then starts a new automatic search for the book's format (as `POST /media/{mediaId}/arr/search` does when the book is in Allseerr). The removal stands when the search cannot be started; `searchError` then says why.
 
         Requires the `MANAGE_REQUESTS` permission. Works with a personal key.
       tags:
@@ -11242,9 +11242,9 @@ paths:
     get:
       summary: Get the book of an Audiobookshelf item
       description: |
-        Returns the book an Audiobookshelf library item is of, among the books AllSeerr knows, with its request status per format. Items are remembered once a book page or the Chaptarr scan finds the book in the library, so known items answer from the database.
+        Returns the book an Audiobookshelf library item is of, among the books Allseerr knows, with its request status per format. Items are remembered once a book page or the Chaptarr scan finds the book in the library, so known items answer from the database.
 
-        With `title` (and optionally `author`), an unknown item is looked for: books with that title AllSeerr knows are looked up in Audiobookshelf the way book pages do, which may take a couple of seconds. Works with the personal key from the connect link.
+        With `title` (and optionally `author`), an unknown item is looked for: books with that title Allseerr knows are looked up in Audiobookshelf the way book pages do, which may take a couple of seconds. Works with the personal key from the connect link.
       tags:
         - nobookends
       parameters:
@@ -11258,7 +11258,7 @@ paths:
         - in: query
           name: title
           required: false
-          description: Title of the item, used to find an item AllSeerr has not seen yet
+          description: Title of the item, used to find an item Allseerr has not seen yet
           schema:
             type: string
             example: Fantastic Mr Fox
@@ -11287,7 +11287,7 @@ paths:
                     description: Format the item is of the book
                   mediaId:
                     type: number
-                    description: AllSeerr media ID, for `POST /issue`
+                    description: Allseerr media ID, for `POST /issue`
                     example: 42
                   title:
                     type: string
@@ -11326,7 +11326,7 @@ paths:
         '403':
           description: Not signed in
         '404':
-          description: No book AllSeerr knows has this item
+          description: No book Allseerr knows has this item
   /book/{bookId}:
     get:
       summary: Get book details
@@ -13439,7 +13439,7 @@ paths:
     get:
       summary: List the downloads of every arr
       description: |
-        Lists the queues of every Radarr, Sonarr (4K servers too), Lidarr and Chaptarr server in one list, failed and stuck downloads first. Downloads of media in AllSeerr carry the media IDs, the target for the `/media/{mediaId}/arr` actions and the user who requested it. Answers are kept for 5 seconds. A server that does not answer is listed in `serverErrors`, the other servers are shown anyway.
+        Lists the queues of every Radarr, Sonarr (4K servers too), Lidarr and Chaptarr server in one list, failed and stuck downloads first. Downloads of media in Allseerr carry the media IDs, the target for the `/media/{mediaId}/arr` actions and the user who requested it. Answers are kept for 5 seconds. A server that does not answer is listed in `serverErrors`, the other servers are shown anyway.
 
         Requires the `MANAGE_REQUESTS` permission.
       tags:
@@ -13709,7 +13709,7 @@ paths:
                           nullable: true
                         mediaId:
                           type: number
-                          description: The book in AllSeerr, when it has the Talearr book
+                          description: The book in Allseerr, when it has the Talearr book
                         olId:
                           type: string
                   summary:

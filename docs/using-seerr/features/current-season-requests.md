@@ -8,7 +8,7 @@ sidebar_position: 5
 
 Some series, such as talk shows, news programs and soaps, have many seasons and nobody wants all of them. A **current season** request keeps only the season that is airing now and follows the series from season to season, deleting older seasons as new ones start.
 
-AllSeerr also supports two other partial requests in the series request dialog: **single episodes** (expand a season to pick episodes) and **only future seasons** (Sonarr monitors episodes that have not aired yet, without searching for old ones). Both need **Allow Partial Series Requests** to be enabled in **Settings &rarr; General**.
+Allseerr also supports two other partial requests in the series request dialog: **single episodes** (expand a season to pick episodes) and **only future seasons** (Sonarr monitors episodes that have not aired yet, without searching for old ones). Both need **Allow Partial Series Requests** to be enabled in **Settings &rarr; General**.
 
 ## Turning it on
 

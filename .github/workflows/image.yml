@@ -61,7 +61,7 @@ jobs:
             type=raw,value=develop,enable=${{ github.ref_name == 'develop' }}
             type=sha,prefix=${{ github.ref_name }}-,format=short
           labels: |
-            org.opencontainers.image.title=AllSeerr
+            org.opencontainers.image.title=Allseerr
             org.opencontainers.image.description=Request management for movies, series, music, books and audiobooks, based on Seerr
             org.opencontainers.image.licenses=MIT
 
@@ -153,7 +153,7 @@ jobs:
             type=match,pattern=^v(\d+\.\d+)\.,group=1,enable=${{ needs.verify-tag.outputs.prerelease == 'false' }}
             type=raw,value=latest,enable=${{ needs.verify-tag.outputs.prerelease == 'false' }}
           labels: |
-            org.opencontainers.image.title=AllSeerr
+            org.opencontainers.image.title=Allseerr
             org.opencontainers.image.description=Request management for movies, series, music, books and audiobooks, based on Seerr
             org.opencontainers.image.licenses=MIT
 
@@ -190,7 +190,7 @@ jobs:
           set -euo pipefail
           if [ "$PRERELEASE" = "true" ]; then latest=false; else latest=true; fi
           body="$(jq -n --arg tag "$TAG" --argjson pre "$PRERELEASE" --arg latest "$latest" \
-            '{tag_name: $tag, name: ("AllSeerr " + $tag), generate_release_notes: true, prerelease: $pre, make_latest: $latest}')"
+            '{tag_name: $tag, name: ("Allseerr " + $tag), generate_release_notes: true, prerelease: $pre, make_latest: $latest}')"
           curl -fsS -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \

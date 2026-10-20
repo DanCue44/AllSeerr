@@ -2,7 +2,7 @@ import {
   authHeading,
   authInput,
   authPrimary,
-} from '@app/components/AllSeerr/Auth';
+} from '@app/components/Allseerr/Auth';
 import Button from '@app/components/Common/Button';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
 import JellyfinQuickConnectModal from '@app/components/Login/JellyfinQuickConnectModal';

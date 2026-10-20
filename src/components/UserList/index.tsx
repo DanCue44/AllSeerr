@@ -1,5 +1,5 @@
-import UserAvatar from '@app/components/AllSeerr/RequestList/UserAvatar';
-import { statusTone } from '@app/components/AllSeerr/Title/styles';
+import UserAvatar from '@app/components/Allseerr/RequestList/UserAvatar';
+import { statusTone } from '@app/components/Allseerr/Title/styles';
 import Alert from '@app/components/Common/Alert';
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';

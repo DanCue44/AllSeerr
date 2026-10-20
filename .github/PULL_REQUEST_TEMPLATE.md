@@ -24,7 +24,7 @@
 <!--- Go over all the following points, and put an `x` in all the boxes that apply. -->
 <!--- If you're unsure about any of these, don't hesitate to ask. We're here to help! -->
 
-- [ ] I have read and followed the contribution [guidelines](https://github.com/DanCue44/AllSeerr/blob/main/CONTRIBUTING.md).
+- [ ] I have read and followed the contribution [guidelines](https://github.com/DanCue44/Allseerr/blob/main/CONTRIBUTING.md).
 - [ ] I have updated the documentation accordingly.
 - [ ] All new and existing tests passed (`pnpm test`).
 - [ ] Successful build `pnpm build`

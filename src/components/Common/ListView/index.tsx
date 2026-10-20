@@ -1,4 +1,4 @@
-import { ambientGrid } from '@app/components/AllSeerr/ListPage';
+import { ambientGrid } from '@app/components/Allseerr/ListPage';
 import PersonCard from '@app/components/PersonCard';
 import TitleCard from '@app/components/TitleCard';
 import BookTitleCard from '@app/components/TitleCard/BookTitleCard';

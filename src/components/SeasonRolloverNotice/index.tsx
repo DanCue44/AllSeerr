@@ -1,4 +1,4 @@
-import { Card } from '@app/components/AllSeerr/Title';
+import { Card } from '@app/components/Allseerr/Title';
 import Alert from '@app/components/Common/Alert';
 import Button from '@app/components/Common/Button';
 import useToasts from '@app/hooks/useToasts';
