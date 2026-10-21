@@ -1700,5 +1700,16 @@
   "components.Settings.toggleLibraryFailure": "Misslyckades med att uppdatera biblioteket.",
   "components.Settings.Notifications.NotificationsNtfy.tags": "Taggar",
   "components.Settings.Notifications.NotificationsNtfy.tagsPlaceholder": "eyes,warning",
-  "components.UserList.searchUsers": "Sök…"
+  "components.UserList.searchUsers": "Sök…",
+  "components.Layout.Sidebar.dashboard": "Upptäck",
+  "components.Layout.VersionStatus.streamstable": "Seerr stable",
+  "components.Layout.VersionStatus.streamdevelop": "Seerr develop",
+  "components.Layout.VersionStatus.outofdate": "Föråldrad",
+  "components.Layout.VersionStatus.commitsbehind": "{commitsBehind} {commitsBehind, plural, one {ändring} other {ändringar}} efter",
+  "components.Settings.serviceSettingsDescription": "Konfigurera dina {serverType}-instanser nedan. Du kan ansluta flera {serverType}-instanser, men endast två av dem kan markeras som standard (en icke-4K och en 4K). Administratörer kan åsidosätta instansen som används för att bearbeta nya förfrågningar före godkännande.",
+  "components.NotificationTypeSelector.usermediaavailableDescription": "Få meddelanden när dina medieförfrågningar blir tillgängliga.",
+  "components.Settings.Notifications.usePublicLogoTip": "Om din Seerr-instans inte är offentligt åtkomlig aktiverar du det här alternativet så att e-postklienter utanför ditt nätverk kan visa bilden. Bilden hämtas från det offentliga GitHub-repot.",
+  "components.Settings.SettingsMain.hideRequested": "Dölj begärd media",
+  "components.Settings.SettingsMain.hideRequestedTip": "Dölj media som har begärts från Upptäck-sidorna men inte från sökresultaten",
+  "components.Login.demoModeInfo": "Demoläget är aktiverat. Använd demouppgifterna för att logga in."
 }

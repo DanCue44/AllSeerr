@@ -1697,5 +1697,11 @@
   "components.Settings.Notifications.NotificationsGotify.embedPoster": "Poszter beágyazása",
   "components.Settings.jellyfinSyncFailedConnectionError": "A {mediaServerName} szerver nem elérhető. Ellenőrizze, hogy fut-e és elérhető-e a Allseerr-ből.",
   "components.Settings.toastPlexSyncFailure": "Sikertelen a Plex könyvtárak szinkronizációja.",
-  "components.Settings.toggleLibraryFailure": "Nem sikerült a könyvtár frissítése."
+  "components.Settings.toggleLibraryFailure": "Nem sikerült a könyvtár frissítése.",
+  "components.Settings.Notifications.NotificationsNtfy.tags": "Címkék",
+  "components.UserList.searchUsers": "Keresés…",
+  "components.Settings.SettingsMain.hideRequested": "A kért média elrejtése",
+  "components.Settings.SettingsMain.hideRequestedTip": "A felfedező oldalakról kért médiaelemek elrejtése a keresési találatok között",
+  "components.Settings.Notifications.NotificationsNtfy.tagsPlaceholder": "megfigyelés,figyelmeztetés",
+  "components.Login.demoModeInfo": "A demó mód engedélyezve van. A demóhoz tartozó bejelentkezési adatokkal jelentkezzen be."
 }

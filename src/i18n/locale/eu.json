@@ -1686,5 +1686,7 @@
   "components.UserProfile.UserSettings.LinkJellyfinQuickConnectModal.usePassword": "Erabili pasahitza horren ordez",
   "hooks.useQuickConnect.errorMessage": "Quick Connect hasieratzeak huts egin du. Mesedez, saiatu berriro.",
   "i18n.sync": "Sinkronizazioa",
-  "i18n.syncing": "Sinkronizatzen…"
+  "i18n.syncing": "Sinkronizatzen…",
+  "components.Settings.Notifications.NotificationsNtfy.tags": "Etiketak",
+  "components.Settings.Notifications.NotificationsNtfy.tagsPlaceholder": "begiak,oharra"
 }

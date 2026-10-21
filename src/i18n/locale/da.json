@@ -972,7 +972,7 @@
   "components.Settings.SettingsJobsCache.imagecachecount": "Cachelagrede billeder",
   "components.Settings.SettingsLogs.viewdetails": "Se detaljer",
   "components.Settings.SettingsJobsCache.imagecachesize": "Samlet cachestørrelse",
-  "components.StatusChecker.appUpdated": "{applicationTitle} opdateret",
+  "components.StatusChecker.appUpdated": "{applicationTitle} er blevet opdateret",
   "components.StatusChecker.appUpdatedDescription": "Klik venligst på knappen nedenfor for at genindlæse applikationen.",
   "components.StatusChecker.reloadApp": "Genindlæs {applicationTitle}",
   "components.TitleCard.cleardata": "Ryd data",
@@ -1700,5 +1700,8 @@
   "components.Settings.toggleLibraryFailure": "Kunne ikke opdatere biblioteket.",
   "components.UserList.searchUsers": "Søg…",
   "components.Settings.Notifications.NotificationsNtfy.tags": "Tags",
-  "components.Settings.Notifications.NotificationsNtfy.tagsPlaceholder": "eyes,warning"
+  "components.Settings.Notifications.NotificationsNtfy.tagsPlaceholder": "eyes,warning",
+  "components.Settings.SettingsMain.hideRequested": "Skjul anmodede medier",
+  "components.Settings.SettingsMain.hideRequestedTip": "Skjul medier, der er anmodet om, fra Udforsk-siderne, men ikke fra søgeresultaterne",
+  "components.Login.demoModeInfo": "Demotilstand er aktiveret. Brug demo-loginoplysningerne til at logge ind."
 }

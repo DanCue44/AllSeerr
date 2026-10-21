@@ -1697,5 +1697,11 @@
   "components.ManageSlideOver.clearmediadataerror": "Wystąpił błąd podczas czyszczenia danych multimediów.",
   "components.ManageSlideOver.removemediaerror": "Wystąpił błąd podczas usuwania multimediów.",
   "components.RequestList.RequestItem.removemediaerror": "Wystąpił błąd podczas usuwania multimedia.",
-  "components.Settings.Notifications.NotificationsGotify.embedPoster": "Dołącz plakat"
+  "components.Settings.Notifications.NotificationsGotify.embedPoster": "Dołącz plakat",
+  "components.Login.demoModeInfo": "Tryb demo jest włączony. Użyj loginu i hasła dla wersji demo, by się zalogować.",
+  "components.Settings.Notifications.NotificationsNtfy.tags": "Tagi",
+  "components.Settings.Notifications.NotificationsNtfy.tagsPlaceholder": "oczy,ostrzeżenie",
+  "components.Settings.SettingsMain.hideRequested": "Ukryj poproszone media",
+  "components.Settings.SettingsMain.hideRequestedTip": "Ukryj media, o które poproszono w zakładce Odkryj, lecz nie z wyników wyszukiwania",
+  "components.UserList.searchUsers": "Wyszukaj…"
 }
