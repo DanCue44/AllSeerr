@@ -20,6 +20,8 @@ When you give someone an app, Allseerr links an existing account with the same u
 
 Taking an app away locks the account instead of deleting it, so reading progress is kept. Use **Delete account** to delete it from the app.
 
+Audiobookshelf and Kavita turn a locked account off, so it can no longer sign in. Komga has no way to turn an account off: Allseerr removes all of its libraries and its reading and download rights instead, so the person can still sign in to Komga but sees nothing. Use **Delete account** if they must not be able to sign in at all.
+
 The **User Access Sync** job (every 30 minutes) puts libraries, age limits and locks back the way Allseerr has them. It never creates accounts.
 
 ## Invites
