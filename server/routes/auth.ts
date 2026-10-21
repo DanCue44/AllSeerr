@@ -8,6 +8,12 @@ import { User } from '@server/entity/User';
 import { startJobs } from '@server/job/schedule';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import {
+  describeInvite,
+  findValidInvite,
+  hasRedeemedInvite,
+  redeemInvite,
+} from '@server/lib/userAccess/invites';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { checkAvatarChanged } from '@server/routes/avatarproxy';
@@ -72,7 +78,7 @@ authRoutes.get('/me', isAuthenticated(), async (req, res) => {
 authRoutes.post('/plex', async (req, res, next) => {
   const settings = getSettings();
   const userRepository = getRepository(User);
-  const body = req.body as { authToken?: string };
+  const body = req.body as { authToken?: string; inviteToken?: string };
 
   if (!body.authToken) {
     return next({
@@ -92,6 +98,11 @@ authRoutes.post('/plex', async (req, res, next) => {
     // First we need to use this auth token to get the user's email from plex.tv
     const plextv = new PlexTvAPI(body.authToken);
     const account = await plextv.getUser();
+
+    // An invite lets a Plex account in that has no access to the server
+    const invite = body.inviteToken
+      ? await findValidInvite(body.inviteToken)
+      : null;
 
     // Next let's see if the user already exists
     let user = await userRepository
@@ -142,6 +153,8 @@ authRoutes.post('/plex', async (req, res, next) => {
       if (
         account.id === mainUser.plexId ||
         (account.email === mainUser.email && !mainUser.plexId) ||
+        !!invite ||
+        (!!user && (await hasRedeemedInvite(user.id))) ||
         (await mainPlexTv.checkUserAccess(account.id))
       ) {
         if (user) {
@@ -167,7 +180,7 @@ authRoutes.post('/plex', async (req, res, next) => {
           user.userType = UserType.PLEX;
 
           await userRepository.save(user);
-        } else if (!settings.main.newPlexLogin) {
+        } else if (!settings.main.newPlexLogin && !invite) {
           logger.warn(
             'Failed sign-in attempt by unimported Plex user with access to the media server',
             {
@@ -241,6 +254,53 @@ authRoutes.post('/plex', async (req, res, next) => {
     });
   }
 });
+
+/**
+ * What an invite link opens, shown before signing in
+ */
+authRoutes.get<{ token: string }>('/invite/:token', async (req, res, next) => {
+  const invite = await findValidInvite(req.params.token);
+
+  if (!invite) {
+    return next({
+      status: 404,
+      message: 'This invite link is not valid anymore.',
+    });
+  }
+
+  return res.status(200).json(describeInvite(invite));
+});
+
+/**
+ * Gives the signed in person what their invite names. The passwords of
+ * accounts made for them are shown once, to them.
+ */
+authRoutes.post<{ token: string }>(
+  '/invite/:token/redeem',
+  isAuthenticated(),
+  async (req, res, next) => {
+    const invite = await findValidInvite(req.params.token);
+
+    if (!invite) {
+      return next({
+        status: 404,
+        message: 'This invite link is not valid anymore.',
+      });
+    }
+
+    try {
+      const passwords = await redeemInvite(invite, req.user!);
+      return res.status(200).json({ passwords });
+    } catch (e) {
+      logger.error('Failed to redeem an invite', {
+        label: 'User Access',
+        userId: req.user?.id,
+        message: (e as Error).message,
+      });
+      return next({ status: 500, message: 'Failed to use the invite.' });
+    }
+  }
+);
 
 function getUserAvatarUrl(user: User): string {
   return `/avatarproxy/${user.jellyfinUserId}?v=${user.avatarVersion}`;

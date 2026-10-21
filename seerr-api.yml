@@ -1047,6 +1047,55 @@ components:
           type: string
         emailed:
           type: boolean
+    UserAccessInvite:
+      type: object
+      properties:
+        id:
+          type: number
+        label:
+          type: string
+          nullable: true
+        apps:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              libraryIds:
+                type: array
+                nullable: true
+                items:
+                  type: string
+        ageLimit:
+          type: string
+          nullable: true
+        includeUnrated:
+          type: boolean
+        expiresAt:
+          type: string
+        redeemedAt:
+          type: string
+          nullable: true
+        redeemedBy:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: number
+            displayName:
+              type: string
+        revokedAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        createdBy:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: number
+            displayName:
+              type: string
     UserAccessUpdateResult:
       type: object
       properties:
@@ -5356,6 +5405,89 @@ paths:
                 $ref: '#/components/schemas/UserAccessNewPassword'
         '400':
           description: The person has no account in the app
+  /user-access/invites:
+    get:
+      summary: List invite links
+      tags:
+        - user-access
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserAccessInvite'
+    post:
+      summary: Make an invite link
+      description: The link lets one person sign in with Plex, even without access to the Plex server, and gives them the apps, libraries and age limit named here. The link is returned only now.
+      tags:
+        - user-access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                  nullable: true
+                  description: Who the invite is for, shown to admins only
+                days:
+                  type: number
+                  description: How long the link works, 7 days unless set, at most 90
+                ageLimit:
+                  type: string
+                  nullable: true
+                  enum: [none, teen, tween, kids, null]
+                includeUnrated:
+                  type: boolean
+                apps:
+                  type: object
+                  additionalProperties:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                      libraryIds:
+                        type: array
+                        nullable: true
+                        items:
+                          type: string
+      responses:
+        '201':
+          description: The invite and its link
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invite:
+                    $ref: '#/components/schemas/UserAccessInvite'
+                  link:
+                    type: string
+                  token:
+                    type: string
+        '400':
+          description: The invite is not valid
+  /user-access/invites/{id}:
+    delete:
+      summary: Revoke an invite link
+      tags:
+        - user-access
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '204':
+          description: Revoked
+        '404':
+          description: Invite not found
   /settings/user-access:
     get:
       summary: Get the app connections for user access
@@ -7497,8 +7629,67 @@ paths:
               properties:
                 authToken:
                   type: string
+                inviteToken:
+                  type: string
+                  description: The token of an invite link. It lets in a Plex account without access to the server; the invite is used up by `/auth/invite/{token}/redeem`.
               required:
                 - authToken
+  /auth/invite/{token}:
+    get:
+      summary: Describe an invite link
+      description: The apps an invite gives, before signing in. Answers 404 once the invite is used, revoked or expired.
+      security: []
+      tags:
+        - auth
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      type: string
+                    example: ['Kavita']
+                  expiresAt:
+                    type: string
+        '404':
+          description: The invite is not valid anymore
+  /auth/invite/{token}/redeem:
+    post:
+      summary: Use an invite link
+      description: Gives the signed in user the apps, libraries and age limit the invite names and uses it up. Accounts made for them come back with their passwords, once.
+      tags:
+        - auth
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The invite was used
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  passwords:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/UserAccessNewPassword'
+        '404':
+          description: The invite is not valid anymore
   /auth/jellyfin:
     post:
       summary: Sign in using a Jellyfin username and password

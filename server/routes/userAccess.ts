@@ -7,6 +7,7 @@ import {
 } from '@server/constants/userAccess';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
+import { getSettings } from '@server/lib/settings';
 import type {
   PersonAccess,
   PersonAccessChanges,
@@ -24,6 +25,12 @@ import {
   updatePerson,
 } from '@server/lib/userAccess';
 import { isAgeLimit } from '@server/lib/userAccess/ageLimits';
+import type { InviteSummary } from '@server/lib/userAccess/invites';
+import {
+  createInvite,
+  listInvites,
+  revokeInvite,
+} from '@server/lib/userAccess/invites';
 import logger from '@server/logger';
 import { Router } from 'express';
 
@@ -262,6 +269,80 @@ userAccessRoutes.delete<{ userId: string; app: string }, PersonAccess>(
         message: `${USER_ACCESS_APP_NAMES[app]}: ${(e as Error).message}`,
       });
     }
+  }
+);
+
+userAccessRoutes.get<never, InviteSummary[]>('/invites', async (_req, res) => {
+  res.status(200).json(await listInvites());
+});
+
+/**
+ * Makes an invite link. The link is only shown now, Allseerr keeps a hash
+ * of it.
+ */
+userAccessRoutes.post<
+  never,
+  { invite: InviteSummary; link: string; token: string }
+>('/invites', async (req, res, next) => {
+  const parsed = parsePersonChanges({
+    ageLimit: req.body?.ageLimit,
+    includeUnrated: req.body?.includeUnrated,
+    apps: req.body?.apps ?? {},
+  });
+  const days = req.body?.days;
+  const label = req.body?.label;
+
+  if (typeof parsed === 'string') {
+    return next({ status: 400, message: parsed });
+  }
+  if (
+    days !== undefined &&
+    (typeof days !== 'number' || !Number.isFinite(days) || days <= 0)
+  ) {
+    return next({ status: 400, message: 'Invalid number of days.' });
+  }
+  if (
+    label !== undefined &&
+    label !== null &&
+    (typeof label !== 'string' || label.length > 100)
+  ) {
+    return next({ status: 400, message: 'Invalid label.' });
+  }
+
+  const apps = Object.fromEntries(
+    Object.entries(parsed.apps ?? {})
+      .filter(([, access]) => access.enabled !== false)
+      .map(([app, access]) => [app, { libraryIds: access.libraryIds ?? null }])
+  );
+
+  if (!Object.keys(apps).length) {
+    return next({ status: 400, message: 'Pick at least one app.' });
+  }
+
+  const { invite, token } = await createInvite(req.user!, {
+    label,
+    apps,
+    ageLimit: parsed.ageLimit,
+    includeUnrated: parsed.includeUnrated,
+    days,
+  });
+  const base = getSettings().main.applicationUrl.replace(/\/+$/, '');
+
+  return res
+    .status(201)
+    .json({ invite, token, link: `${base}/invite/${token}` });
+});
+
+userAccessRoutes.delete<{ id: string }>(
+  '/invites/:id',
+  async (req, res, next) => {
+    const id = Number(req.params.id);
+
+    if (!Number.isInteger(id) || !(await revokeInvite(id))) {
+      return next({ status: 404, message: 'Invite not found.' });
+    }
+
+    return res.status(204).send();
   }
 );
 
