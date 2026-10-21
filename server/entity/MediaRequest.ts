@@ -64,6 +64,8 @@ import {
   isActiveRecordingRequest,
   isSameRecording,
 } from '@server/lib/talearrRecordings';
+import type { AgeLimit } from '@server/lib/userAccess/ageLimits';
+import { canRequestWork, isRestricted } from '@server/lib/userAccess/ageLimits';
 import { getBlockingProviders } from '@server/lib/watchProviderBlock';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
@@ -90,6 +92,7 @@ import Media from './Media';
 import { episodeNumbersTransformer } from './Season';
 import SeasonRequest from './SeasonRequest';
 import { User } from './User';
+import { UserAccessProfile } from './UserAccessProfile';
 
 export class RequestPermissionError extends Error {}
 export class QuotaRestrictedError extends Error {}
@@ -871,6 +874,24 @@ export class MediaRequest {
    * against the book quota. Request Books grants book requests on its own,
    * the way Request Music does for albums.
    */
+  /**
+   * The age limit of the person a request is for, null without one. Admins
+   * are never limited.
+   */
+  private static async getRequestAgeLimit(
+    requestUser: User
+  ): Promise<AgeLimit | null> {
+    if (requestUser.hasPermission(Permission.ADMIN)) {
+      return null;
+    }
+
+    const profile = await getRepository(UserAccessProfile).findOne({
+      where: { user: { id: requestUser.id } },
+    });
+
+    return isRestricted(profile?.ageLimit) ? profile.ageLimit : null;
+  }
+
   private static async createBookRequest(
     requestBody: MediaRequestBody,
     user: User,
@@ -961,11 +982,23 @@ export class MediaRequest {
 
     // Makes sure the work exists before anything is saved. A merged work is
     // requested as the work it was merged into.
-    const olId = options.skipMetadataLookup
-      ? String(requestBody.mediaId)
-      : getOlId(
-          (await new OpenLibrary().getWork(String(requestBody.mediaId))).key
-        );
+    const work = options.skipMetadataLookup
+      ? null
+      : await new OpenLibrary().getWork(String(requestBody.mediaId));
+    const olId = work ? getOlId(work.key) : String(requestBody.mediaId);
+
+    // A person with an age limit cannot request a book written for adults,
+    // and their requests wait for someone who manages requests
+    const ageLimit = await MediaRequest.getRequestAgeLimit(requestUser);
+
+    if (!canRequestWork(ageLimit, work?.subjects)) {
+      throw new RequestPermissionError(
+        'This book is written for adults, and your account has an age limit.'
+      );
+    }
+
+    const needsApproval =
+      !!ageLimit && !user.hasPermission(Permission.MANAGE_REQUESTS);
 
     let media = await mediaRepository.findOne({
       where: { olId, mediaType: MediaType.BOOK },
@@ -1023,10 +1056,14 @@ export class MediaRequest {
 
     // If the user is an admin or has the "auto approve" permission,
     // automatically approve the request
-    const hasAutoApprovePermission = user.hasPermission(
-      [Permission.AUTO_APPROVE, Permission.MANAGE_REQUESTS],
-      { type: 'or' }
-    );
+    const hasAutoApprovePermission =
+      !needsApproval &&
+      user.hasPermission(
+        [Permission.AUTO_APPROVE, Permission.MANAGE_REQUESTS],
+        {
+          type: 'or',
+        }
+      );
 
     await mediaRepository.save(media);
 
