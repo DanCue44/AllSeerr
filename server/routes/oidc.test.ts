@@ -124,7 +124,10 @@ const pathOf = (location: string): string => {
  * Runs the browser side of a sign in, from the app's authorize link to the
  * redirect back to the app
  */
-async function signIn(agent: ReturnType<typeof request.agent>) {
+async function signIn(
+  agent: ReturnType<typeof request.agent>,
+  prompt: string | undefined = 'consent'
+) {
   const start = await agent.get('/oidc/auth').query({
     client_id: 'allseerr-kavita',
     redirect_uri: KAVITA_REDIRECT,
@@ -132,7 +135,7 @@ async function signIn(agent: ReturnType<typeof request.agent>) {
     scope: 'openid profile email roles offline_access',
     state: 'state-1',
     nonce: 'nonce-1',
-    prompt: 'consent',
+    ...(prompt ? { prompt } : {}),
   });
   assert.equal(start.status, 303, start.text);
   const interaction = pathOf(start.headers.location);
@@ -237,6 +240,48 @@ describe('sign in with Allseerr', () => {
 
     assert.equal(back.searchParams.get('error'), 'access_denied');
     assert.equal(back.searchParams.get('code'), null);
+  });
+
+  it('stops a signed in person as soon as their access is taken away', async () => {
+    const user = await demoUser();
+    await updatePerson(user.id, { apps: { kavita: { enabled: true } } });
+    const agent = await loginAs('demo@seerr.dev');
+    const code = (await signIn(agent)).searchParams.get('code');
+    const token = await request(server)
+      .post('/oidc/token')
+      .type('form')
+      .send({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: KAVITA_REDIRECT,
+        client_id: 'allseerr-kavita',
+        client_secret: clientSecret,
+      })
+      .expect(200);
+
+    await updatePerson(user.id, { apps: { kavita: { enabled: false } } });
+
+    // The Allseerr session and the earlier approval are still there (an app
+    // coming back sends no prompt), but no new code is handed out
+    const back = await signIn(agent, undefined);
+    assert.equal(back.searchParams.get('code'), null);
+    assert.equal(back.searchParams.get('error'), 'access_denied');
+
+    await request(server)
+      .post('/oidc/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: token.body.refresh_token,
+        client_id: 'allseerr-kavita',
+        client_secret: clientSecret,
+      })
+      .expect(400);
+
+    await request(server)
+      .get('/oidc/me')
+      .set('Authorization', `Bearer ${token.body.access_token}`)
+      .expect(401);
   });
 
   it('refuses a wrong client secret', async () => {

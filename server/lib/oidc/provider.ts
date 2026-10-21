@@ -144,6 +144,38 @@ export const canSignInTo = async (
   return !!account?.enabled;
 };
 
+// The routes of a sign in, where a missing account would end in an error page
+// instead of the access denied redirect the login prompt gives
+const SIGN_IN_ROUTES = new Set(['authorization', 'resume']);
+
+/**
+ * Reuses an earlier approval only while the person still has access to the app,
+ * so a person whose access was taken away is sent to the login prompt, which
+ * turns them away
+ */
+const loadExistingGrant = async (ctx: KoaContextWithOIDC) => {
+  const clientId = ctx.oidc.client?.clientId;
+  const grantId =
+    ctx.oidc.result?.consent?.grantId ||
+    (clientId ? ctx.oidc.session?.grantIdFor(clientId) : undefined);
+
+  if (!grantId || !clientId) {
+    return undefined;
+  }
+
+  const app = getClientApp(clientId);
+  const userId = Number(ctx.oidc.session?.accountId);
+  const user = Number.isInteger(userId)
+    ? await getRepository(User).findOne({ where: { id: userId } })
+    : null;
+
+  if (app && (!user || !(await canSignInTo(user, app)))) {
+    return undefined;
+  }
+
+  return ctx.oidc.provider.Grant.find(grantId);
+};
+
 const findAccount = async (
   ctx: KoaContextWithOIDC,
   sub: string
@@ -159,6 +191,17 @@ const findAccount = async (
 
   const clientId = ctx.oidc.client?.clientId;
   const app = clientId ? getClientApp(clientId) : null;
+
+  // A person whose app access was taken away keeps their Allseerr session, so
+  // tokens, refreshes and user info check access again. Sign in itself goes
+  // through loadExistingGrant, which sends them back to the login prompt
+  if (
+    app &&
+    !SIGN_IN_ROUTES.has(ctx.oidc.route) &&
+    !(await canSignInTo(user, app))
+  ) {
+    return undefined;
+  }
 
   return {
     accountId: sub,
@@ -205,6 +248,7 @@ const buildProvider = async (
     },
     clientAuthMethods: ['client_secret_basic', 'client_secret_post'],
     findAccount,
+    loadExistingGrant,
     claims: OIDC_SCOPE_CLAIMS,
     scopes: ['openid', 'offline_access', ...Object.keys(OIDC_SCOPE_CLAIMS)],
     // Apps such as Kavita read the claims from the ID token, not only from
