@@ -2294,6 +2294,7 @@
   "components.Settings.SettingsJobsCache.size": "Size",
   "components.Settings.SettingsJobsCache.sonarr-scan": "Sonarr Scan",
   "components.Settings.SettingsJobsCache.unknownJob": "Unknown Job",
+  "components.Settings.SettingsJobsCache.user-access-sync": "User Access Sync",
   "components.Settings.SettingsJobsCache.usersavatars": "Users' Avatars",
   "components.Settings.SettingsLogs.copiedLogMessage": "Copied log message to clipboard.",
   "components.Settings.SettingsLogs.copyToClipboard": "Copy to Clipboard",

@@ -95,6 +95,7 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages(
     'process-blocklisted-tags': 'Process Blocklisted Tags',
     'recently-added-newsletter': 'Recently Added Newsletter',
     'followed-releases': 'Followed Artist and Author Releases',
+    'user-access-sync': 'User Access Sync',
     editJobSchedule: 'Modify Job',
     jobScheduleEditSaved: 'Job edited successfully!',
     jobScheduleEditFailed: 'Something went wrong while saving the job.',

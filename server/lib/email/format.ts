@@ -13,6 +13,9 @@ const messages = defineMessages('notifications.email', {
   manageNotifications: 'Manage notifications',
   accountCreated: 'An account has been created for you at {applicationTitle}.',
   yourPassword: 'Your password',
+  appAccountCreated:
+    '{applicationTitle} made you an account in {appName}. Sign in with these details, then change the password if you like.',
+  yourUsername: 'Your username',
   resetRequested:
     'A request has been received to change the password for your {applicationTitle} account.',
   resetPassword: 'Reset Password',
@@ -129,6 +132,7 @@ export const getEmailLayoutLocals = ({
         applicationTitle,
       }),
       yourPassword: intl.formatMessage(messages.yourPassword),
+      yourUsername: intl.formatMessage(messages.yourUsername),
       resetRequested: intl.formatMessage(messages.resetRequested, {
         applicationTitle,
       }),
@@ -138,3 +142,6 @@ export const getEmailLayoutLocals = ({
     },
   };
 };
+
+// The labels, for emails that word their own sentences
+export { messages as emailMessages };

@@ -1,0 +1,20 @@
+extends ../_partials/layout.pug
+
+block content
+  +text
+    | #{appAccountCreated}
+  tr
+    td(style='padding:4px 0 20px;')
+      table.as-bg-surface.as-b-line(width='100%' bgcolor=C.surface style=`width:100%;background-color:${C.surface};border:1px solid ${C.line};border-radius:16px;border-collapse:separate;`)&attributes(TABLE)
+        tr
+          td.as-card-pad(style='padding:20px;')
+            div.as-c-faint(style=`font-family:${F.body};font-size:11px;line-height:16px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${C.inkFaint};`)
+              | #{yourUsernameLabel}
+            div.as-c-ink(style=`padding-top:8px;font-family:${F.mono};font-size:20px;line-height:28px;font-weight:600;letter-spacing:0.04em;color:${C.ink};word-break:break-all;`)
+              | #{username}
+            div.as-c-faint(style=`padding-top:16px;font-family:${F.body};font-size:11px;line-height:16px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${C.inkFaint};`)
+              | #{labels.yourPassword}
+            div.as-c-ink(style=`padding-top:8px;font-family:${F.mono};font-size:20px;line-height:28px;font-weight:600;letter-spacing:0.04em;color:${C.ink};word-break:break-all;`)
+              | #{password}
+  if appUrl
+    +button(appUrl, openAppLabel)

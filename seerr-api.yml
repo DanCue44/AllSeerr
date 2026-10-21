@@ -19,6 +19,9 @@ tags:
     description: Endpoints related to logging in or out, and the currently authenticated user.
   - name: users
     description: Endpoints related to user management.
+  - name: user-access
+    description: |
+      Accounts Allseerr manages for the people it knows in Audiobookshelf, Kavita and Komga: who may use which app and libraries, an age limit per person passed on to every app, and invite links. Needs the Manage Users permission; the app connections are settings and need an admin.
   - name: search
     description: Endpoints related to search and discovery.
   - name: request
@@ -913,6 +916,147 @@ components:
           nullable: true
           deprecated: true
           description: Moved to AudiobookshelfSettings.libraryId.
+    UserAccessAppConnection:
+      type: object
+      description: How Allseerr reaches an app to manage its accounts. Secrets are never returned, only whether they are saved. Leaving a secret out keeps the saved one, an empty one removes it.
+      properties:
+        url:
+          type: string
+          description: The address the server reaches the app at
+          example: 'http://kavita:5000'
+        publicUrl:
+          type: string
+          description: The address people open the app at, used in emails
+          example: 'https://comics.example.com'
+        apiKey:
+          type: string
+          writeOnly: true
+          description: An API key of an admin of the app
+        username:
+          type: string
+          description: An admin's username (Kavita) or email (Komga), when no API key is used
+        password:
+          type: string
+          writeOnly: true
+        apiKeySet:
+          type: boolean
+          readOnly: true
+        passwordSet:
+          type: boolean
+          readOnly: true
+    UserAccessSettings:
+      type: object
+      properties:
+        audiobookshelf:
+          $ref: '#/components/schemas/UserAccessAppConnection'
+        kavita:
+          $ref: '#/components/schemas/UserAccessAppConnection'
+        komga:
+          $ref: '#/components/schemas/UserAccessAppConnection'
+        emailPasswords:
+          type: boolean
+          description: Emails new app passwords to people when email notifications are set up
+    UserAccessAppLibrary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    UserAccessAppInfo:
+      type: object
+      properties:
+        app:
+          type: string
+          enum: [audiobookshelf, kavita, komga]
+        name:
+          type: string
+        connected:
+          type: boolean
+        publicUrl:
+          type: string
+          nullable: true
+        libraries:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserAccessAppLibrary'
+        error:
+          type: string
+          nullable: true
+    UserAccessPersonApp:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        libraryIds:
+          type: array
+          nullable: true
+          description: Libraries the person may open, null for all of them
+          items:
+            type: string
+        status:
+          type: string
+          enum: [none, active, disabled, error]
+        remoteUsername:
+          type: string
+          nullable: true
+        lastError:
+          type: string
+          nullable: true
+        syncedAt:
+          type: string
+          nullable: true
+    UserAccessPerson:
+      type: object
+      properties:
+        userId:
+          type: number
+        displayName:
+          type: string
+        email:
+          type: string
+        avatar:
+          type: string
+        userType:
+          type: number
+        isAdmin:
+          type: boolean
+        ageLimit:
+          type: string
+          nullable: true
+          enum: [none, teen, tween, kids, null]
+          description: kids is up to 9, tween up to 12 and teen up to 15. Admins are never limited.
+        includeUnrated:
+          type: boolean
+          description: Whether content without an age rating is shown under a limit
+        apps:
+          type: object
+          properties:
+            audiobookshelf:
+              $ref: '#/components/schemas/UserAccessPersonApp'
+            kavita:
+              $ref: '#/components/schemas/UserAccessPersonApp'
+            komga:
+              $ref: '#/components/schemas/UserAccessPersonApp'
+    UserAccessNewPassword:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        emailed:
+          type: boolean
+    UserAccessUpdateResult:
+      type: object
+      properties:
+        person:
+          $ref: '#/components/schemas/UserAccessPerson'
+        passwords:
+          type: object
+          description: Passwords of accounts made while saving, by app. Shown once, never stored.
+          additionalProperties:
+            $ref: '#/components/schemas/UserAccessNewPassword'
     AudiobookshelfSettings:
       type: object
       properties:
@@ -5053,6 +5197,233 @@ paths:
                     description: Only returned when an API key was given
                     items:
                       $ref: '#/components/schemas/AudiobookshelfLibrary'
+  /user-access/apps:
+    get:
+      summary: List the apps user access manages
+      description: Each app with whether it is connected and its libraries.
+      tags:
+        - user-access
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserAccessAppInfo'
+  /user-access/people:
+    get:
+      summary: List everyone's app access
+      tags:
+        - user-access
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserAccessPerson'
+  /user-access/people/{userId}:
+    parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: number
+    get:
+      summary: Get a person's app access
+      tags:
+        - user-access
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccessPerson'
+        '404':
+          description: User not found
+    post:
+      summary: Update a person's app access
+      description: Saves the person's age limit and app access, then makes, links, updates or turns off their account in each app. Accounts made here get a new password, returned once and emailed when email is set up.
+      tags:
+        - user-access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ageLimit:
+                  type: string
+                  nullable: true
+                  enum: [none, teen, tween, kids, null]
+                includeUnrated:
+                  type: boolean
+                apps:
+                  type: object
+                  additionalProperties:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                      libraryIds:
+                        type: array
+                        nullable: true
+                        items:
+                          type: string
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccessUpdateResult'
+        '400':
+          description: The change is not valid
+        '404':
+          description: User not found
+  /user-access/people/{userId}/sync:
+    post:
+      summary: Sync a person's app accounts again
+      tags:
+        - user-access
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Synced
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccessUpdateResult'
+  /user-access/people/{userId}/apps/{app}:
+    delete:
+      summary: Delete a person's account in an app
+      description: Deletes the account in the app, with its reading progress, and takes away the person's access to the app.
+      tags:
+        - user-access
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccessPerson'
+  /user-access/people/{userId}/apps/{app}/password:
+    post:
+      summary: Give a person a new password in an app
+      tags:
+        - user-access
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      responses:
+        '200':
+          description: The new password, shown once
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccessNewPassword'
+        '400':
+          description: The person has no account in the app
+  /settings/user-access:
+    get:
+      summary: Get the app connections for user access
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccessSettings'
+    post:
+      summary: Update the app connections for user access
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserAccessSettings'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccessSettings'
+        '400':
+          description: An address is not an http or https address
+  /settings/user-access/{app}/test:
+    post:
+      summary: Test an app connection for user access
+      description: Checks the address and that the credentials belong to an admin, with the saved ones where none are sent, and lists the app's libraries.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserAccessAppConnection'
+      responses:
+        '200':
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                  libraries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserAccessAppLibrary'
+        '400':
+          description: The address or credentials are missing
+        '502':
+          description: The app could not be reached or refused the credentials
   /settings/audiobookshelf/match-authors:
     post:
       summary: Match Audiobookshelf authors

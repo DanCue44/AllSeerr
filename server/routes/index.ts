@@ -61,6 +61,7 @@ import searchRoutes from './search';
 import serviceRoutes from './service';
 import tvRoutes from './tv';
 import user from './user';
+import userAccessRoutes from './userAccess';
 
 const router = Router();
 
@@ -183,6 +184,11 @@ router.use('/artist', isAuthenticated(), artistRoutes);
 router.use('/coverart', isAuthenticated(), coverArtRoutes);
 router.use('/book', isAuthenticated(), bookRoutes);
 router.use('/nobookends', isAuthenticated(), nobookendsRoutes);
+router.use(
+  '/user-access',
+  isAuthenticated(Permission.MANAGE_USERS),
+  userAccessRoutes
+);
 router.use('/author', isAuthenticated(), authorRoutes);
 router.use('/media/:mediaId/arr', isAuthenticated(), arrActionRoutes);
 router.use('/media', isAuthenticated(), mediaRoutes);

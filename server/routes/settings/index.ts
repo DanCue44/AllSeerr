@@ -74,6 +74,7 @@ import nobookendsSyncRoutes from './nobookendsSync';
 import notificationRoutes from './notifications';
 import radarrRoutes from './radarr';
 import sonarrRoutes from './sonarr';
+import userAccessSettingsRoutes from './userAccess';
 
 const settingsRoutes = Router();
 
@@ -84,6 +85,7 @@ settingsRoutes.use('/lidarr', lidarrRoutes);
 settingsRoutes.use('/chaptarr', chaptarrRoutes);
 settingsRoutes.use('/audiobookshelf', audiobookshelfRoutes);
 settingsRoutes.use('/nobookends-sync', nobookendsSyncRoutes);
+settingsRoutes.use('/user-access', userAccessSettingsRoutes);
 settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 

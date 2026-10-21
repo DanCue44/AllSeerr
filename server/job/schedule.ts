@@ -18,6 +18,7 @@ import { radarrScanner } from '@server/lib/scanners/radarr';
 import { sonarrScanner } from '@server/lib/scanners/sonarr';
 import type { JobId } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { isSyncRunning, syncEveryone } from '@server/lib/userAccess';
 import watchlistSync from '@server/lib/watchlistsync';
 import logger from '@server/logger';
 import schedule from 'node-schedule';
@@ -353,6 +354,28 @@ export const startJobs = (): void => {
     }),
     running: () => followedReleases.running,
     cancelFn: () => followedReleases.cancel(),
+  });
+
+  // Keeps the accounts Allseerr manages in other apps in line with each
+  // person's access, and links accounts made by signing in with Allseerr
+  scheduledJobs.push({
+    id: 'user-access-sync',
+    name: 'User Access Sync',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['user-access-sync'].schedule,
+    job: schedule.scheduleJob(jobs['user-access-sync'].schedule, () => {
+      logger.debug('Starting scheduled job: User Access Sync', {
+        label: 'Jobs',
+      });
+      syncEveryone().catch((e) => {
+        logger.error('Failed to sync user access', {
+          label: 'Jobs',
+          errorMessage: e.message,
+        });
+      });
+    }),
+    running: () => isSyncRunning(),
   });
 
   logger.info('Scheduled jobs loaded', { label: 'Jobs' });
