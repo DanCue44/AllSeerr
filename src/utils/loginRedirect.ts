@@ -3,7 +3,7 @@
  * outside Allseerr and need a signed in user are allowed, so a crafted link
  * can never send someone elsewhere after they sign in.
  */
-const NEXT_PATH_PREFIXES = ['/nobookends/'];
+const NEXT_PATH_PREFIXES = ['/nobookends/', '/signin/', '/invite/'];
 
 const NEXT_MAX_LENGTH = 512;
 

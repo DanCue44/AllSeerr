@@ -316,6 +316,8 @@
   "components.Allseerr.NoBookEndsConnect.switchUser": "Not {name}? Sign in as someone else",
   "components.Allseerr.NoBookEndsConnect.title": "Connect NoBookEnds",
   "components.Allseerr.NoBookEndsConnect.unavailable": "NoBookEnds can be connected once an admin sets up books and Audiobookshelf.",
+  "components.Allseerr.OidcSignIn.signingIn": "Signing you in with {applicationTitle}…",
+  "components.Allseerr.OidcSignIn.title": "Signing in",
   "components.Allseerr.PersonDetails.age": "{age} years old",
   "components.Allseerr.PersonDetails.agedied": "aged {age}",
   "components.Allseerr.PersonDetails.alsoknownas": "Also Known As",

@@ -21,6 +21,12 @@ describe('getSafeNextPath', () => {
     );
   });
 
+  it('allows the sign in with Allseerr and invite pages', () => {
+    assert.equal(getSafeNextPath('/signin/abc-123'), '/signin/abc-123');
+    assert.equal(getSafeNextPath('/invite/Zx_9-a'), '/invite/Zx_9-a');
+    assert.equal(getSafeNextPath('/signin'), null);
+  });
+
   it('refuses pages that are not on the allowlist', () => {
     for (const value of [
       '/',

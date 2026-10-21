@@ -192,8 +192,11 @@ const CoreApp: Omit<NextAppComponentType, 'origGetInitialProps'> = ({
 
   if (
     router.pathname.match(/(login|setup|resetpassword)/) ||
-    // The page the NoBookEnds app opens to connect stands on its own
-    router.pathname.startsWith('/nobookends/')
+    // The page the NoBookEnds app opens to connect stands on its own, and
+    // so do the pages apps open to sign in with Allseerr and invite links
+    router.pathname.startsWith('/nobookends/') ||
+    router.pathname.startsWith('/signin/') ||
+    router.pathname.startsWith('/invite/')
   ) {
     component = <Component {...pageProps} />;
   } else {

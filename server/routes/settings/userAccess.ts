@@ -5,13 +5,18 @@ import {
   USER_ACCESS_APP_NAMES,
   isUserAccessApp,
 } from '@server/constants/userAccess';
+import type { OidcApp } from '@server/lib/oidc/claims';
+import { OIDC_APPS, isOidcApp } from '@server/lib/oidc/claims';
+import { getOidcIssuer, resetOidcProvider } from '@server/lib/oidc/provider';
 import type {
+  OidcClientSettings,
   UserAccessAppConnection,
   UserAccessSettings,
 } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
-import { getAppClient } from '@server/lib/userAccess';
+import { getAppClient, getAppPublicUrl } from '@server/lib/userAccess';
 import logger from '@server/logger';
+import { randomBytes } from 'crypto';
 import { Router } from 'express';
 
 const userAccessSettingsRoutes = Router();
@@ -187,5 +192,285 @@ userAccessSettingsRoutes.post<
     return next({ status: 502, message: (e as Error).message });
   }
 });
+
+export interface OidcClientResponse {
+  app: OidcApp;
+  clientId: string;
+  redirectUris: string[];
+  enabled: boolean;
+}
+
+export interface OidcSettingsResponse {
+  enabled: boolean;
+  // The issuer apps are given, null until the application address is set
+  issuer: string | null;
+  clients: OidcClientResponse[];
+  // Redirect addresses each app uses, from its public address
+  defaultRedirectUris: Record<OidcApp, string[]>;
+}
+
+/**
+ * The addresses each app sends people back to after signing in with
+ * Allseerr, from the app's public address
+ */
+export const defaultRedirectUris = (app: OidcApp): string[] => {
+  if (app === 'nobookends') {
+    return ['nobookends://oidc'];
+  }
+
+  const base = getAppPublicUrl(app)?.replace(/\/+$/, '');
+
+  if (!base) {
+    return [];
+  }
+
+  switch (app) {
+    case 'audiobookshelf':
+      return [
+        `${base}/auth/openid/callback`,
+        `${base}/auth/openid/mobile-redirect`,
+      ];
+    case 'kavita':
+      return [`${base}/signin-oidc`];
+    case 'komga':
+      return [`${base}/login/oauth2/code/allseerr`];
+  }
+};
+
+const maskClient = (client: OidcClientSettings): OidcClientResponse => ({
+  app: client.app as OidcApp,
+  clientId: client.clientId,
+  redirectUris: client.redirectUris,
+  enabled: client.enabled,
+});
+
+const oidcResponse = (): OidcSettingsResponse => {
+  const { oidc } = getSettings().userAccess;
+
+  return {
+    enabled: oidc.enabled,
+    issuer: getOidcIssuer(),
+    clients: oidc.clients.filter((c) => isOidcApp(c.app)).map(maskClient),
+    defaultRedirectUris: Object.fromEntries(
+      OIDC_APPS.map((app) => [app, defaultRedirectUris(app)])
+    ) as Record<OidcApp, string[]>,
+  };
+};
+
+const generateClientSecret = (): string =>
+  randomBytes(32).toString('base64url');
+
+/**
+ * Redirect addresses an app may use: web addresses, or an app scheme for
+ * the mobile apps
+ */
+const parseRedirectUris = (value: unknown): string[] | null => {
+  if (
+    !Array.isArray(value) ||
+    !value.length ||
+    value.length > 10 ||
+    value.some((uri) => typeof uri !== 'string')
+  ) {
+    return null;
+  }
+
+  const uris = (value as string[]).map((uri) => uri.trim()).filter(Boolean);
+
+  for (const uri of uris) {
+    try {
+      const url = new URL(uri);
+      if (
+        url.hash ||
+        url.protocol === 'javascript:' ||
+        url.protocol === 'data:'
+      ) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return uris.length ? uris : null;
+};
+
+const saveOidc = async (
+  change: (oidc: UserAccessSettings['oidc']) => UserAccessSettings['oidc']
+): Promise<void> => {
+  const settings = getSettings();
+  const current = settings.userAccess;
+  settings.userAccess = { ...current, oidc: change(current.oidc) };
+  await settings.save();
+  resetOidcProvider();
+};
+
+userAccessSettingsRoutes.get<never, OidcSettingsResponse>(
+  '/oidc',
+  (_req, res) => {
+    res.status(200).json(oidcResponse());
+  }
+);
+
+/**
+ * Turns signing in with Allseerr on or off. It needs the application
+ * address, which apps reach the provider at.
+ */
+userAccessSettingsRoutes.post<
+  never,
+  OidcSettingsResponse,
+  { enabled?: boolean }
+>('/oidc', async (req, res, next) => {
+  if (typeof req.body.enabled !== 'boolean') {
+    return next({ status: 400, message: 'Invalid setting.' });
+  }
+  if (req.body.enabled && !getOidcIssuer()) {
+    return next({
+      status: 400,
+      message: 'Set the Application URL in the general settings first.',
+    });
+  }
+
+  await saveOidc((oidc) => ({ ...oidc, enabled: req.body.enabled! }));
+
+  return res.status(200).json(oidcResponse());
+});
+
+/**
+ * Registers an app to sign in with Allseerr. The client secret is only
+ * returned now.
+ */
+userAccessSettingsRoutes.post<
+  never,
+  { client: OidcClientResponse; clientSecret: string },
+  { app?: string; redirectUris?: string[] }
+>('/oidc/clients', async (req, res, next) => {
+  const { app } = req.body;
+
+  if (!isOidcApp(app)) {
+    return next({ status: 400, message: 'Unknown app.' });
+  }
+
+  const redirectUris =
+    req.body.redirectUris !== undefined
+      ? parseRedirectUris(req.body.redirectUris)
+      : defaultRedirectUris(app);
+
+  if (!redirectUris?.length) {
+    return next({
+      status: 400,
+      message:
+        "Add the redirect address, or the app's public address in its connection.",
+    });
+  }
+
+  const { clients } = getSettings().userAccess.oidc;
+  let clientId = `allseerr-${app}`;
+  for (let n = 2; clients.some((c) => c.clientId === clientId); n++) {
+    clientId = `allseerr-${app}-${n}`;
+  }
+
+  const client: OidcClientSettings = {
+    app,
+    clientId,
+    clientSecret: generateClientSecret(),
+    redirectUris,
+    enabled: true,
+  };
+
+  await saveOidc((oidc) => ({ ...oidc, clients: [...oidc.clients, client] }));
+
+  return res
+    .status(201)
+    .json({ client: maskClient(client), clientSecret: client.clientSecret });
+});
+
+userAccessSettingsRoutes.post<
+  { clientId: string },
+  OidcClientResponse,
+  { redirectUris?: string[]; enabled?: boolean }
+>('/oidc/clients/:clientId', async (req, res, next) => {
+  const existing = getSettings().userAccess.oidc.clients.find(
+    (c) => c.clientId === req.params.clientId
+  );
+
+  if (!existing) {
+    return next({ status: 404, message: 'Client not found.' });
+  }
+
+  const redirectUris =
+    req.body.redirectUris !== undefined
+      ? parseRedirectUris(req.body.redirectUris)
+      : existing.redirectUris;
+
+  if (!redirectUris) {
+    return next({ status: 400, message: 'Invalid redirect addresses.' });
+  }
+  if (req.body.enabled !== undefined && typeof req.body.enabled !== 'boolean') {
+    return next({ status: 400, message: 'Invalid setting.' });
+  }
+
+  const updated: OidcClientSettings = {
+    ...existing,
+    redirectUris,
+    enabled: req.body.enabled ?? existing.enabled,
+  };
+
+  await saveOidc((oidc) => ({
+    ...oidc,
+    clients: oidc.clients.map((c) =>
+      c.clientId === existing.clientId ? updated : c
+    ),
+  }));
+
+  return res.status(200).json(maskClient(updated));
+});
+
+/**
+ * Gives a client a new secret, returned only now. The app needs it before
+ * it can sign people in again.
+ */
+userAccessSettingsRoutes.post<
+  { clientId: string },
+  { client: OidcClientResponse; clientSecret: string }
+>('/oidc/clients/:clientId/secret', async (req, res, next) => {
+  const existing = getSettings().userAccess.oidc.clients.find(
+    (c) => c.clientId === req.params.clientId
+  );
+
+  if (!existing) {
+    return next({ status: 404, message: 'Client not found.' });
+  }
+
+  const updated = { ...existing, clientSecret: generateClientSecret() };
+
+  await saveOidc((oidc) => ({
+    ...oidc,
+    clients: oidc.clients.map((c) =>
+      c.clientId === existing.clientId ? updated : c
+    ),
+  }));
+
+  return res
+    .status(200)
+    .json({ client: maskClient(updated), clientSecret: updated.clientSecret });
+});
+
+userAccessSettingsRoutes.delete<{ clientId: string }>(
+  '/oidc/clients/:clientId',
+  async (req, res, next) => {
+    const { clients } = getSettings().userAccess.oidc;
+
+    if (!clients.some((c) => c.clientId === req.params.clientId)) {
+      return next({ status: 404, message: 'Client not found.' });
+    }
+
+    await saveOidc((oidc) => ({
+      ...oidc,
+      clients: oidc.clients.filter((c) => c.clientId !== req.params.clientId),
+    }));
+
+    return res.status(204).send();
+  }
+);
 
 export default userAccessSettingsRoutes;

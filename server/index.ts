@@ -19,6 +19,7 @@ import SlackAgent from '@server/lib/notifications/agents/slack';
 import TelegramAgent from '@server/lib/notifications/agents/telegram';
 import WebhookAgent from '@server/lib/notifications/agents/webhook';
 import WebPushAgent from '@server/lib/notifications/agents/webpush';
+import { OIDC_PATH, oidcMiddleware } from '@server/lib/oidc/provider';
 import checkOverseerrMerge from '@server/lib/overseerrMerge';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -183,6 +184,9 @@ app
       server.enable('trust proxy');
     }
     server.use(cookieParser());
+    // Signing in to other apps with Allseerr. The provider reads its own
+    // request bodies, so it comes before the body parsers and CSRF checks.
+    server.use(OIDC_PATH, oidcMiddleware);
     // Logos are uploaded as base64 inside JSON, so allow a larger body there
     server.use('/api/v1/settings/main/logo', express.json({ limit: '3mb' }));
     server.use(express.json());

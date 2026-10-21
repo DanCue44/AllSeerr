@@ -1096,6 +1096,47 @@ components:
               type: number
             displayName:
               type: string
+    OidcClient:
+      type: object
+      properties:
+        app:
+          type: string
+          enum: [audiobookshelf, kavita, komga, nobookends]
+        clientId:
+          type: string
+          example: allseerr-kavita
+        redirectUris:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+    OidcClientWithSecret:
+      type: object
+      properties:
+        client:
+          $ref: '#/components/schemas/OidcClient'
+        clientSecret:
+          type: string
+    OidcSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        issuer:
+          type: string
+          nullable: true
+          example: 'https://request.example.com/oidc'
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/OidcClient'
+        defaultRedirectUris:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
     UserAccessUpdateResult:
       type: object
       properties:
@@ -5519,6 +5560,137 @@ paths:
                 $ref: '#/components/schemas/UserAccessSettings'
         '400':
           description: An address is not an http or https address
+  /settings/user-access/oidc:
+    get:
+      summary: Get the sign in with Allseerr settings
+      description: Whether apps can sign people in with Allseerr through OpenID Connect, the issuer they use (the application URL followed by /oidc), the registered apps without their secrets and the redirect addresses each app uses.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OidcSettings'
+    post:
+      summary: Turn sign in with Allseerr on or off
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+              required:
+                - enabled
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OidcSettings'
+        '400':
+          description: The application URL is not set
+  /settings/user-access/oidc/clients:
+    post:
+      summary: Register an app to sign in with Allseerr
+      description: Makes a client for the app, with redirect addresses from its public address unless given. The client secret is returned only now.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                app:
+                  type: string
+                  enum: [audiobookshelf, kavita, komga, nobookends]
+                redirectUris:
+                  type: array
+                  items:
+                    type: string
+              required:
+                - app
+      responses:
+        '201':
+          description: The client and its secret
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OidcClientWithSecret'
+        '400':
+          description: Unknown app or no redirect address
+  /settings/user-access/oidc/clients/{clientId}:
+    parameters:
+      - in: path
+        name: clientId
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Update a sign in with Allseerr client
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                redirectUris:
+                  type: array
+                  items:
+                    type: string
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OidcClient'
+        '404':
+          description: Client not found
+    delete:
+      summary: Remove a sign in with Allseerr client
+      tags:
+        - settings
+      responses:
+        '204':
+          description: Removed
+        '404':
+          description: Client not found
+  /settings/user-access/oidc/clients/{clientId}/secret:
+    post:
+      summary: Replace a client secret
+      description: The new secret is returned only now; the app signs nobody in until it has it.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The client and its new secret
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OidcClientWithSecret'
+        '404':
+          description: Client not found
   /settings/user-access/{app}/test:
     post:
       summary: Test an app connection for user access
@@ -7690,6 +7862,28 @@ paths:
                       $ref: '#/components/schemas/UserAccessNewPassword'
         '404':
           description: The invite is not valid anymore
+  /auth/oidc/interaction/{uid}:
+    get:
+      summary: Finish a sign in with Allseerr
+      description: Where an app's "Sign in with Allseerr" lands (the OpenID Connect provider at /oidc sends the browser here). Without a session it redirects to `/login?next=/signin/{uid}`. With one, it checks that the user may use the app (admins always, others when their access to it is on) and redirects back to the app, signed in or with `error=access_denied`.
+      security: []
+      tags:
+        - auth
+      parameters:
+        - in: path
+          name: uid
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: To the Allseerr login
+        '303':
+          description: Back to the app
+        '400':
+          description: The sign in expired
+        '404':
+          description: Signing in with Allseerr is off
   /auth/jellyfin:
     post:
       summary: Sign in using a Jellyfin username and password

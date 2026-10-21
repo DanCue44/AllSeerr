@@ -5,6 +5,7 @@ import recentlyAddedNewsletter from '@server/job/newsletter';
 import availabilitySync from '@server/lib/availabilitySync';
 import downloadTracker from '@server/lib/downloadtracker';
 import ImageProxy from '@server/lib/imageproxy';
+import { cleanUpOidcPayloads } from '@server/lib/oidc/adapter';
 import refreshToken from '@server/lib/refreshToken';
 import { chaptarrScanner } from '@server/lib/scanners/chaptarr';
 import {
@@ -368,12 +369,14 @@ export const startJobs = (): void => {
       logger.debug('Starting scheduled job: User Access Sync', {
         label: 'Jobs',
       });
-      syncEveryone().catch((e) => {
-        logger.error('Failed to sync user access', {
-          label: 'Jobs',
-          errorMessage: e.message,
+      syncEveryone()
+        .then(() => cleanUpOidcPayloads())
+        .catch((e) => {
+          logger.error('Failed to sync user access', {
+            label: 'Jobs',
+            errorMessage: e.message,
+          });
         });
-      });
     }),
     running: () => isSyncRunning(),
   });
