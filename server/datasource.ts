@@ -1,3 +1,4 @@
+import { AccessInvite } from '@server/entity/AccessInvite';
 import { Blocklist } from '@server/entity/Blocklist';
 import DiscoverSlider from '@server/entity/DiscoverSlider';
 import Favorite from '@server/entity/Favorite';
@@ -10,6 +11,7 @@ import MetadataArtist from '@server/entity/MetadataArtist';
 import MetadataBookAudio from '@server/entity/MetadataBookAudio';
 import MetadataBookEbook from '@server/entity/MetadataBookEbook';
 import { NoBookEndsDevice } from '@server/entity/NoBookEndsDevice';
+import { OidcPayload } from '@server/entity/OidcPayload';
 import OverrideRule from '@server/entity/OverrideRule';
 import RemovalRequest from '@server/entity/RemovalRequest';
 import Season from '@server/entity/Season';
@@ -17,6 +19,8 @@ import SeasonRequest from '@server/entity/SeasonRequest';
 import SeasonRollover from '@server/entity/SeasonRollover';
 import { Session } from '@server/entity/Session';
 import { User } from '@server/entity/User';
+import { UserAccessProfile } from '@server/entity/UserAccessProfile';
+import { UserAppAccount } from '@server/entity/UserAppAccount';
 import { UserPushSubscription } from '@server/entity/UserPushSubscription';
 import { UserSettings } from '@server/entity/UserSettings';
 import { Watchlist } from '@server/entity/Watchlist';
@@ -33,6 +37,7 @@ import { DataSource } from 'typeorm';
 const DB_SSL_PREFIX = 'DB_SSL_';
 
 const entities = [
+  AccessInvite,
   Blocklist,
   DiscoverSlider,
   Favorite,
@@ -45,6 +50,7 @@ const entities = [
   MetadataBookAudio,
   MetadataBookEbook,
   NoBookEndsDevice,
+  OidcPayload,
   OverrideRule,
   RemovalRequest,
   Season,
@@ -52,6 +58,8 @@ const entities = [
   SeasonRollover,
   Session,
   User,
+  UserAccessProfile,
+  UserAppAccount,
   UserPushSubscription,
   UserSettings,
   Watchlist,

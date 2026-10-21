@@ -95,6 +95,46 @@ export interface LazyLibrarianSettings {
   audiobookshelfLibraryId?: string;
 }
 
+/**
+ * How Allseerr reaches an app to manage its accounts. The address is the
+ * one the server can reach, which may differ from the public one. The admin
+ * credentials are never sent back to the settings page.
+ */
+export interface UserAccessAppConnection {
+  url?: string;
+  // The address people open the app at, used in emails and the settings
+  publicUrl?: string;
+  // An API key of an admin of the app
+  apiKey?: string;
+  // Or the admin's sign in, for apps where an API key is not enough
+  username?: string;
+  password?: string;
+}
+
+/**
+ * An app signing people in with Allseerr through OpenID Connect
+ */
+export interface OidcClientSettings {
+  // audiobookshelf, kavita, komga or nobookends
+  app: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUris: string[];
+  enabled: boolean;
+}
+
+export interface UserAccessSettings {
+  audiobookshelf: UserAccessAppConnection;
+  kavita: UserAccessAppConnection;
+  komga: UserAccessAppConnection;
+  // Sends new app passwords to people by email when email is set up
+  emailPasswords: boolean;
+  oidc: {
+    enabled: boolean;
+    clients: OidcClientSettings[];
+  };
+}
+
 export interface AudiobookshelfSettings {
   // Public Audiobookshelf address, linked from available books
   url?: string;
@@ -558,7 +598,8 @@ export type JobId =
   | 'availability-sync'
   | 'process-blocklisted-tags'
   | 'recently-added-newsletter'
-  | 'followed-releases';
+  | 'followed-releases'
+  | 'user-access-sync';
 
 export interface AllSettings {
   clientId: string;
@@ -573,6 +614,9 @@ export interface AllSettings {
   lazylibrarian: LazyLibrarianSettings;
   audiobookshelf: AudiobookshelfSettings;
   nobookendsSync: NoBookEndsSyncSettings;
+  userAccess: UserAccessSettings;
+  // Private keys Allseerr signs OpenID Connect tokens with, as JWKs
+  oidcJwks?: { keys: Record<string, unknown>[] };
   radarr: RadarrSettings[];
   sonarr: SonarrSettings[];
   lidarr: LidarrSettings[];
@@ -669,6 +713,16 @@ class Settings {
         url: '',
         internalUrl: '',
         adminToken: '',
+      },
+      userAccess: {
+        audiobookshelf: {},
+        kavita: {},
+        komga: {},
+        emailPasswords: true,
+        oidc: {
+          enabled: false,
+          clients: [],
+        },
       },
       metadataSettings: {
         tv: MetadataProviderType.TMDB,
@@ -848,6 +902,9 @@ class Settings {
         'followed-releases': {
           schedule: '0 15 6 * * *',
         },
+        'user-access-sync': {
+          schedule: '0 */30 * * * *',
+        },
       },
       newsletter: {},
       network: {
@@ -941,6 +998,31 @@ class Settings {
       delete this.data.lazylibrarian.audiobookshelfUrl;
       delete this.data.lazylibrarian.audiobookshelfLibraryId;
     }
+  }
+
+  get userAccess(): UserAccessSettings {
+    return mergeSettings<UserAccessSettings>(
+      {
+        audiobookshelf: {},
+        kavita: {},
+        komga: {},
+        emailPasswords: true,
+        oidc: { enabled: false, clients: [] },
+      },
+      this.data.userAccess ?? {}
+    );
+  }
+
+  set userAccess(data: UserAccessSettings) {
+    this.data.userAccess = mergeSettings(this.userAccess, data);
+  }
+
+  get oidcJwks(): { keys: Record<string, unknown>[] } | undefined {
+    return this.data.oidcJwks;
+  }
+
+  set oidcJwks(data: { keys: Record<string, unknown>[] } | undefined) {
+    this.data.oidcJwks = data;
   }
 
   get nobookendsSync(): NoBookEndsSyncSettings {
