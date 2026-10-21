@@ -140,7 +140,9 @@ describe('invite links', () => {
 
     const res = await request(app).get(`/auth/invite/${body.token}`);
     assert.equal(res.status, 200);
-    assert.deepEqual(res.body.apps, ['Kavita']);
+    assert.deepEqual(res.body.apps, [
+      { app: 'kavita', name: 'Kavita', url: kavita.url },
+    ]);
 
     await request(app).get('/auth/invite/not-a-real-invite-token').expect(404);
   });

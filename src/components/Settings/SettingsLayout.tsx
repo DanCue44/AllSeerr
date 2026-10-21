@@ -11,6 +11,7 @@ import { useIntl } from 'react-intl';
 const messages = defineMessages('components.Settings', {
   menuGeneralSettings: 'General',
   menuUsers: 'Users',
+  menuUserAccess: 'User Access',
   menuPlexSettings: 'Plex',
   menuJellyfinSettings: '{mediaServerName}',
   menuServices: 'Services',
@@ -51,6 +52,11 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
           route: '/settings/jellyfin',
           regex: /^\/settings\/jellyfin/,
         },
+    {
+      text: intl.formatMessage(messages.menuUserAccess),
+      route: '/settings/user-access',
+      regex: /^\/settings\/user-access/,
+    },
     {
       text: intl.formatMessage(messages.menuServices),
       route: '/settings/services',

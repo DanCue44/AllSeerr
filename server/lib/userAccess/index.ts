@@ -16,6 +16,12 @@ import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import { UserAccessProfile } from '@server/entity/UserAccessProfile';
 import { UserAppAccount } from '@server/entity/UserAppAccount';
+import type {
+  NewPasswords,
+  PersonAccess,
+  PersonAppAccess,
+  PersonUpdateResult,
+} from '@server/interfaces/api/userAccessInterfaces';
 import { Permission } from '@server/lib/permissions';
 import type { UserAccessAppConnection } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -25,29 +31,7 @@ import { sendAppAccountEmail } from '@server/lib/userAccess/email';
 import logger from '@server/logger';
 import { randomInt } from 'crypto';
 
-/**
- * A person's access to one app, as the settings page shows it
- */
-export interface PersonAppAccess {
-  enabled: boolean;
-  libraryIds: string[] | null;
-  status: UserAppAccountStatus;
-  remoteUsername: string | null;
-  lastError: string | null;
-  syncedAt: Date | null;
-}
-
-export interface PersonAccess {
-  userId: number;
-  displayName: string;
-  email: string;
-  avatar: string;
-  userType: number;
-  isAdmin: boolean;
-  ageLimit: AgeLimit | null;
-  includeUnrated: boolean;
-  apps: Record<UserAccessApp, PersonAppAccess>;
-}
+export type { NewPasswords, PersonAccess, PersonAppAccess, PersonUpdateResult };
 
 export interface PersonAccessChanges {
   ageLimit?: AgeLimit | null;
@@ -55,22 +39,6 @@ export interface PersonAccessChanges {
   apps?: Partial<
     Record<UserAccessApp, { enabled?: boolean; libraryIds?: string[] | null }>
   >;
-}
-
-/**
- * New passwords made while saving, keyed by app. They are shown once and
- * never stored.
- */
-export type NewPasswords = Partial<
-  Record<
-    UserAccessApp,
-    { username: string; password: string; emailed: boolean }
-  >
->;
-
-export interface PersonUpdateResult {
-  person: PersonAccess;
-  passwords: NewPasswords;
 }
 
 // Letters and digits that cannot be mistaken for each other when read aloud

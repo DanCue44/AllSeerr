@@ -5,6 +5,12 @@ import {
   USER_ACCESS_APP_NAMES,
   isUserAccessApp,
 } from '@server/constants/userAccess';
+import type {
+  OidcClientResponse,
+  OidcSettingsResponse,
+  UserAccessAppConnectionResponse,
+  UserAccessSettingsResponse,
+} from '@server/interfaces/api/userAccessInterfaces';
 import type { OidcApp } from '@server/lib/oidc/claims';
 import { OIDC_APPS, isOidcApp } from '@server/lib/oidc/claims';
 import { getOidcIssuer, resetOidcProvider } from '@server/lib/oidc/provider';
@@ -20,21 +26,6 @@ import { randomBytes } from 'crypto';
 import { Router } from 'express';
 
 const userAccessSettingsRoutes = Router();
-
-export interface UserAccessAppConnectionResponse {
-  url: string;
-  publicUrl: string;
-  username: string;
-  apiKeySet: boolean;
-  passwordSet: boolean;
-}
-
-export interface UserAccessSettingsResponse {
-  audiobookshelf: UserAccessAppConnectionResponse;
-  kavita: UserAccessAppConnectionResponse;
-  komga: UserAccessAppConnectionResponse;
-  emailPasswords: boolean;
-}
 
 const isHttpUrl = (value: string): boolean => {
   try {
@@ -192,22 +183,6 @@ userAccessSettingsRoutes.post<
     return next({ status: 502, message: (e as Error).message });
   }
 });
-
-export interface OidcClientResponse {
-  app: OidcApp;
-  clientId: string;
-  redirectUris: string[];
-  enabled: boolean;
-}
-
-export interface OidcSettingsResponse {
-  enabled: boolean;
-  // The issuer apps are given, null until the application address is set
-  issuer: string | null;
-  clients: OidcClientResponse[];
-  // Redirect addresses each app uses, from its public address
-  defaultRedirectUris: Record<OidcApp, string[]>;
-}
 
 /**
  * The addresses each app sends people back to after signing in with

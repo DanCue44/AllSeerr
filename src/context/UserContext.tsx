@@ -26,6 +26,8 @@ export const UserContext = ({ initialUser, children }: UserContextProps) => {
   useEffect(() => {
     if (
       !router.pathname.match(/(setup|login|resetpassword)/) &&
+      // Invite links are opened before signing in
+      !router.pathname.startsWith('/invite/') &&
       (!user || error) &&
       !routing.current
     ) {

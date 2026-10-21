@@ -1,5 +1,4 @@
 import type { AppLibrary } from '@server/api/userAccess/types';
-import type { UserAccessApp } from '@server/constants/userAccess';
 import {
   USER_ACCESS_APPS,
   USER_ACCESS_APP_NAMES,
@@ -7,6 +6,7 @@ import {
 } from '@server/constants/userAccess';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
+import type { UserAccessAppInfo } from '@server/interfaces/api/userAccessInterfaces';
 import { getSettings } from '@server/lib/settings';
 import type {
   PersonAccess,
@@ -35,15 +35,6 @@ import logger from '@server/logger';
 import { Router } from 'express';
 
 const userAccessRoutes = Router();
-
-export interface UserAccessAppInfo {
-  app: UserAccessApp;
-  name: string;
-  connected: boolean;
-  publicUrl: string | null;
-  libraries: AppLibrary[];
-  error: string | null;
-}
 
 /**
  * The apps and their libraries, for picking who sees which

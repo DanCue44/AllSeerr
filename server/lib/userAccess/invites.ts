@@ -9,29 +9,18 @@ import { getRepository } from '@server/datasource';
 import type { InviteApps } from '@server/entity/AccessInvite';
 import { AccessInvite } from '@server/entity/AccessInvite';
 import type { User } from '@server/entity/User';
+import type { InviteSummary } from '@server/interfaces/api/userAccessInterfaces';
 import type { NewPasswords } from '@server/lib/userAccess';
-import { updatePerson } from '@server/lib/userAccess';
+import { getAppPublicUrl, updatePerson } from '@server/lib/userAccess';
 import type { AgeLimit } from '@server/lib/userAccess/ageLimits';
 import { isRestricted } from '@server/lib/userAccess/ageLimits';
 import { createHash, randomBytes } from 'crypto';
 import { IsNull, MoreThan } from 'typeorm';
 
+export type { InviteSummary };
+
 export const hashInviteToken = (token: string): string =>
   createHash('sha256').update(token).digest('hex');
-
-export interface InviteSummary {
-  id: number;
-  label: string | null;
-  apps: InviteApps;
-  ageLimit: AgeLimit | null;
-  includeUnrated: boolean;
-  expiresAt: Date;
-  redeemedAt: Date | null;
-  redeemedBy: { id: number; displayName: string } | null;
-  revokedAt: Date | null;
-  createdAt: Date;
-  createdBy: { id: number; displayName: string } | null;
-}
 
 const summarize = (invite: AccessInvite): InviteSummary => ({
   id: invite.id,
@@ -153,9 +142,11 @@ export const hasRedeemedInvite = async (userId: number): Promise<boolean> =>
  * What an invite page shows before signing in: only the app names
  */
 export const describeInvite = (invite: AccessInvite) => ({
-  apps: USER_ACCESS_APPS.filter((app) => invite.apps[app]).map(
-    (app) => USER_ACCESS_APP_NAMES[app]
-  ),
+  apps: USER_ACCESS_APPS.filter((app) => invite.apps[app]).map((app) => ({
+    app,
+    name: USER_ACCESS_APP_NAMES[app],
+    url: getAppPublicUrl(app) ?? null,
+  })),
   expiresAt: invite.expiresAt,
 });
 

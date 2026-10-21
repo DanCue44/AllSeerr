@@ -7830,8 +7830,18 @@ paths:
                   apps:
                     type: array
                     items:
-                      type: string
-                    example: ['Kavita']
+                      type: object
+                      properties:
+                        app:
+                          type: string
+                          enum: [audiobookshelf, kavita, komga]
+                        name:
+                          type: string
+                          example: Kavita
+                        url:
+                          type: string
+                          nullable: true
+                          description: The address people open the app at
                   expiresAt:
                     type: string
         '404':

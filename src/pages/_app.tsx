@@ -341,7 +341,11 @@ CoreApp.getInitialProps = async (initialProps) => {
         // If there is no user, and ctx.res is set (to check if we are on the server side)
         // _AND_ we are not already on the login or setup route, redirect to /login with a 307
         // before anything actually renders
-        if (!router.pathname.match(/(login|setup|resetpassword)/)) {
+        if (
+          !router.pathname.match(/(login|setup|resetpassword)/) &&
+          // Invite links are opened before signing in
+          !router.pathname.startsWith('/invite/')
+        ) {
           ctx.res.writeHead(307, {
             // A page opened from outside, such as the NoBookEnds app's
             // connect page, is returned to after sign in
