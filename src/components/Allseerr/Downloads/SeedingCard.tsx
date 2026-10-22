@@ -16,6 +16,7 @@ import {
   getSeedProgress,
 } from '@app/components/Allseerr/Downloads/seedingLogic';
 import { statusTone } from '@app/components/Allseerr/Title/styles';
+import Tooltip from '@app/components/Common/Tooltip';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { formatBytes } from '@app/utils/numberHelpers';
@@ -39,7 +40,6 @@ import type {
 } from '@server/interfaces/api/downloadInterfaces';
 import Link from 'next/link';
 import type { ComponentType } from 'react';
-import { useState } from 'react';
 import { useIntl } from 'react-intl';
 
 export const messages = defineMessages(
@@ -148,7 +148,6 @@ const SeedingCard = ({
   layout?: DownloadsLayout;
 }) => {
   const intl = useIntl();
-  const [fillerOpen, setFillerOpen] = useState(false);
   const bookCover = useBookCover(torrent.posterUrl ? undefined : torrent.olId);
   const cover = torrent.posterUrl ?? bookCover;
   const tone = getSeedingTone(torrent);
@@ -194,38 +193,46 @@ const SeedingCard = ({
         : messages[STATE_MESSAGES[torrent.state]]
   );
 
-  // Hover shows the explanation, a tap (touch) opens it, and screen readers
-  // read it as the button's description
-  const fillerStatus = (className: string) => (
-    <button
-      type="button"
-      className={`inline-flex items-center gap-1 ${className}`}
-      title={fillerText}
-      aria-expanded={fillerOpen}
-      aria-label={`${stateLabel}. ${fillerText}`}
-      onClick={() => setFillerOpen((open) => !open)}
-    >
-      {stateLabel}
-      <InformationCircleIcon className="h-3.5 w-3.5 flex-none" />
-    </button>
-  );
-
-  const fillerPanel = fillerOpen ? (
-    <div className="rounded-[12px] bg-black/40 px-2.5 py-2 text-xs leading-relaxed text-as-ink-soft">
+  // Shown at once on hover (and on tap for touch screens); the tooltip stays
+  // open while the pointer is on it so the settings link can be clicked
+  const fillerTip = (
+    <div className="max-w-xs space-y-1 py-1 text-xs leading-relaxed">
       <p>{intl.formatMessage(messages.fillerExplain)}</p>
-      <p className="mt-1">{intl.formatMessage(messages.fillerTurnOff)}</p>
+      <p>{intl.formatMessage(messages.fillerTurnOff)}</p>
       {talearrUrl && (
         <a
           href={`${talearrUrl}/settings/indexers`}
           target="_blank"
           rel="noreferrer"
-          className="mt-1 inline-block font-semibold text-as-accent hover:underline"
+          className="inline-block font-semibold text-as-accent hover:underline"
         >
           {intl.formatMessage(messages.fillerOpenSettings)}
         </a>
       )}
     </div>
-  ) : null;
+  );
+  const fillerStatus = (className: string) => (
+    <Tooltip
+      content={fillerTip}
+      tooltipConfig={{
+        followCursor: false,
+        placement: 'top',
+        offset: [0, 8],
+        trigger: ['hover', 'click'],
+        interactive: true,
+        delayHide: 150,
+      }}
+    >
+      <span
+        tabIndex={0}
+        className={`inline-flex cursor-help items-center gap-1 ${className}`}
+        aria-label={`${stateLabel}. ${fillerText}`}
+      >
+        {stateLabel}
+        <InformationCircleIcon className="h-3.5 w-3.5 flex-none" />
+      </span>
+    </Tooltip>
+  );
 
   const detail = [formatText, torrent.authorName].filter(Boolean).join(' · ');
 
@@ -283,27 +290,26 @@ const SeedingCard = ({
           }
         );
 
-  // Same treatment as the filler status: hover title, a tap opens the
-  // explanation, and screen readers get it in the label
-  const [goalOpen, setGoalOpen] = useState(false);
+  // Hover only: the explanation shows at once, screen readers get it in the label
   const goalButton = (className: string) =>
     goalText && goalHint ? (
-      <button
-        type="button"
-        className={`text-right ${className}`}
-        title={goalHint}
-        aria-expanded={goalOpen}
-        aria-label={`${goalText}. ${goalHint}`}
-        onClick={() => setGoalOpen((open) => !open)}
+      <Tooltip
+        content={
+          <p className="max-w-xs py-1 text-xs leading-relaxed">{goalHint}</p>
+        }
+        tooltipConfig={{
+          followCursor: false,
+          placement: 'top',
+          offset: [0, 8],
+        }}
       >
-        {goalText}
-      </button>
-    ) : null;
-  const goalPanel =
-    goalOpen && goalHint ? (
-      <p className="rounded-[12px] bg-black/40 px-2.5 py-2 text-left text-xs leading-relaxed text-as-ink-soft">
-        {goalHint}
-      </p>
+        <span
+          className={`cursor-help text-right ${className}`}
+          aria-label={`${goalText}. ${goalHint}`}
+        >
+          {goalText}
+        </span>
+      </Tooltip>
     ) : null;
 
   const ratioText = intl.formatMessage(messages.ratio, {
@@ -350,7 +356,6 @@ const SeedingCard = ({
               <div
                 className="h-2 w-full overflow-hidden rounded-full bg-as-tile"
                 role="progressbar"
-                title={goalHint}
                 aria-label={goalHint ?? seededText}
                 aria-valuemin={0}
                 aria-valuemax={100}
@@ -366,16 +371,13 @@ const SeedingCard = ({
               </span>
             </div>
           )}
-          <div
-            className="truncate text-xs text-as-ink-muted md:hidden"
-            title={goalHint}
-          >
+          <div className="truncate text-xs text-as-ink-muted md:hidden">
             {[seededText, goalText, ratioText].filter(Boolean).join(' · ')}
           </div>
         </div>
         <div className="hidden min-w-0 flex-col text-xs text-as-ink-muted md:flex">
           <span className="truncate">{seededText}</span>
-          {goalButton('truncate text-left hover:underline')}
+          {goalButton('truncate text-left')}
         </div>
         <div className="hidden min-w-0 flex-col text-xs text-as-ink-muted md:flex">
           <span className="truncate tabular-nums">{ratioText}</span>
@@ -385,8 +387,6 @@ const SeedingCard = ({
               .join(' · ')}
           </span>
         </div>
-        {fillerPanel && <div className="col-span-full">{fillerPanel}</div>}
-        {goalPanel && <div className="col-span-full">{goalPanel}</div>}
       </article>
     );
   }
@@ -431,7 +431,7 @@ const SeedingCard = ({
               </Detail>
               <Detail label={intl.formatMessage(messages.labelStatus)}>
                 {isFillerSeeding ? (
-                  fillerStatus(`font-semibold ${stateText} hover:underline`)
+                  fillerStatus(`font-semibold ${stateText}`)
                 ) : (
                   <span className={`font-semibold ${stateText}`}>
                     {stateLabel}
@@ -460,7 +460,6 @@ const SeedingCard = ({
                 {seededText}
               </Detail>
             </dl>
-            {fillerPanel}
             {torrent.atRisk && (
               <div
                 className={`flex gap-2 rounded-[12px] px-2.5 py-1.5 text-xs leading-relaxed ${statusTone.bad}`}
@@ -478,7 +477,6 @@ const SeedingCard = ({
           <div
             className="relative h-1 w-full bg-black/40"
             role="progressbar"
-            title={goalHint}
             aria-label={goalHint ?? seededText}
             aria-valuemin={0}
             aria-valuemax={100}
@@ -510,10 +508,9 @@ const SeedingCard = ({
                 torrent.title}
             </span>
           </div>
-          {goalPanel}
         </div>
         <div className="flex flex-none flex-col items-end gap-0.5 text-right text-xs leading-snug text-as-ink-soft">
-          {goalButton('text-[13px] font-semibold text-as-ink hover:underline')}
+          {goalButton('text-[13px] font-semibold text-as-ink')}
           <span className="tabular-nums">
             {intl.formatMessage(messages.uploaded, {
               size: formatBytes(torrent.uploaded, 1),
