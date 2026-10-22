@@ -20,7 +20,7 @@ export const logoUrl = (version?: string): string =>
  * Bumped when the bundled icons change, so browsers that cached the old ones
  * (they keep favicons for a long time) fetch the new files.
  */
-export const BUNDLED_ICON_VERSION = 'allseerr-1';
+export const BUNDLED_ICON_VERSION = 'allseerr-2';
 
 export const brandingIconUrl = (
   name: BrandingIconName,
