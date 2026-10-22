@@ -5,6 +5,7 @@ import {
 import UserAvatar from '@app/components/Allseerr/RequestList/UserAvatar';
 import { statusTone } from '@app/components/Allseerr/Title/styles';
 import CachedImage from '@app/components/Common/CachedImage';
+import Tooltip from '@app/components/Common/Tooltip';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { formatBytes } from '@app/utils/numberHelpers';
@@ -13,6 +14,7 @@ import {
   ArrowTopRightOnSquareIcon,
   EllipsisVerticalIcon,
   ExclamationTriangleIcon,
+  InformationCircleIcon,
   ListBulletIcon,
   MagnifyingGlassIcon,
   TrashIcon,
@@ -36,7 +38,7 @@ import type {
 } from '@server/interfaces/api/downloadInterfaces';
 import type { BookDetails } from '@server/models/Book';
 import Link from 'next/link';
-import type { ComponentType, ReactNode } from 'react';
+import type { ComponentType, ReactElement, ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -385,6 +387,34 @@ const DownloadCard = ({
       ? item.statusMessages
       : []),
   ];
+  // The client's messages (PAR, unpack, move...) are long, so they open on
+  // hover or tap over the status instead of filling the card
+  const problemTip =
+    problems.length > 0 ? (
+      <div className="max-w-sm space-y-1 py-1 text-xs leading-relaxed">
+        {problems.map((problem) => (
+          <p key={problem} className="break-words">
+            {problem}
+          </p>
+        ))}
+      </div>
+    ) : null;
+  const withProblemTip = (node: ReactElement) =>
+    problemTip ? (
+      <Tooltip
+        content={problemTip}
+        tooltipConfig={{
+          followCursor: false,
+          placement: 'top',
+          offset: [0, 8],
+          trigger: ['hover', 'click'],
+        }}
+      >
+        {node}
+      </Tooltip>
+    ) : (
+      node
+    );
   const showTime =
     item.status === 'downloading' && item.timeLeftSeconds !== undefined;
   const sizeText =
@@ -531,14 +561,22 @@ const DownloadCard = ({
             <div className="min-w-0 [&>*]:line-clamp-1 [&>*]:text-[15px]">
               {title}
             </div>
-            {problems.length > 0 && (
-              <ExclamationTriangleIcon
-                className={`h-4 w-4 flex-none ${
-                  item.status === 'failed' ? 'text-[#f2b0aa]' : 'text-[#f0d9a8]'
-                }`}
-                title={problems.join(' ')}
-              />
-            )}
+            {problems.length > 0 &&
+              withProblemTip(
+                <span
+                  tabIndex={0}
+                  className="flex-none cursor-help"
+                  aria-label={problems.join(' ')}
+                >
+                  <ExclamationTriangleIcon
+                    className={`h-4 w-4 ${
+                      item.status === 'failed'
+                        ? 'text-[#f2b0aa]'
+                        : 'text-[#f0d9a8]'
+                    }`}
+                  />
+                </span>
+              )}
           </div>
           <div className="truncate text-xs text-as-ink-muted">
             {[detail, item.serverName].filter(Boolean).join(' · ')}
@@ -642,9 +680,24 @@ const DownloadCard = ({
                 </Detail>
               )}
               <Detail label={intl.formatMessage(messages.labelStatus)}>
-                <span className={`font-semibold ${style.text}`}>
-                  {intl.formatMessage(messages[style.message])}
-                </span>
+                {withProblemTip(
+                  <span
+                    tabIndex={problems.length > 0 ? 0 : undefined}
+                    className={`inline-flex items-center gap-1 font-semibold ${style.text} ${
+                      problems.length > 0 ? 'cursor-help' : ''
+                    }`}
+                    aria-label={
+                      problems.length > 0
+                        ? `${intl.formatMessage(messages[style.message])}. ${problems.join(' ')}`
+                        : undefined
+                    }
+                  >
+                    {intl.formatMessage(messages[style.message])}
+                    {problems.length > 0 && (
+                      <InformationCircleIcon className="h-3.5 w-3.5 flex-none" />
+                    )}
+                  </span>
+                )}
                 {item.seeders !== undefined && (
                   <span className="text-as-ink-muted">
                     {' · '}
@@ -676,20 +729,6 @@ const DownloadCard = ({
                 </Detail>
               )}
             </dl>
-            {problems.length > 0 && (
-              <div
-                className={`flex gap-2 rounded-[12px] px-2.5 py-1.5 text-xs leading-relaxed ${
-                  item.status === 'failed' ? statusTone.bad : statusTone.warn
-                }`}
-              >
-                <ExclamationTriangleIcon className="mt-px h-4 w-4 flex-none" />
-                <div className="min-w-0 space-y-0.5 break-words">
-                  {problems.slice(0, 2).map((problem) => (
-                    <p key={problem}>{problem}</p>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
           <div className="absolute right-2 top-2">{actionsMenu('')}</div>
         </div>
