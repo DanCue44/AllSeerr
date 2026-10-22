@@ -756,10 +756,8 @@ describe('app usernames that match Plex', () => {
       message: string;
       notifyUser: User;
     };
-    assert.equal(
-      payload.subject,
-      'Your Audiobookshelf username now matches Plex'
-    );
+    assert.equal(payload.subject, 'Your reading app username now matches Plex');
+    assert.doesNotMatch(payload.message, /Audiobookshelf|Kavita/);
     assert.match(payload.message, /Your new username is demo\./);
     assert.equal(payload.notifyUser.id, userId);
 
@@ -790,6 +788,45 @@ describe('app usernames that match Plex', () => {
     });
     assert.equal(account.remoteUsername, 'demo2');
     assert.equal(account.remoteUserId, 'abs-old');
+  });
+
+  it('sends one message naming NoBookEnds for renames in two apps', async (t) => {
+    const settings = getSettings();
+    settings.nobookendsSync = { enabled: true };
+    t.after(() => {
+      settings.nobookendsSync = { enabled: false };
+    });
+    kavita.members.push({
+      id: 7,
+      username: 'KReader',
+      email: 'kreader@example.com',
+      isPending: false,
+      roles: ['Login'],
+      libraries: [],
+      ageRestriction: { ageRating: -1, includeUnknowns: true },
+      identityProvider: 0,
+    });
+    const agent = await loginAs('admin@seerr.dev');
+    const userId = await userIdOf('demo@seerr.dev');
+
+    await agent
+      .post(`/user-access/people/${userId}/apps/audiobookshelf/link`)
+      .send({ remoteUserId: 'abs-old' })
+      .expect(200);
+    await agent
+      .post(`/user-access/people/${userId}/apps/kavita/link`)
+      .send({ remoteUserId: '7' })
+      .expect(200);
+
+    assert.equal(kavita.members.find((m) => m.id === 7)?.username, 'demo');
+    const notices = renameNotices();
+    assert.equal(notices.length, 1);
+    const payload = notices[0].arguments[1] as {
+      subject: string;
+      message: string;
+    };
+    assert.equal(payload.subject, 'Your NoBookEnds username now matches Plex');
+    assert.doesNotMatch(payload.message, /Audiobookshelf|Kavita/);
   });
 
   it('keeps the name when another account has it, and says so', async () => {

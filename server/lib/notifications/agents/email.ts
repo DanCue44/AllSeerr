@@ -533,6 +533,9 @@ class EmailAgent
   ): Promise<boolean> {
     if (payload.notifyUser) {
       if (
+        // A changed username changes how the person signs in, so they
+        // always hear about it
+        type === Notification.APP_USERNAME_CHANGED ||
         !payload.notifyUser.settings ||
         (payload.notifyUser.settings.hasNotificationType(
           NotificationAgentKey.EMAIL,

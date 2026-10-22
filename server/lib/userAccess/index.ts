@@ -799,15 +799,16 @@ export const listAppAccounts = async (
     throw new Error(`${USER_ACCESS_APP_NAMES[app]} is not connected.`);
   }
 
-  const [accounts, links, users, connectionAccountId] = await Promise.all([
+  const [accounts, links, users] = await Promise.all([
     client.listAccounts(),
     getRepository(UserAppAccount).find({
       where: { app },
       relations: { user: true },
     }),
     getRepository(User).find({ order: { id: 'ASC' } }),
-    connectionAccountIdFor(client),
   ]);
+  // Asked after the list, so both do not sign in to the app at once
+  const connectionAccountId = await connectionAccountIdFor(client);
   const linkedTo = new Map(
     links
       .filter((link) => link.remoteUserId && link.user)
@@ -1045,10 +1046,9 @@ const renameDriftedAccounts = async (): Promise<void> => {
     }
 
     try {
-      const [accounts, connectionAccountId] = await Promise.all([
-        client.listAccounts(),
-        connectionAccountIdFor(client),
-      ]);
+      // One after the other, so both do not sign in to the app at once
+      const accounts = await client.listAccounts();
+      const connectionAccountId = await connectionAccountIdFor(client);
 
       for (const account of linked) {
         const outcome = await renameToPlexUsername({

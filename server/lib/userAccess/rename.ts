@@ -105,24 +105,29 @@ export type RenameOutcome =
   | { status: 'same' | 'off' | 'unsupported' | 'skipped'; message?: string }
   | { status: 'clash' | 'failed'; message: string };
 
+// A person renamed in a second app this soon after the first already heard
+const TOLD_FOR_MS = 60 * 60 * 1000;
+
 /**
- * Tells the person their app username changed
+ * Tells the person their username changed. People use the apps through
+ * Allseerr and NoBookEnds, so the message names NoBookEnds when it is set up
+ * and no app otherwise.
  */
-export const sendUsernameChanged = (
-  user: User,
-  app: UserAccessApp,
-  username: string
-): void => {
-  const appName = USER_ACCESS_APP_NAMES[app];
+export const sendUsernameChanged = (user: User, username: string): void => {
+  const withNoBookEnds = !!getSettings().nobookendsSync.enabled;
 
   notificationManager.sendNotification(Notification.APP_USERNAME_CHANGED, {
-    event: 'Reading App Username Changed',
-    subject: `Your ${appName} username now matches Plex`,
-    message: `Your ${appName} username is changing to match your Plex name. Your new username is ${username}. Your password, progress and bookmarks stay the same. If you use the ${appName} app, sign in with the new username next time it asks.`,
+    event: 'Username Changed',
+    subject: withNoBookEnds
+      ? 'Your NoBookEnds username now matches Plex'
+      : 'Your reading app username now matches Plex',
+    message: withNoBookEnds
+      ? `The accounts NoBookEnds uses for your books and audiobooks changed their username to match your Plex name. Your new username is ${username}. Your password, progress and bookmarks stay the same. If NoBookEnds asks you to sign in, use the new username.`
+      : `The accounts your books and audiobooks are read in changed their username to match your Plex name. Your new username is ${username}. Your password, progress and bookmarks stay the same. If an app asks you to sign in, use the new username.`,
     notifyAdmin: false,
     notifySystem: false,
     notifyUser: user,
-    actionPath: `/profile/settings/apps?app=${app}`,
+    actionPath: '/profile/settings/apps',
   });
 };
 
@@ -265,8 +270,18 @@ export const renameToPlexUsername = async ({
     }
   }
 
+  // One message covers every app renamed to the same name
+  const alreadyTold = (getSettings().userAccess.renames ?? []).some(
+    (rename) =>
+      rename.userId === user.id &&
+      rename.to === targetName &&
+      Date.now() - new Date(rename.date).getTime() < TOLD_FOR_MS
+  );
+
   await recordRename(user, account.app, from, targetName);
-  sendUsernameChanged(user, account.app, targetName);
+  if (!alreadyTold) {
+    sendUsernameChanged(user, targetName);
+  }
   logger.info('Renamed an app account to match Plex', {
     label: 'User Access',
     app: account.app,
