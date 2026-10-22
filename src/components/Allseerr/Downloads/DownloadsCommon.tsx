@@ -68,15 +68,17 @@ export const EmptyState = ({
 export const LayoutToggle = ({
   value,
   onChange,
+  compact = false,
 }: {
   value: DownloadsLayout;
   onChange: (layout: DownloadsLayout) => void;
+  compact?: boolean;
 }) => {
   const intl = useIntl();
 
   return (
     <div
-      className="flex flex-none rounded-full bg-as-surface p-1"
+      className={`flex flex-none rounded-full bg-as-surface ${compact ? 'p-0.5' : 'p-1'}`}
       role="radiogroup"
       aria-label={intl.formatMessage(messages.layout)}
     >
@@ -96,13 +98,15 @@ export const LayoutToggle = ({
             aria-label={label}
             title={label}
             onClick={() => onChange(key)}
-            className={`flex h-9 w-10 items-center justify-center rounded-full transition ${
+            className={`flex items-center justify-center rounded-full transition ${
+              compact ? 'h-7 w-8' : 'h-9 w-10'
+            } ${
               active
                 ? 'bg-as-raised text-as-ink'
                 : 'text-as-ink-muted hover:text-as-ink'
             }`}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className={compact ? 'h-4 w-4' : 'h-5 w-5'} />
           </button>
         );
       })}

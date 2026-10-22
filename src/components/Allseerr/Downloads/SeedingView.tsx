@@ -21,6 +21,7 @@ import type {
   SeedingResponse,
   TrackerAccount,
 } from '@server/interfaces/api/downloadInterfaces';
+import type { ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -131,7 +132,13 @@ const TrackerAccountPanel = ({ mam }: { mam: TrackerAccount }) => {
  * What Talearr seeds, at risk torrents first, and the tracker account
  * its seeding rules come from
  */
-const SeedingView = ({ layout = 'cards' }: { layout?: DownloadsLayout }) => {
+const SeedingView = ({
+  layout = 'cards',
+  summaryActions,
+}: {
+  layout?: DownloadsLayout;
+  summaryActions?: ReactNode;
+}) => {
   const intl = useIntl();
   const [statsRef, statsHidden] = useScrolledPast();
   const { data, error } = useSWR<SeedingResponse>('/api/v1/downloads/seeding', {
@@ -175,6 +182,7 @@ const SeedingView = ({ layout = 'cards' }: { layout?: DownloadsLayout }) => {
   return (
     <div className="flex flex-col gap-6">
       <StickySummary
+        actions={summaryActions}
         show={statsHidden}
         label={intl.formatMessage(messages.summaryLabel)}
         groups={[

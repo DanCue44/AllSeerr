@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Fragment, useEffect, useState } from 'react';
 
 export interface SummaryItem {
@@ -56,10 +57,13 @@ const StickySummary = ({
   show,
   groups,
   label,
+  actions,
 }: {
   show: boolean;
   groups: SummaryItem[][];
   label: string;
+  // The page's view switches, kept within reach while scrolling
+  actions?: ReactNode;
 }) => {
   const [desktop, setDesktop] = useState(false);
 
@@ -89,46 +93,53 @@ const StickySummary = ({
         <div
           role="status"
           aria-label={label}
-          className={`${glass} flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-2xl px-4 py-2 text-xs leading-snug text-as-ink-soft shadow-lg shadow-black/30 sm:text-[13px]`}
+          className={`${glass} flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl px-4 py-1.5 text-xs leading-snug text-as-ink-soft shadow-lg shadow-black/30 sm:text-[13px]`}
         >
-          {filled.map((group, index) => (
-            <Fragment key={group[0].key}>
-              {index > 0 && (
-                <span aria-hidden="true" className="text-as-ink-muted">
-                  |
-                </span>
-              )}
-              {group.map((item, itemIndex) => (
-                <Fragment key={item.key}>
-                  {itemIndex > 0 && (
-                    <span aria-hidden="true" className="text-as-ink-muted">
-                      ·
-                    </span>
-                  )}
-                  {item.onClick ? (
-                    <button
-                      type="button"
-                      tabIndex={show ? 0 : -1}
-                      onClick={item.onClick}
-                      className={`whitespace-nowrap font-semibold tabular-nums transition hover:underline ${
-                        item.tone ?? 'text-as-ink'
-                      } ${item.active ? 'underline' : ''}`}
-                    >
-                      {item.text}
-                    </button>
-                  ) : (
-                    <span
-                      className={`whitespace-nowrap font-semibold tabular-nums ${
-                        item.tone ?? 'text-as-ink'
-                      }`}
-                    >
-                      {item.text}
-                    </span>
-                  )}
-                </Fragment>
-              ))}
-            </Fragment>
-          ))}
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+            {filled.map((group, index) => (
+              <Fragment key={group[0].key}>
+                {index > 0 && (
+                  <span aria-hidden="true" className="text-as-ink-muted">
+                    |
+                  </span>
+                )}
+                {group.map((item, itemIndex) => (
+                  <Fragment key={item.key}>
+                    {itemIndex > 0 && (
+                      <span aria-hidden="true" className="text-as-ink-muted">
+                        ·
+                      </span>
+                    )}
+                    {item.onClick ? (
+                      <button
+                        type="button"
+                        tabIndex={show ? 0 : -1}
+                        onClick={item.onClick}
+                        className={`whitespace-nowrap font-semibold tabular-nums transition hover:underline ${
+                          item.tone ?? 'text-as-ink'
+                        } ${item.active ? 'underline' : ''}`}
+                      >
+                        {item.text}
+                      </button>
+                    ) : (
+                      <span
+                        className={`whitespace-nowrap font-semibold tabular-nums ${
+                          item.tone ?? 'text-as-ink'
+                        }`}
+                      >
+                        {item.text}
+                      </span>
+                    )}
+                  </Fragment>
+                ))}
+              </Fragment>
+            ))}
+          </div>
+          {actions && (
+            <div className="ml-auto flex flex-none items-center gap-1.5">
+              {actions}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -248,6 +248,51 @@ const Downloads = () => {
   const visible = filterDownloads(results, tab, statusFilter);
   const totals = data?.totals;
 
+  // The Queue / Seeding switch and the layout toggle, full size in the page
+  // header and compact on the sticky summary
+  const viewControls = (compact: boolean) => (
+    <>
+      {showSeeding && (
+        <div
+          className={`flex flex-none rounded-full bg-as-surface ${compact ? 'p-0.5' : 'p-1'}`}
+          role="tablist"
+          aria-label={intl.formatMessage(messages.views)}
+        >
+          {DOWNLOADS_VIEWS.map((key) => {
+            const active = activeView === key;
+
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setView(key)}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-full font-semibold transition ${
+                  compact ? 'h-7 px-3 text-xs' : 'h-9 px-4 text-sm'
+                } ${
+                  active
+                    ? 'bg-as-raised text-as-ink'
+                    : 'text-as-ink-muted hover:text-as-ink'
+                }`}
+              >
+                {intl.formatMessage(
+                  key === 'seeding' ? messages.viewSeeding : messages.viewQueue
+                )}
+                {key === 'seeding' && seedingAtRisk > 0 && (
+                  <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#3b2427] px-1.5 text-[11px] font-bold leading-5 text-[#f2b0aa]">
+                    {seedingAtRisk}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <LayoutToggle value={layout} onChange={setLayout} compact={compact} />
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-6 pb-6">
       <PageTitle title={intl.formatMessage(messages.downloads)} />
@@ -312,49 +357,12 @@ const Downloads = () => {
           </p>
         </div>
         <div className="flex flex-none items-center gap-2 self-start sm:self-auto">
-          {showSeeding && (
-            <div
-              className="flex flex-none rounded-full bg-as-surface p-1"
-              role="tablist"
-              aria-label={intl.formatMessage(messages.views)}
-            >
-              {DOWNLOADS_VIEWS.map((key) => {
-                const active = activeView === key;
-
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setView(key)}
-                    className={`flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-sm font-semibold transition ${
-                      active
-                        ? 'bg-as-raised text-as-ink'
-                        : 'text-as-ink-muted hover:text-as-ink'
-                    }`}
-                  >
-                    {intl.formatMessage(
-                      key === 'seeding'
-                        ? messages.viewSeeding
-                        : messages.viewQueue
-                    )}
-                    {key === 'seeding' && seedingAtRisk > 0 && (
-                      <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#3b2427] px-1.5 text-[11px] font-bold leading-5 text-[#f2b0aa]">
-                        {seedingAtRisk}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <LayoutToggle value={layout} onChange={setLayout} />
+          {viewControls(false)}
         </div>
       </div>
 
       {activeView === 'seeding' ? (
-        <SeedingView layout={layout} />
+        <SeedingView layout={layout} summaryActions={viewControls(true)} />
       ) : (
         <>
           <div
@@ -382,6 +390,7 @@ const Downloads = () => {
 
           <StickySummary
             show={statsHidden}
+            actions={viewControls(true)}
             label={intl.formatMessage(messages.summaryLabel)}
             groups={[
               (
