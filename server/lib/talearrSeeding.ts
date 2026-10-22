@@ -12,6 +12,7 @@ import type {
   TalearrSeeding,
   TrackerAccount,
 } from '@server/interfaces/api/downloadInterfaces';
+import { pickRequester } from '@server/lib/downloads';
 import { addLookupCovers } from '@server/lib/seedingCovers';
 import { parseSeedingFileName } from '@server/lib/seedingNames';
 import type { ChaptarrSettings } from '@server/lib/settings';
@@ -150,7 +151,7 @@ export const parseTalearrSeeding = (
 
 /**
  * Adds the Allseerr book of each torrent Talearr matched to a book, for
- * its cover and link
+ * its cover, link and the person who requested it
  */
 const linkBooks = async (
   server: ChaptarrSettings,
@@ -179,6 +180,7 @@ const linkBooks = async (
     .map((other) => other.id);
 
   const medias = await getRepository(Media).find({
+    relations: { requests: { requestedBy: true } },
     where: [
       {
         mediaType: MediaType.BOOK,
@@ -208,6 +210,16 @@ const linkBooks = async (
     if (media) {
       torrent.mediaId = media.id;
       torrent.olId = media.olId ?? undefined;
+      // The request for the format this torrent is of
+      const bookFormat =
+        torrent.mediaType === 'ebook'
+          ? 'ebook'
+          : torrent.mediaType === 'audiobook'
+            ? 'audiobook'
+            : media.externalServiceIdAudio === torrent.bookId
+              ? 'audiobook'
+              : 'ebook';
+      torrent.requester = pickRequester(media, { bookFormat }) ?? null;
     }
   }
 };
@@ -282,6 +294,10 @@ export const collectSeeding = async (): Promise<SeedingResponse> => {
       label: 'Downloads',
       errorMessage: e.message,
     });
+  }
+
+  for (const torrent of seeding.torrents) {
+    torrent.requester ??= null;
   }
 
   try {

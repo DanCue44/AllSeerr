@@ -15,6 +15,7 @@ import {
   getSeedingTone,
   getSeedProgress,
 } from '@app/components/Allseerr/Downloads/seedingLogic';
+import UserAvatar from '@app/components/Allseerr/RequestList/UserAvatar';
 import { statusTone } from '@app/components/Allseerr/Title/styles';
 import Tooltip from '@app/components/Common/Tooltip';
 import globalMessages from '@app/i18n/globalMessages';
@@ -313,6 +314,41 @@ const SeedingCard = ({
       </Tooltip>
     ) : null;
 
+  // Who asked for the book, named at once on hover and in the label
+  const requester = torrent.requester;
+  const requesterBadge = (size: number, className = '') =>
+    requester ? (
+      <Tooltip
+        content={
+          <p className="py-1 text-xs">
+            {intl.formatMessage(cardMessages.requestedBy, {
+              name: requester.displayName,
+            })}
+          </p>
+        }
+        tooltipConfig={{
+          followCursor: false,
+          placement: 'top',
+          offset: [0, 8],
+        }}
+      >
+        <span
+          className={`inline-flex flex-none ${className}`}
+          aria-label={intl.formatMessage(cardMessages.requestedBy, {
+            name: requester.displayName,
+          })}
+          role="img"
+        >
+          <UserAvatar
+            id={requester.id}
+            name={requester.displayName}
+            avatar={requester.avatar}
+            size={size}
+          />
+        </span>
+      </Tooltip>
+    ) : null;
+
   const ratioText = intl.formatMessage(messages.ratio, {
     ratio: formatRatio(torrent.ratio),
   });
@@ -337,6 +373,7 @@ const SeedingCard = ({
                 title={intl.formatMessage(messages.privateTracker)}
               />
             )}
+            {requesterBadge(20)}
           </div>
           <div
             className="truncate text-xs text-as-ink-muted"
@@ -421,10 +458,18 @@ const SeedingCard = ({
       >
         <CardBackdrop src={cover} />
         <div className="relative flex gap-4 p-3 sm:p-4">
+          {requesterBadge(
+            28,
+            'absolute right-3 top-3 z-10 sm:right-4 sm:top-4'
+          )}
           <div className="relative aspect-[2/3] w-[104px] flex-none self-center overflow-hidden rounded-[10px] bg-as-tile shadow-lg shadow-black/40 sm:w-[128px]">
             <PosterImage src={cover} />
           </div>
-          <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
+          <div
+            className={`flex min-w-0 flex-1 flex-col justify-between gap-3 ${
+              requester ? 'pr-9' : ''
+            }`}
+          >
             <dl className="flex min-w-0 flex-col gap-1">
               <Detail label={intl.formatMessage(messages.labelService)}>
                 {intl.formatMessage(messages.talearr)}

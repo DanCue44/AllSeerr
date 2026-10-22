@@ -14619,6 +14619,17 @@ paths:
                         posterUrl:
                           type: string
                           description: The book's cover from Talearr
+                        requester:
+                          type: object
+                          nullable: true
+                          description: Who requested the book in this format, null when nobody did (such as filler torrents)
+                          properties:
+                            id:
+                              type: number
+                            displayName:
+                              type: string
+                            avatar:
+                              type: string
                   summary:
                     type: object
                     properties:

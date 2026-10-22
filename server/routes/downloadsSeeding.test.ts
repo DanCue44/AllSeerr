@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
-import { MediaStatus, MediaType } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
+import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { clearDownloadsCache } from '@server/lib/downloads';
 import { Permission } from '@server/lib/permissions';
@@ -244,13 +249,68 @@ describe('GET /downloads/seeding', () => {
       ...payload.torrents[0],
       mediaId: media.id,
       olId: 'OL900001W',
+      requester: null,
     });
     // Without a book, the title and format come from the release name
     assert.deepStrictEqual(res.body.torrents[1], {
       ...payload.torrents[1],
       bookTitle: 'Unknown.Release',
       mediaType: 'ebook',
+      requester: null,
     });
+  });
+
+  it('adds who requested the book in the format of the torrent', async () => {
+    const media = await getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.BOOK,
+        olId: 'OL900001W',
+        status: MediaStatus.AVAILABLE,
+        statusAudio: MediaStatus.AVAILABLE,
+        serviceId: 0,
+        externalServiceId: 3756,
+        externalServiceIdAudio: 3757,
+      })
+    );
+    const apiKey = await admin();
+    const users = getRepository(User);
+    const reader = await users.findOneByOrFail({ email: 'admin@example.com' });
+    await createUser('listener@example.com', Permission.REQUEST);
+    const listener = await users.findOneByOrFail({
+      email: 'listener@example.com',
+    });
+    // Saved without Talearr set up, so the requests are sent nowhere
+    getSettings().chaptarr = [];
+    await getRepository(MediaRequest).save([
+      new MediaRequest({
+        type: MediaType.BOOK,
+        status: MediaRequestStatus.COMPLETED,
+        media,
+        requestedBy: reader,
+        isAudiobook: false,
+      }),
+      new MediaRequest({
+        type: MediaType.BOOK,
+        status: MediaRequestStatus.COMPLETED,
+        media,
+        requestedBy: listener,
+        isAudiobook: true,
+      }),
+    ]);
+    getSettings().chaptarr = [talearr];
+
+    const res = await request(app)
+      .get('/downloads/seeding')
+      .set('X-Api-Key', apiKey);
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.deepStrictEqual(res.body.torrents[0].requester, {
+      id: listener.id,
+      displayName: listener.displayName,
+      avatar: listener.avatar,
+    });
+    // Filler and unmatched torrents have nobody to show
+    assert.strictEqual(res.body.torrents[1].requester, null);
   });
 
   it("adds each book's cover from Talearr", async () => {

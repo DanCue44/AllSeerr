@@ -187,6 +187,9 @@ export interface SeedingTorrent {
   olId?: string;
   // Added by Allseerr: the book's cover from Talearr
   posterUrl?: string;
+  // Added by Allseerr: who requested the book in this format, null when
+  // nobody did (such as filler torrents)
+  requester?: DownloadRequester | null;
 }
 
 export interface SeedingSummary {
