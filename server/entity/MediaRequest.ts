@@ -37,8 +37,10 @@ import {
 } from '@server/lib/bookNotifications';
 import { getRequestStatusKey } from '@server/lib/bookRequests';
 import {
+  findLibrarySeries,
   getComicNotificationDetails,
   getComicsServer,
+  getLibrarySeries,
   isComicId,
 } from '@server/lib/comics';
 import {
@@ -1163,6 +1165,13 @@ export class MediaRequest {
 
     if (!metadata) {
       throw new InvalidComicRequestError('Unknown comic series.');
+    }
+
+    // A series Talearr has already needs no request
+    if (findLibrarySeries(await getLibrarySeries(), comicId, metadata)) {
+      throw new DuplicateMediaRequestError(
+        'This series is in the library already.'
+      );
     }
 
     const ageLimit = await MediaRequest.getRequestAgeLimit(requestUser);

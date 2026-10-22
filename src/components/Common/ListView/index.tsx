@@ -2,7 +2,9 @@ import { ambientGrid } from '@app/components/Allseerr/ListPage';
 import PersonCard from '@app/components/PersonCard';
 import TitleCard from '@app/components/TitleCard';
 import BookTitleCard from '@app/components/TitleCard/BookTitleCard';
-import ComicTitleCard from '@app/components/TitleCard/ComicTitleCard';
+import ComicTitleCard, {
+  getComicStatus,
+} from '@app/components/TitleCard/ComicTitleCard';
 import MusicTitleCard from '@app/components/TitleCard/MusicTitleCard';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
@@ -241,7 +243,7 @@ const ListView = ({
                     subtitle={title.authors}
                     year={title.year}
                     image={title.posterPath}
-                    status={title.mediaInfo?.status}
+                    status={getComicStatus(title)}
                     canExpand
                   />
                 );

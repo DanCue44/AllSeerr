@@ -11,6 +11,20 @@ import Link from 'next/link';
 import { useInView } from 'react-intersection-observer';
 import useSWR from 'swr';
 
+/**
+ * The status a comic card shows: its request's, or what Talearr's library
+ * holds of a series added there some other way
+ */
+export const getComicStatus = (comic: {
+  mediaInfo?: { status: MediaStatus };
+  library?: { status: MediaStatus };
+}): MediaStatus | undefined =>
+  comic.mediaInfo &&
+  comic.mediaInfo.status !== MediaStatus.UNKNOWN &&
+  comic.mediaInfo.status !== MediaStatus.DELETED
+    ? comic.mediaInfo.status
+    : (comic.library?.status ?? comic.mediaInfo?.status);
+
 interface ComicTitleCardProps {
   id: string;
   kind: ComicKind;
@@ -176,7 +190,7 @@ export const ComicIdTitleCard = ({
       subtitle={comic.authors}
       year={comic.year}
       image={comic.posterPath}
-      status={comic.mediaInfo?.status}
+      status={getComicStatus(comic)}
       canExpand={canExpand}
     />
   );

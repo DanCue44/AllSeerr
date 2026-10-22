@@ -23,7 +23,10 @@ import { MediaRequest } from '@server/entity/MediaRequest';
 import MetadataComic from '@server/entity/MetadataComic';
 import { User } from '@server/entity/User';
 import { UserAccessProfile } from '@server/entity/UserAccessProfile';
-import { resetComicsStatusCache } from '@server/lib/comics';
+import {
+  resetComicsLibraryCache,
+  resetComicsStatusCache,
+} from '@server/lib/comics';
 import { Permission } from '@server/lib/permissions';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -144,7 +147,17 @@ mock.method(
     return lookupAnswers[kind];
   }
 );
-mock.method(TalearrComicsAPI.prototype, 'getSeries', async () => library);
+let seriesReads = 0;
+mock.method(TalearrComicsAPI.prototype, 'getSeries', async () => {
+  seriesReads++;
+  return library;
+});
+
+// Talearr's library changes under a cached copy, as a test sets it
+const setLibrary = (series: TalearrComicSeriesSummary[]) => {
+  library = series;
+  resetComicsLibraryCache();
+};
 mock.method(
   TalearrComicsAPI.prototype,
   'getRootFolders',
@@ -297,6 +310,8 @@ beforeEach(async () => {
   searchesOnAdd = true;
   sendNotificationMock.resetCalls();
   resetComicsStatusCache();
+  resetComicsLibraryCache();
+  seriesReads = 0;
   configureBooks();
   await setRequester(Permission.REQUEST_BOOK);
 });
@@ -367,6 +382,76 @@ describe('GET /comic/search', () => {
     assert.strictEqual(saved.ageRating, 'Mature 17+');
   });
 
+  it('drops a Hardcover result that is the same series as an AniList one', async () => {
+    const answer = lookupAnswers.manga;
+    lookupAnswers.manga = {
+      ...answer,
+      results: [
+        ...answer.results,
+        {
+          hardcoverSeriesId: 62928,
+          kind: 'manga',
+          title: 'FRIEREN - Beyond Journey’s End',
+          alternateTitles: [],
+          authors: 'Tsukasa Abe',
+          coverUrl: null,
+          isAdult: false,
+        },
+      ],
+    };
+    lookupAnswers.manga.results[0] = {
+      ...answer.results[0],
+      title: 'Frieren: Beyond Journey’s End',
+      hardcoverSeriesId: null,
+    };
+    const agent = await loginAs('demo@seerr.dev');
+
+    try {
+      const res = await agent.get('/comic/search').query({ query: 'frieren' });
+
+      assert.strictEqual(res.status, 200, res.body.message);
+      assert.deepStrictEqual(
+        res.body.results.map((result: { id: string }) => result.id),
+        [FRIEREN_ID, SAGA_ID]
+      );
+      const saved = await getRepository(MetadataComic).findOneOrFail({
+        where: { comicId: FRIEREN_ID },
+      });
+      assert.strictEqual(saved.hardcoverSeriesId, 62928);
+    } finally {
+      lookupAnswers.manga = answer;
+    }
+  });
+
+  it('marks series Talearr has already, reading its library once', async () => {
+    setLibrary([
+      {
+        series: {
+          id: 7,
+          kind: 'comic',
+          title: 'Saga',
+          hardcoverSeriesId: 4521,
+          monitored: true,
+        },
+        volumeCount: 11,
+        downloadedCount: 11,
+        missingCount: 0,
+        downloadingCount: 0,
+      },
+    ]);
+    const agent = await loginAs('demo@seerr.dev');
+
+    await agent.get('/comic/search').query({ query: 'saga' });
+    const res = await agent.get('/comic/search').query({ query: 'saga' });
+
+    const saga = res.body.results.find(
+      (result: { id: string }) => result.id === SAGA_ID
+    );
+    assert.strictEqual(saga.library.status, MediaStatus.AVAILABLE);
+    assert.strictEqual(saga.library.seriesId, 7);
+    assert.strictEqual(seriesReads, 1);
+  });
+
   it('searches one kind when asked', async () => {
     const agent = await loginAs('demo@seerr.dev');
 
@@ -433,7 +518,7 @@ describe('GET /comic/:comicId', () => {
 
   it('shows the saved facts and what Talearr holds', async () => {
     await searchFirst();
-    library = [
+    setLibrary([
       {
         series: {
           id: 41,
@@ -447,7 +532,7 @@ describe('GET /comic/:comicId', () => {
         missingCount: 8,
         downloadingCount: 0,
       },
-    ];
+    ]);
     const agent = await loginAs('demo@seerr.dev');
 
     const res = await agent.get(`/comic/${FRIEREN_ID}`);
@@ -461,6 +546,7 @@ describe('GET /comic/:comicId', () => {
       downloadedCount: 5,
       missingCount: 8,
       downloadingCount: 0,
+      status: MediaStatus.PARTIALLY_AVAILABLE,
     });
   });
 
@@ -474,7 +560,7 @@ describe('GET /comic/:comicId', () => {
         status: MediaStatus.PROCESSING,
       })
     );
-    library = [
+    setLibrary([
       {
         series: {
           id: 41,
@@ -488,7 +574,7 @@ describe('GET /comic/:comicId', () => {
         missingCount: 0,
         downloadingCount: 0,
       },
-    ];
+    ]);
     const agent = await loginAs('demo@seerr.dev');
 
     const res = await agent.get(`/comic/${FRIEREN_ID}`);
@@ -611,6 +697,34 @@ describe('comic requests', () => {
       .send({ mediaType: MediaType.COMIC, mediaId: SAGA_ID });
 
     assert.strictEqual(res.status, 403);
+  });
+
+  it('refuses a series Talearr has already, matched on its title', async () => {
+    await searchFirst();
+    setLibrary([
+      {
+        series: {
+          id: 9,
+          kind: 'manga',
+          title: 'Frieren - Beyond Journey’s End',
+          monitored: true,
+        },
+        volumeCount: 13,
+        downloadedCount: 2,
+        missingCount: 11,
+        downloadingCount: 0,
+      },
+    ]);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const detail = await agent.get(`/comic/${FRIEREN_ID}`);
+    const res = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: FRIEREN_ID });
+
+    assert.strictEqual(detail.body.library.seriesId, 9);
+    assert.strictEqual(res.status, 409);
+    assert.strictEqual(addCalls.length, 0);
   });
 
   it('needs the book request permission', async () => {

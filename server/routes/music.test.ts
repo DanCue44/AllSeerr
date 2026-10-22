@@ -603,7 +603,8 @@ describe('GET /search', () => {
     assert.strictEqual(res.status, 200);
     assert.deepStrictEqual(
       res.body.results.map((result: { mediaType: string }) => result.mediaType),
-      ['movie', 'artist', 'album']
+      // The artist called exactly what was searched for comes first
+      ['artist', 'movie', 'album']
     );
     assert.strictEqual(res.body.totalResults, 3);
   });

@@ -14,6 +14,7 @@ import MetadataComic from '@server/entity/MetadataComic';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import { getDefaultChaptarr, getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import type { ComicLibraryInfo } from '@server/models/Comic';
 import type { ComicResult } from '@server/models/Search';
 import { truncate } from 'lodash';
 import { In } from 'typeorm';
@@ -207,7 +208,8 @@ export const saveComicMetadata = async (
 
 export const mapComicResult = (
   metadata: MetadataComic,
-  media?: Media
+  media?: Media,
+  library?: TalearrComicSeriesSummary
 ): ComicResult => ({
   id: metadata.comicId,
   mediaType: 'comic',
@@ -220,14 +222,104 @@ export const mapComicResult = (
   isAdult: metadata.isAdult,
   posterPath: metadata.coverUrl,
   mediaInfo: media,
+  library: library ? toLibraryInfo(library) : undefined,
 });
 
 /**
  * Finds a series in Talearr's library, matched on the ids it was added with
  */
+// Titles and names compared without case, accents or punctuation
+export const normalizeComicTitle = (title: string): string =>
+  title
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const nameTokens = (names?: string | null): Set<string> =>
+  new Set(
+    normalizeComicTitle(names ?? '')
+      .split(' ')
+      .filter((token) => token.length > 1)
+  );
+
+// Authors agree when they share a name, or when one side names nobody
+const authorsAgree = (a?: string | null, b?: string | null): boolean => {
+  const first = nameTokens(a);
+  const second = nameTokens(b);
+
+  return (
+    first.size === 0 ||
+    second.size === 0 ||
+    [...first].some((token) => second.has(token))
+  );
+};
+
+/**
+ * Talearr's lookup can find a series twice: from AniList as manga and from
+ * Hardcover on its own. A Hardcover only result with the title and authors
+ * of an AniList result is the same series, so it is dropped, and its
+ * Hardcover id and cover go to the AniList result when that has none.
+ */
+export const dropHardcoverDuplicates = (
+  results: TalearrComicLookupResult[]
+): TalearrComicLookupResult[] => {
+  const aniList = results
+    .filter((result) => !!result.aniListId)
+    .map((result) => ({ ...result }));
+
+  const titlesOf = (result: TalearrComicLookupResult) =>
+    new Set(
+      [result.title, ...result.alternateTitles]
+        .map(normalizeComicTitle)
+        .filter(Boolean)
+    );
+  const aniListTitles = aniList.map(titlesOf);
+
+  const rest = results.filter((result) => {
+    if (result.aniListId) {
+      return false;
+    }
+
+    const title = normalizeComicTitle(result.title);
+    const index = aniList.findIndex(
+      (candidate, i) =>
+        aniListTitles[i].has(title) &&
+        authorsAgree(candidate.authors, result.authors)
+    );
+
+    if (index < 0) {
+      return true;
+    }
+
+    const match = aniList[index];
+    match.hardcoverSeriesId =
+      match.hardcoverSeriesId ?? result.hardcoverSeriesId;
+    match.coverUrl = match.coverUrl ?? result.coverUrl;
+    return false;
+  });
+
+  // AniList results keep their place among the others
+  const merged = new Map(aniList.map((result) => [result.aniListId, result]));
+  return results
+    .filter((result) => !!result.aniListId || rest.includes(result))
+    .map((result) =>
+      result.aniListId ? (merged.get(result.aniListId) ?? result) : result
+    );
+};
+
+/**
+ * Finds a series in Talearr's library: on the ids it was added with, the
+ * AniList or Hardcover id the facts know, and failing those its title
+ */
 export const findLibrarySeries = (
   library: TalearrComicSeriesSummary[],
-  comicId: string
+  comicId: string,
+  metadata?: Pick<
+    MetadataComic,
+    'title' | 'aniListId' | 'hardcoverSeriesId'
+  > | null
 ): TalearrComicSeriesSummary | undefined => {
   const ids = parseComicId(comicId);
 
@@ -235,17 +327,116 @@ export const findLibrarySeries = (
     return undefined;
   }
 
-  return library.find((summary) =>
-    ids.aniListId
-      ? summary.series.aniListId === ids.aniListId
-      : summary.series.hardcoverSeriesId === ids.hardcoverSeriesId
+  const aniListId = ids.aniListId ?? metadata?.aniListId ?? undefined;
+  const hardcoverSeriesId =
+    ids.hardcoverSeriesId ?? metadata?.hardcoverSeriesId ?? undefined;
+  const title = metadata?.title ? normalizeComicTitle(metadata.title) : '';
+
+  return (
+    library.find(
+      (summary) =>
+        (!!aniListId && summary.series.aniListId === aniListId) ||
+        (!!hardcoverSeriesId &&
+          summary.series.hardcoverSeriesId === hardcoverSeriesId)
+    ) ??
+    (title
+      ? library.find(
+          (summary) =>
+            !!summary.series.title &&
+            normalizeComicTitle(summary.series.title) === title
+        )
+      : undefined)
   );
 };
 
+export const toLibraryInfo = (
+  summary: TalearrComicSeriesSummary
+): ComicLibraryInfo => ({
+  seriesId: summary.series.id,
+  volumeCount: summary.volumeCount,
+  downloadedCount: summary.downloadedCount,
+  missingCount: summary.missingCount,
+  downloadingCount: summary.downloadingCount,
+  status: getLibraryStatus(summary),
+});
+
 /**
- * The status a requested series has from what Talearr holds of it: every
- * volume, some of them or none yet
+ * Search results for saved series, with their request status and what
+ * Talearr's library holds of them
  */
+export const mapComicResults = async (
+  rows: MetadataComic[],
+  mediaFor?: (media: Media) => Media
+): Promise<ComicResult[]> => {
+  const [media, library] = await Promise.all([
+    Media.getRelatedComics(rows.map((row) => row.comicId)),
+    getLibrarySeries(),
+  ]);
+  const mediaById = new Map(media.map((m) => [m.comicId, m]));
+
+  return rows.map((row) => {
+    const item = mediaById.get(row.comicId);
+
+    return mapComicResult(
+      row,
+      item && mediaFor ? mediaFor(item) : item,
+      findLibrarySeries(library, row.comicId, row)
+    );
+  });
+};
+
+// How long Talearr's series list is kept for the search and the pages
+const LIBRARY_TTL_MS = 30_000;
+
+let cachedLibrary: {
+  series: Promise<TalearrComicSeriesSummary[]>;
+  until: number;
+  key: string;
+} | null = null;
+
+export const resetComicsLibraryCache = (): void => {
+  cachedLibrary = null;
+};
+
+/**
+ * Talearr's comics library, kept for half a minute so searches and pages
+ * do not ask for it each time. Empty when it cannot be read.
+ */
+export const getLibrarySeries = async (): Promise<
+  TalearrComicSeriesSummary[]
+> => {
+  const server = getComicsServer();
+
+  if (!server) {
+    return [];
+  }
+
+  const key = `${server.id}:${server.hostname}:${server.port}`;
+  if (
+    !cachedLibrary ||
+    cachedLibrary.key !== key ||
+    cachedLibrary.until <= Date.now()
+  ) {
+    cachedLibrary = {
+      key,
+      until: Date.now() + LIBRARY_TTL_MS,
+      series: getComicsApi(server)
+        .getSeries()
+        .catch((e) => {
+          logger.debug('Could not read the Talearr comics library', {
+            label: 'Comics',
+            errorMessage: e instanceof Error ? e.message : String(e),
+          });
+          // A failed read is tried again on the next call
+          cachedLibrary = null;
+          return [];
+        }),
+    };
+  }
+
+  return cachedLibrary.series;
+};
+
 export const getLibraryStatus = (
   summary: TalearrComicSeriesSummary
 ): MediaStatus =>
@@ -311,11 +502,19 @@ export const syncComicAvailability = async (): Promise<number> => {
   }
 
   const library = await getComicsApi(server).getSeries();
+  const metadata = await getRepository(MetadataComic).find({
+    where: {
+      comicId: In(
+        media.map((item) => item.comicId).filter((id): id is string => !!id)
+      ),
+    },
+  });
+  const metadataById = new Map(metadata.map((row) => [row.comicId, row]));
   let changed = 0;
 
   for (const item of media) {
     const summary = item.comicId
-      ? findLibrarySeries(library, item.comicId)
+      ? findLibrarySeries(library, item.comicId, metadataById.get(item.comicId))
       : undefined;
 
     if (summary && (await applyLibraryStatus(item, summary))) {
@@ -382,7 +581,9 @@ export const searchComics = async ({
     )
   );
 
-  const results = answers.flatMap((answer) => answer.results);
+  const results = dropHardcoverDuplicates(
+    answers.flatMap((answer) => answer.results)
+  );
   const ordered = kind
     ? results
     : [
@@ -471,7 +672,10 @@ export const sendComicToTalearr = async (
 
   const api = getComicsApi(server);
   const library = await api.getSeries();
-  const existing = findLibrarySeries(library, comicId);
+  const metadata = await getRepository(MetadataComic).findOne({
+    where: { comicId },
+  });
+  const existing = findLibrarySeries(library, comicId, metadata);
 
   if (existing) {
     return { seriesId: existing.series.id, alreadyInLibrary: true };
@@ -487,6 +691,7 @@ export const sendComicToTalearr = async (
     );
   }
 
+  resetComicsLibraryCache();
   const series = await api.addSeries({
     ...ids,
     kind,

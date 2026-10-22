@@ -1,4 +1,4 @@
-import type { ComicKind } from '@server/constants/media';
+import type { ComicKind, MediaStatus } from '@server/constants/media';
 import type Media from '@server/entity/Media';
 import type MetadataComic from '@server/entity/MetadataComic';
 
@@ -11,6 +11,8 @@ export interface ComicLibraryInfo {
   downloadedCount: number;
   missingCount: number;
   downloadingCount: number;
+  // Available, partly available or processing, from the volume counts
+  status: MediaStatus;
 }
 
 export interface ComicDetails {

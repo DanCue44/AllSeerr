@@ -13,6 +13,7 @@ import { MediaStatus } from '@server/constants/media';
 import {
   comicIdOf,
   comicPlainText,
+  dropHardcoverDuplicates,
   findLibrarySeries,
   getLibraryStatus,
   isComicId,
@@ -291,5 +292,45 @@ describe('TalearrComicsAPI', () => {
         error.needsAgeRating &&
         error.message.startsWith('Frieren is rated Teen')
     );
+  });
+});
+
+describe('dropHardcoverDuplicates', () => {
+  const base = { alternateTitles: [], isAdult: false };
+
+  it('keeps one series when AniList and Hardcover both find it', () => {
+    const results = dropHardcoverDuplicates([
+      {
+        ...base,
+        aniListId: 98263,
+        kind: 'manga',
+        title: 'Witch Hat Atelier',
+        authors: 'Kamome Shirahama',
+        coverUrl: 'https://s4.anilist.co/witch.jpg',
+      },
+      {
+        ...base,
+        hardcoverSeriesId: 62928,
+        kind: 'comic',
+        title: 'Witch Hat Atelier',
+        authors: 'Kamome Shirahama',
+      },
+      // Same title, someone else: another series
+      {
+        ...base,
+        hardcoverSeriesId: 5,
+        kind: 'comic',
+        title: 'Witch Hat Atelier',
+        authors: 'Somebody Different',
+      },
+      { ...base, hardcoverSeriesId: 6, kind: 'comic', title: 'Saga' },
+    ]);
+
+    assert.deepStrictEqual(
+      results.map((result) => result.aniListId ?? result.hardcoverSeriesId),
+      [98263, 5, 6]
+    );
+    assert.strictEqual(results[0].hardcoverSeriesId, 62928);
+    assert.strictEqual(results[0].coverUrl, 'https://s4.anilist.co/witch.jpg');
   });
 });
