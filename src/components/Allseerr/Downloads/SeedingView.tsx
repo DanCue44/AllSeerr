@@ -6,6 +6,9 @@ import {
   StatTile,
 } from '@app/components/Allseerr/Downloads/DownloadsCommon';
 import SeedingCard from '@app/components/Allseerr/Downloads/SeedingCard';
+import StickySummary, {
+  useScrolledPast,
+} from '@app/components/Allseerr/Downloads/StickySummary';
 import {
   isNearUnsatisfiedLimit,
   sortSeeding,
@@ -34,6 +37,13 @@ const messages = defineMessages('components.Allseerr.Downloads.Seeding', {
   bonusPoints: 'Bonus points',
   checkedAt: 'Checked {time}',
   unknown: 'Unknown',
+  summaryLabel: 'Seeding summary',
+  compactSeeding: '{count} seeding',
+  compactAtRisk: '{count} at risk',
+  compactBelowMinimum: '{count} below minimum',
+  compactUnsatisfied: '{count} unsatisfied',
+  compactWedges: '{count} wedges',
+  compactBonus: '{count} bonus',
   emptyTitle: 'Nothing is seeding',
   emptyText: 'Torrents Talearr grabs show up here while they seed.',
   unsupportedTitle: 'Seeding is not available',
@@ -123,6 +133,7 @@ const TrackerAccountPanel = ({ mam }: { mam: TrackerAccount }) => {
  */
 const SeedingView = ({ layout = 'cards' }: { layout?: DownloadsLayout }) => {
   const intl = useIntl();
+  const [statsRef, statsHidden] = useScrolledPast();
   const { data, error } = useSWR<SeedingResponse>('/api/v1/downloads/seeding', {
     refreshInterval: REFRESH_MS,
     refreshWhenHidden: false,
@@ -155,25 +166,102 @@ const SeedingView = ({ layout = 'cards' }: { layout?: DownloadsLayout }) => {
   const torrents = sortSeeding(data.torrents);
   const { summary } = data;
 
+  const mam = data.trackerAccount;
+  const number = (value: number | null) =>
+    value === null
+      ? intl.formatMessage(messages.unknown)
+      : intl.formatNumber(value);
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-3">
-        <StatTile
-          label={intl.formatMessage(messages.seeding)}
-          value={summary.seeding}
-        />
-        <StatTile
-          label={intl.formatMessage(messages.atRiskCount)}
-          value={summary.atRisk}
-          tone={summary.atRisk ? statusTone.bad : undefined}
-        />
-        <StatTile
-          label={intl.formatMessage(messages.belowMinimum)}
-          value={summary.privateUnsatisfied}
-        />
-      </div>
+      <StickySummary
+        show={statsHidden}
+        label={intl.formatMessage(messages.summaryLabel)}
+        groups={[
+          [
+            {
+              key: 'seeding',
+              text: intl.formatMessage(messages.compactSeeding, {
+                count: summary.seeding,
+              }),
+            },
+            {
+              key: 'atRisk',
+              text: intl.formatMessage(messages.compactAtRisk, {
+                count: summary.atRisk,
+              }),
+              tone: summary.atRisk ? 'text-[#f2b0aa]' : undefined,
+            },
+            {
+              key: 'belowMinimum',
+              text: intl.formatMessage(messages.compactBelowMinimum, {
+                count: summary.privateUnsatisfied,
+              }),
+            },
+          ],
+          mam
+            ? [
+                {
+                  key: 'class',
+                  text: [
+                    mam.userClass ?? intl.formatMessage(messages.unknown),
+                    mam.isVip ? intl.formatMessage(messages.vip) : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' '),
+                },
+                {
+                  key: 'unsatisfied',
+                  text: intl.formatMessage(messages.compactUnsatisfied, {
+                    count:
+                      mam.unsatisfiedLimit !== null
+                        ? intl.formatMessage(messages.unsatisfiedOf, {
+                            count: number(mam.unsatisfied),
+                            limit: number(mam.unsatisfiedLimit),
+                          })
+                        : number(mam.unsatisfied),
+                  }),
+                  tone: isNearUnsatisfiedLimit(mam)
+                    ? 'text-[#f0d9a8]'
+                    : undefined,
+                },
+                {
+                  key: 'wedges',
+                  text: intl.formatMessage(messages.compactWedges, {
+                    count: number(mam.wedges),
+                  }),
+                },
+                {
+                  key: 'bonus',
+                  text: intl.formatMessage(messages.compactBonus, {
+                    count: number(mam.bonusPoints),
+                  }),
+                },
+              ]
+            : [],
+        ]}
+      />
+      <div ref={statsRef} className="flex flex-col gap-6">
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-3">
+          <StatTile
+            label={intl.formatMessage(messages.seeding)}
+            value={summary.seeding}
+          />
+          <StatTile
+            label={intl.formatMessage(messages.atRiskCount)}
+            value={summary.atRisk}
+            tone={summary.atRisk ? statusTone.bad : undefined}
+          />
+          <StatTile
+            label={intl.formatMessage(messages.belowMinimum)}
+            value={summary.privateUnsatisfied}
+          />
+        </div>
 
-      {data.trackerAccount && <TrackerAccountPanel mam={data.trackerAccount} />}
+        {data.trackerAccount && (
+          <TrackerAccountPanel mam={data.trackerAccount} />
+        )}
+      </div>
 
       {torrents.length === 0 ? (
         <EmptyState

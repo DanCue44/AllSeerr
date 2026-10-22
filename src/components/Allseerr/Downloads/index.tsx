@@ -11,6 +11,9 @@ import {
 } from '@app/components/Allseerr/Downloads/DownloadsCommon';
 import RemoveDownloadModal from '@app/components/Allseerr/Downloads/RemoveDownloadModal';
 import SeedingView from '@app/components/Allseerr/Downloads/SeedingView';
+import StickySummary, {
+  useScrolledPast,
+} from '@app/components/Allseerr/Downloads/StickySummary';
 import type {
   DownloadStatusFilter,
   DownloadTab,
@@ -41,7 +44,7 @@ import type {
   DownloadsResponse,
 } from '@server/interfaces/api/downloadInterfaces';
 import axios from 'axios';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -56,6 +59,10 @@ const messages = defineMessages('components.Allseerr.Downloads', {
   downloading: 'Downloading',
   queued: 'Queued',
   attention: 'Need attention',
+  summaryLabel: 'Downloads summary',
+  compactDownloading: '{count} downloading',
+  compactQueued: '{count} queued',
+  compactAttention: '{count} need attention',
   statusFilter: 'Status',
   filterAll: 'All statuses',
   filterDownloading: 'Downloading',
@@ -123,6 +130,9 @@ const Downloads = () => {
   const [layout, setLayout] = useState<DownloadsLayout>('cards');
   const [tab, setTab] = useState<DownloadTab>('all');
   const [statusFilter, setStatusFilter] = useState<DownloadStatusFilter>('all');
+  // The stat tiles, and the filter row a click in the compact summary scrolls to
+  const [statsRef, statsHidden] = useScrolledPast();
+  const filtersRef = useRef<HTMLDivElement>(null);
   const [removing, setRemoving] = useState<DownloadItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState<DownloadItem | null>(null);
@@ -347,7 +357,10 @@ const Downloads = () => {
         <SeedingView layout={layout} />
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-3">
+          <div
+            ref={statsRef}
+            className="grid grid-cols-3 gap-2 sm:flex sm:gap-3"
+          >
             <StatTile
               label={intl.formatMessage(messages.downloading)}
               value={totals?.downloading ?? 0}
@@ -367,7 +380,38 @@ const Downloads = () => {
             />
           </div>
 
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <StickySummary
+            show={statsHidden}
+            label={intl.formatMessage(messages.summaryLabel)}
+            groups={[
+              (
+                [
+                  [
+                    'downloading',
+                    messages.compactDownloading,
+                    totals?.downloading,
+                  ],
+                  ['queued', messages.compactQueued, totals?.queued],
+                  ['attention', messages.compactAttention, totals?.attention],
+                ] as const
+              ).map(([key, message, count]) => ({
+                key,
+                text: intl.formatMessage(message, { count: count ?? 0 }),
+                tone:
+                  key === 'attention' && count ? 'text-[#f0d9a8]' : undefined,
+                active: statusFilter === key,
+                onClick: () => {
+                  setStatusFilter(statusFilter === key ? 'all' : key);
+                  filtersRef.current?.scrollIntoView({ block: 'start' });
+                },
+              })),
+            ]}
+          />
+
+          <div
+            ref={filtersRef}
+            className="flex scroll-mt-36 flex-col gap-3 md:flex-row md:items-center md:justify-between"
+          >
             <div
               className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:px-0 md:pb-0"
               role="tablist"
