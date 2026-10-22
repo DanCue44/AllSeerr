@@ -17,13 +17,26 @@ import {
   MagnifyingGlassIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
+import {
+  ArrowDownTrayIcon,
+  ArrowPathIcon,
+  BookOpenIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  FilmIcon,
+  MusicalNoteIcon,
+  PauseIcon,
+  SpeakerWaveIcon,
+  TvIcon,
+  ExclamationTriangleIcon as WarningSolidIcon,
+} from '@heroicons/react/24/solid';
 import type {
   DownloadItem,
   DownloadStatus,
 } from '@server/interfaces/api/downloadInterfaces';
 import type { BookDetails } from '@server/models/Book';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -54,53 +67,73 @@ export const messages = defineMessages('components.Allseerr.Downloads', {
   pickRelease: 'Pick a Release',
   removeFromQueue: 'Remove from Queue',
   openTitle: 'Open Title Page',
+  labelService: 'Service',
+  labelClient: 'Client',
+  labelQuality: 'Quality',
+  labelFormat: 'Format',
+  labelSize: 'Size',
+  labelStatus: 'Status',
+  labelIndexer: 'Indexer',
+  labelRelease: 'Release',
+  labelPath: 'Path',
+  eta: 'ETA: {time}',
+  sizeOfTotal: '{done} / {size}',
 });
 
 const STATUS_STYLE: Record<
   DownloadStatus,
-  { tone: string; bar: string; message: keyof typeof messages }
+  { tone: string; bar: string; text: string; message: keyof typeof messages }
 > = {
   downloading: {
+    text: 'text-as-accent',
     tone: statusTone.info,
     bar: 'bg-as-accent',
     message: 'statusDownloading',
   },
   queued: {
+    text: 'text-as-ink-soft',
     tone: statusTone.neutral,
     bar: 'bg-as-ink-faint',
     message: 'statusQueued',
   },
   paused: {
+    text: 'text-as-ink-soft',
     tone: statusTone.neutral,
     bar: 'bg-as-ink-faint',
     message: 'statusPaused',
   },
   importing: {
+    text: 'text-[#a8e6c4]',
     tone: statusTone.ok,
     bar: 'bg-[#a8e6c4]',
     message: 'statusImporting',
   },
   importPending: {
+    text: 'text-[#a8e6c4]',
     tone: statusTone.ok,
     bar: 'bg-[#a8e6c4]',
     message: 'statusImportPending',
   },
   completed: {
+    text: 'text-[#a8e6c4]',
     tone: statusTone.ok,
     bar: 'bg-[#a8e6c4]',
     message: 'statusCompleted',
   },
   warning: {
+    text: 'text-[#f0d9a8]',
     tone: statusTone.warn,
     bar: 'bg-[#f0d9a8]',
     message: 'statusWarning',
   },
   stalled: {
+    text: 'text-[#f0d9a8]',
     tone: statusTone.warn,
     bar: 'bg-[#f0d9a8]',
     message: 'statusStalled',
   },
   failed: {
+    text: 'text-[#f2b0aa]',
     tone: statusTone.bad,
     bar: 'bg-[#f2b0aa]',
     message: 'statusFailed',
@@ -134,7 +167,13 @@ const imageStyle = {
  * A poster or cover through the image cache when it is one Allseerr
  * caches, or the placeholder without one
  */
-export const PosterImage = ({ src }: { src?: string }) => {
+export const PosterImage = ({
+  src,
+  className,
+}: {
+  src?: string;
+  className?: string;
+}) => {
   if (!src) {
     return (
       <CachedImage
@@ -142,6 +181,7 @@ export const PosterImage = ({ src }: { src?: string }) => {
         src="/images/seerr_poster_not_found.png"
         alt=""
         style={imageStyle}
+        className={className}
         fill
       />
     );
@@ -157,8 +197,49 @@ export const PosterImage = ({ src }: { src?: string }) => {
           ? 'music'
           : 'avatar';
 
-  return <CachedImage type={type} src={src} alt="" style={imageStyle} fill />;
+  return (
+    <CachedImage
+      type={type}
+      src={src}
+      alt=""
+      style={imageStyle}
+      className={className}
+      fill
+    />
+  );
 };
+
+/**
+ * The card's backdrop: the art blurred and darkened behind the details
+ */
+export const CardBackdrop = ({ src }: { src?: string }) => (
+  <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+    {src && <PosterImage src={src} className="scale-110 blur-2xl" />}
+    <div className="absolute inset-0 bg-gradient-to-r from-as-surface via-as-surface/85 to-as-surface/70" />
+  </div>
+);
+
+/**
+ * A small uppercase label over its value, the rows of the card details
+ */
+export const Detail = ({
+  label,
+  children,
+  title,
+}: {
+  label: string;
+  children: ReactNode;
+  title?: string;
+}) => (
+  <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)] items-baseline gap-2">
+    <dt className="text-[11px] font-bold uppercase tracking-wider text-as-ink-faint">
+      {label}
+    </dt>
+    <dd className="truncate text-[13px] text-as-ink" title={title}>
+      {children}
+    </dd>
+  </div>
+);
 
 /**
  * The cover of a book in Allseerr, from its OpenLibrary work
@@ -176,31 +257,58 @@ export const useBookCover = (olId?: string | null): string | undefined => {
  * The poster or cover the arr sent. Books Chaptarr has no cover for use
  * the OpenLibrary one.
  */
-const Poster = ({ item }: { item: DownloadItem }) => {
+const usePosterSrc = (item: DownloadItem) => {
   const isBook = item.mediaType === 'ebook' || item.mediaType === 'audiobook';
   const bookCover = useBookCover(
     isBook && !item.posterUrl ? item.olId : undefined
   );
 
-  return <PosterImage src={item.posterUrl ?? bookCover} />;
+  return item.posterUrl ?? bookCover;
 };
 
-const Badge = ({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) => (
-  <span
-    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${className ?? ''}`}
-  >
-    {children}
-  </span>
+const Poster = ({ item }: { item: DownloadItem }) => (
+  <PosterImage src={usePosterSrc(item)} />
 );
+
+const STATUS_ICON: Record<
+  DownloadStatus,
+  ComponentType<{ className?: string }>
+> = {
+  downloading: ArrowDownTrayIcon,
+  queued: ClockIcon,
+  paused: PauseIcon,
+  importing: ArrowPathIcon,
+  importPending: ArrowPathIcon,
+  completed: CheckCircleIcon,
+  warning: WarningSolidIcon,
+  stalled: WarningSolidIcon,
+  failed: WarningSolidIcon,
+};
+
+export const MEDIA_ICON: Record<
+  DownloadItem['mediaType'],
+  ComponentType<{ className?: string }>
+> = {
+  movie: FilmIcon,
+  tv: TvIcon,
+  music: MusicalNoteIcon,
+  audiobook: SpeakerWaveIcon,
+  ebook: BookOpenIcon,
+};
+
+export type DownloadsLayout = 'cards' | 'list';
+
+export const DOWNLOADS_LAYOUTS: DownloadsLayout[] = ['cards', 'list'];
+
+// Shared by the list rows and their column headings so the columns line up
+export const QUEUE_LIST_GRID =
+  'md:grid-cols-[2.5rem_minmax(0,1fr)_8.5rem_minmax(8rem,12rem)_9rem_11rem]';
+export const SEEDING_LIST_GRID =
+  'md:grid-cols-[2.5rem_minmax(0,1fr)_8.5rem_minmax(8rem,12rem)_9rem_9rem]';
 
 interface DownloadCardProps {
   item: DownloadItem;
+  layout?: DownloadsLayout;
   onSearch: (item: DownloadItem) => void;
   onPickRelease: (item: DownloadItem) => void;
   onRemove: (item: DownloadItem) => void;
@@ -208,6 +316,7 @@ interface DownloadCardProps {
 
 const DownloadCard = ({
   item,
+  layout = 'cards',
   onSearch,
   onPickRelease,
   onRemove,
@@ -217,6 +326,7 @@ const DownloadCard = ({
   const href = getMediaHref(item);
   const percent = Math.floor(item.progress * 100);
   const square = item.mediaType === 'music';
+  const posterSrc = usePosterSrc(item);
 
   const formatDuration = (seconds: number) =>
     splitDuration(seconds)
@@ -322,193 +432,327 @@ const DownloadCard = ({
     </MenuItem>
   );
 
-  return (
-    <article
-      className="flex flex-col gap-3 rounded-[20px] bg-as-surface p-4 sm:p-[18px]"
-      data-testid="download-card"
+  const actionsMenu = (className: string) => (
+    <Menu as="div" className={`relative flex-none ${className}`}>
+      <MenuButton
+        className="flex h-8 w-8 items-center justify-center rounded-full text-as-ink-soft transition hover:bg-as-raised hover:text-as-ink focus:outline-none"
+        aria-label={intl.formatMessage(messages.actions, {
+          title: item.title,
+        })}
+      >
+        <EllipsisVerticalIcon className="h-5 w-5" />
+      </MenuButton>
+      <MenuItems
+        anchor="bottom end"
+        className="z-50 w-56 rounded-2xl bg-as-surface p-1.5 shadow-xl shadow-black/40 ring-1 ring-as-line [--anchor-gap:4px] focus:outline-none"
+      >
+        {item.canSearch &&
+          menuItem(
+            <MagnifyingGlassIcon className="h-5 w-5" />,
+            intl.formatMessage(messages.searchAgain),
+            () => onSearch(item)
+          )}
+        {item.mediaId &&
+          item.target &&
+          menuItem(
+            <ListBulletIcon className="h-5 w-5" />,
+            intl.formatMessage(messages.pickRelease),
+            () => onPickRelease(item)
+          )}
+        {href && (
+          <MenuItem>
+            {({ focus }) => (
+              <Link
+                href={href}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold text-as-ink ${
+                  focus ? 'bg-as-raised' : ''
+                }`}
+              >
+                <ArrowTopRightOnSquareIcon className="h-5 w-5" />
+                {intl.formatMessage(messages.openTitle)}
+              </Link>
+            )}
+          </MenuItem>
+        )}
+        {menuItem(
+          <TrashIcon className="h-5 w-5" />,
+          intl.formatMessage(messages.removeFromQueue),
+          () => onRemove(item),
+          true
+        )}
+      </MenuItems>
+    </Menu>
+  );
+
+  const statusBadge = (
+    <span
+      className={`flex-none whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${style.tone}`}
     >
-      <div className="flex gap-3">
+      {intl.formatMessage(messages[style.message])}
+    </span>
+  );
+
+  const progressBar = (
+    <div
+      className="h-2 w-full overflow-hidden rounded-full bg-as-tile"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percent}
+    >
+      <div
+        className={`h-full rounded-full transition-[width] duration-700 ${style.bar}`}
+        style={{ width: `${percent}%` }}
+      />
+    </div>
+  );
+
+  const timeText = showTime
+    ? intl.formatMessage(messages.timeLeft, {
+        time: formatDuration(item.timeLeftSeconds ?? 0),
+      })
+    : undefined;
+
+  if (layout === 'list') {
+    return (
+      <article
+        className={`grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 md:gap-y-0 ${QUEUE_LIST_GRID}`}
+        data-testid="download-row"
+      >
         <div
-          className={`relative flex-none overflow-hidden rounded-[10px] bg-as-tile ${
-            square ? 'h-14 w-14' : 'h-[72px] w-12'
+          className={`relative row-span-2 flex-none self-start overflow-hidden rounded-[8px] bg-as-tile md:row-span-1 md:self-center ${
+            square ? 'h-10 w-10' : 'h-[60px] w-10'
           }`}
         >
           <Poster item={item} />
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">{title}</div>
-            <span
-              className={`flex-none whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${style.tone}`}
-            >
-              {intl.formatMessage(messages[style.message])}
-            </span>
-            <Menu as="div" className="relative -mr-1.5 -mt-1 flex-none">
-              <MenuButton
-                className="flex h-8 w-8 items-center justify-center rounded-full text-as-ink-soft transition hover:bg-as-raised hover:text-as-ink focus:outline-none"
-                aria-label={intl.formatMessage(messages.actions, {
-                  title: item.title,
-                })}
-              >
-                <EllipsisVerticalIcon className="h-5 w-5" />
-              </MenuButton>
-              <MenuItems
-                anchor="bottom end"
-                className="z-50 w-56 rounded-2xl bg-as-surface p-1.5 shadow-xl shadow-black/40 ring-1 ring-as-line [--anchor-gap:4px] focus:outline-none"
-              >
-                {item.canSearch &&
-                  menuItem(
-                    <MagnifyingGlassIcon className="h-5 w-5" />,
-                    intl.formatMessage(messages.searchAgain),
-                    () => onSearch(item)
-                  )}
-                {item.mediaId &&
-                  item.target &&
-                  menuItem(
-                    <ListBulletIcon className="h-5 w-5" />,
-                    intl.formatMessage(messages.pickRelease),
-                    () => onPickRelease(item)
-                  )}
-                {href && (
-                  <MenuItem>
-                    {({ focus }) => (
-                      <Link
-                        href={href}
-                        className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold text-as-ink ${
-                          focus ? 'bg-as-raised' : ''
-                        }`}
-                      >
-                        <ArrowTopRightOnSquareIcon className="h-5 w-5" />
-                        {intl.formatMessage(messages.openTitle)}
-                      </Link>
-                    )}
-                  </MenuItem>
-                )}
-                {menuItem(
-                  <TrashIcon className="h-5 w-5" />,
-                  intl.formatMessage(messages.removeFromQueue),
-                  () => onRemove(item),
-                  true
-                )}
-              </MenuItems>
-            </Menu>
-          </div>
-          {detail && (
-            <div className="truncate text-sm text-as-ink-soft">{detail}</div>
-          )}
-          {item.requester && (
-            <div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-as-ink-muted">
-              <UserAvatar
-                id={item.requester.id}
-                name={item.requester.displayName}
-                avatar={item.requester.avatar}
-                size={20}
-              />
-              <span className="truncate">
-                {intl.formatMessage(messages.requestedBy, {
-                  name: item.requester.displayName,
-                })}
-              </span>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="min-w-0 [&>*]:line-clamp-1 [&>*]:text-[15px]">
+              {title}
             </div>
-          )}
+            {problems.length > 0 && (
+              <ExclamationTriangleIcon
+                className={`h-4 w-4 flex-none ${
+                  item.status === 'failed' ? 'text-[#f2b0aa]' : 'text-[#f0d9a8]'
+                }`}
+                title={problems.join(' ')}
+              />
+            )}
+          </div>
+          <div className="truncate text-xs text-as-ink-muted">
+            {[detail, item.serverName].filter(Boolean).join(' · ')}
+          </div>
         </div>
-      </div>
+        <div className="flex items-center gap-1 md:contents">
+          <div className="hidden md:flex">{statusBadge}</div>
+          <div className="md:hidden">{actionsMenu('')}</div>
+        </div>
+        <div className="col-span-2 flex flex-col gap-1 md:col-span-1">
+          <div className="flex items-center gap-2 md:hidden">
+            {statusBadge}
+            <span className="ml-auto text-xs font-bold tabular-nums text-as-ink-soft">
+              {percent}%
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {progressBar}
+            <span className="hidden w-10 flex-none text-right text-xs font-bold tabular-nums text-as-ink-soft md:inline">
+              {percent}%
+            </span>
+          </div>
+          <div className="truncate text-xs text-as-ink-muted md:hidden">
+            {[sizeText, timeText, item.downloadClient]
+              .filter(Boolean)
+              .join(' · ')}
+          </div>
+        </div>
+        <div className="hidden min-w-0 flex-col text-xs text-as-ink-muted md:flex">
+          <span className="truncate">{sizeText}</span>
+          {timeText && <span className="truncate">{timeText}</span>}
+        </div>
+        <div className="hidden min-w-0 items-center gap-2 md:flex">
+          <span className="min-w-0 truncate text-xs text-as-ink-muted">
+            {[item.downloadClient, item.indexer].filter(Boolean).join(' · ')}
+          </span>
+          {actionsMenu('ml-auto')}
+        </div>
+      </article>
+    );
+  }
 
-      <div className="flex flex-col gap-1.5">
+  const StatusIcon = STATUS_ICON[item.status] ?? ClockIcon;
+  const MediaIcon = MEDIA_ICON[item.mediaType] ?? FilmIcon;
+  const doneText =
+    item.size > 0
+      ? intl.formatMessage(messages.sizeOfTotal, {
+          done: formatBytes(Math.max(0, item.size - item.sizeLeft), 1),
+          size: formatBytes(item.size, 1),
+        })
+      : undefined;
+  const isBook = item.mediaType === 'ebook' || item.mediaType === 'audiobook';
+  const subline = [
+    detail,
+    item.year && item.mediaType !== 'movie' ? item.year : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <article className="flex flex-col gap-2" data-testid="download-card">
+      <div className="relative overflow-hidden rounded-[18px] bg-as-surface">
+        <CardBackdrop src={item.backdropUrl ?? posterSrc} />
+        <div className="relative flex gap-4 p-3 sm:p-4">
+          <div
+            className={`relative flex-none overflow-hidden rounded-[10px] bg-as-tile shadow-lg shadow-black/40 ${
+              square
+                ? 'h-[120px] w-[120px]'
+                : 'h-[150px] w-[100px] sm:h-[168px] sm:w-[112px]'
+            }`}
+          >
+            <PosterImage src={posterSrc} />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
+            <dl className="flex min-w-0 flex-col gap-1">
+              <Detail label={intl.formatMessage(messages.labelService)}>
+                {item.serverName}
+              </Detail>
+              {item.downloadClient && (
+                <Detail label={intl.formatMessage(messages.labelClient)}>
+                  {[
+                    item.downloadClient,
+                    item.protocol !== 'unknown' &&
+                      intl.formatMessage(
+                        item.protocol === 'usenet'
+                          ? messages.usenet
+                          : messages.torrent
+                      ),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Detail>
+              )}
+              {item.quality && (
+                <Detail
+                  label={intl.formatMessage(
+                    isBook ? messages.labelFormat : messages.labelQuality
+                  )}
+                >
+                  {item.quality}
+                </Detail>
+              )}
+              <Detail label={intl.formatMessage(messages.labelStatus)}>
+                <span className={`font-semibold ${style.text}`}>
+                  {intl.formatMessage(messages[style.message])}
+                </span>
+                {item.seeders !== undefined && (
+                  <span className="text-as-ink-muted">
+                    {' · '}
+                    {intl.formatMessage(messages.seeders, {
+                      count: item.seeders,
+                    })}
+                  </span>
+                )}
+              </Detail>
+              {item.indexer && (
+                <Detail label={intl.formatMessage(messages.labelIndexer)}>
+                  {item.indexer}
+                </Detail>
+              )}
+              {item.releaseTitle && item.releaseTitle !== item.title && (
+                <Detail
+                  label={intl.formatMessage(messages.labelRelease)}
+                  title={item.releaseTitle}
+                >
+                  {item.releaseTitle}
+                </Detail>
+              )}
+              {item.outputPath && (
+                <Detail
+                  label={intl.formatMessage(messages.labelPath)}
+                  title={item.outputPath}
+                >
+                  {item.outputPath}
+                </Detail>
+              )}
+            </dl>
+            {problems.length > 0 && (
+              <div
+                className={`flex gap-2 rounded-[12px] px-2.5 py-1.5 text-xs leading-relaxed ${
+                  item.status === 'failed' ? statusTone.bad : statusTone.warn
+                }`}
+              >
+                <ExclamationTriangleIcon className="mt-px h-4 w-4 flex-none" />
+                <div className="min-w-0 space-y-0.5 break-words">
+                  {problems.slice(0, 2).map((problem) => (
+                    <p key={problem}>{problem}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-col items-end text-right text-xs leading-snug text-as-ink-soft">
+              {timeText && (
+                <span className="font-semibold text-as-ink">
+                  {intl.formatMessage(messages.eta, {
+                    time: formatDuration(item.timeLeftSeconds ?? 0),
+                  })}
+                </span>
+              )}
+              {doneText && <span className="tabular-nums">{doneText}</span>}
+            </div>
+          </div>
+          <div className="absolute right-2 top-2">{actionsMenu('')}</div>
+        </div>
         <div
-          className="h-2 w-full overflow-hidden rounded-full bg-as-tile"
+          className="relative h-1 w-full bg-black/40"
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={percent}
         >
           <div
-            className={`h-full rounded-full transition-[width] duration-700 ${style.bar}`}
+            className="h-full bg-as-accent transition-[width] duration-700"
             style={{ width: `${percent}%` }}
           />
         </div>
-        <div className="flex items-center justify-between gap-3 text-xs text-as-ink-muted">
-          <span className="truncate">
-            {[
-              sizeText,
-              showTime &&
-                intl.formatMessage(messages.timeLeft, {
-                  time: formatDuration(item.timeLeftSeconds ?? 0),
-                }),
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-          <span className="flex-none font-bold tabular-nums text-as-ink-soft">
-            {percent}%
-          </span>
-        </div>
       </div>
-
-      {problems.length > 0 && (
-        <div
-          className={`flex gap-2 rounded-[14px] px-3 py-2 text-xs leading-relaxed ${
-            item.status === 'failed' ? statusTone.bad : statusTone.warn
-          }`}
-        >
-          <ExclamationTriangleIcon className="mt-px h-4 w-4 flex-none" />
-          <div className="min-w-0 space-y-0.5 break-words">
-            {problems.slice(0, 3).map((problem) => (
-              <p key={problem}>{problem}</p>
-            ))}
+      <div className="flex min-w-0 items-start gap-3 px-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <StatusIcon
+              className={`h-4 w-4 flex-none ${style.text}`}
+              aria-hidden="true"
+            />
+            <div className="min-w-0 [&>*]:line-clamp-1 [&>*]:text-[15px]">
+              {title}
+            </div>
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-as-ink-muted">
+            <MediaIcon className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+            <span className="truncate">
+              {subline || (item.year ? String(item.year) : '')}
+            </span>
           </div>
         </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs text-as-ink-muted">
-        {item.protocol !== 'unknown' && (
-          <Badge
-            className={
-              item.protocol === 'usenet'
-                ? statusTone.info
-                : 'bg-[#2d2a45] text-[#c9c0f5]'
-            }
+        {item.requester && (
+          <div
+            className="flex flex-none items-center gap-2 pt-0.5 text-xs text-as-ink-soft"
+            title={intl.formatMessage(messages.requestedBy, {
+              name: item.requester.displayName,
+            })}
           >
-            {intl.formatMessage(
-              item.protocol === 'usenet' ? messages.usenet : messages.torrent
-            )}
-          </Badge>
-        )}
-        {[
-          item.downloadClient,
-          item.indexer,
-          item.seeders !== undefined &&
-            intl.formatMessage(messages.seeders, { count: item.seeders }),
-          item.serverName,
-        ]
-          .filter(Boolean)
-          .map((part) => (
-            <span key={String(part)} className="whitespace-nowrap">
-              {part}
+            <span className="hidden max-w-[8rem] truncate sm:inline">
+              {item.requester.displayName}
             </span>
-          ))
-          .reduce<ReactNode[]>(
-            (parts, part, index) =>
-              index === 0
-                ? [part]
-                : [
-                    ...parts,
-                    <span key={`dot-${index}`} aria-hidden="true">
-                      ·
-                    </span>,
-                    part,
-                  ],
-            []
-          )}
+            <UserAvatar
+              id={item.requester.id}
+              name={item.requester.displayName}
+              avatar={item.requester.avatar}
+              size={28}
+            />
+          </div>
+        )}
       </div>
-      {item.releaseTitle && item.releaseTitle !== item.title && (
-        <div
-          className="-mt-1 truncate text-[11px] text-as-ink-faint"
-          title={item.releaseTitle}
-        >
-          {item.releaseTitle}
-        </div>
-      )}
     </article>
   );
 };

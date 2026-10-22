@@ -14421,6 +14421,17 @@ paths:
                         added:
                           type: string
                           format: date-time
+                        posterUrl:
+                          type: string
+                        backdropUrl:
+                          type: string
+                          description: Fanart for movies and series
+                        quality:
+                          type: string
+                          example: Bluray-1080p
+                        outputPath:
+                          type: string
+                          description: Where the download client puts the files
                         mediaId:
                           type: number
                         tmdbId:

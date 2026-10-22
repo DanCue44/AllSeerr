@@ -69,6 +69,8 @@ export interface QueueRecord {
   indexer?: string;
   seeders?: number;
   leechers?: number;
+  quality?: { quality?: { name?: string } };
+  outputPath?: string;
   movieId?: number;
   movie?: {
     title?: string;
@@ -383,6 +385,7 @@ const describeRecord = (
   | 'artistName'
   | 'authorName'
   | 'posterUrl'
+  | 'backdropUrl'
 > & { ref: Omit<DownloadRef, 'queueIds'> } => {
   const releaseTitle = record.title ?? '';
 
@@ -393,6 +396,7 @@ const describeRecord = (
         title: record.movie?.title || releaseTitle,
         year: optionalNumber(record.movie?.year) || undefined,
         posterUrl: pickImage(record.movie?.images, ['poster']),
+        backdropUrl: pickImage(record.movie?.images, ['fanart']),
         ref: {
           movieId: positiveId(record.movieId),
           tmdbId: positiveId(record.movie?.tmdbId),
@@ -411,6 +415,7 @@ const describeRecord = (
         episodeNumbers: episodeNumber !== undefined ? [episodeNumber] : [],
         episodeTitle: record.episode?.title || undefined,
         posterUrl: pickImage(record.series?.images, ['poster']),
+        backdropUrl: pickImage(record.series?.images, ['fanart']),
         ref: {
           seriesId: positiveId(record.seriesId),
           episodeIds: episodeId ? [episodeId] : [],
@@ -490,6 +495,8 @@ const mapRecord = (
       added: record.added || undefined,
       seeders: optionalNumber(record.seeders),
       leechers: optionalNumber(record.leechers),
+      quality: record.quality?.quality?.name || undefined,
+      outputPath: record.outputPath || undefined,
       canSearch: false,
     },
     ref: { queueIds: [record.id], ...ref },

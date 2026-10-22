@@ -80,6 +80,12 @@ export interface DownloadItem {
   seeders?: number;
   leechers?: number;
   posterUrl?: string;
+  // Fanart for the card backdrop, movies and series only
+  backdropUrl?: string;
+  // The quality the arr expects the release to be, such as Bluray-1080p
+  quality?: string;
+  // Where the download client puts the files
+  outputPath?: string;
   // The media in Allseerr, when the download is of one
   mediaId?: number;
   tmdbId?: number;
