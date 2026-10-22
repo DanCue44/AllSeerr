@@ -78,6 +78,7 @@ export const messages = defineMessages('components.Allseerr.Downloads', {
   labelProgress: 'Progress',
   labelEta: 'ETA',
   progressValue: '{done} ({percent}%)',
+  progressShort: '{percent}% of {size}',
   labelIndexer: 'Indexer',
   labelRelease: 'Release',
   labelPath: 'Path',
@@ -661,22 +662,25 @@ const DownloadCard = ({
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
             <dl className="flex min-w-0 flex-col gap-1">
-              <Detail label={intl.formatMessage(messages.labelService)}>
+              <Detail
+                label={intl.formatMessage(messages.labelService)}
+                className="hidden sm:grid"
+              >
                 {item.serverName}
               </Detail>
               {item.downloadClient && (
                 <Detail label={intl.formatMessage(messages.labelClient)}>
-                  {[
-                    item.downloadClient,
-                    item.protocol !== 'unknown' &&
-                      intl.formatMessage(
+                  {item.downloadClient}
+                  {item.protocol !== 'unknown' && (
+                    <span className="hidden sm:inline">
+                      {' · '}
+                      {intl.formatMessage(
                         item.protocol === 'usenet'
                           ? messages.usenet
                           : messages.torrent
-                      ),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
+                      )}
+                    </span>
+                  )}
                 </Detail>
               )}
               {item.quality && (
@@ -708,7 +712,7 @@ const DownloadCard = ({
                   </span>
                 )}
                 {item.seeders !== undefined && (
-                  <span className="text-as-ink-muted">
+                  <span className="hidden text-as-ink-muted sm:inline">
                     {' · '}
                     {intl.formatMessage(messages.seeders, {
                       count: item.seeders,
@@ -718,7 +722,14 @@ const DownloadCard = ({
               </Detail>
               {doneText && (
                 <Detail label={intl.formatMessage(messages.labelProgress)}>
-                  <span className="tabular-nums">
+                  {/* Phones have room for the percent and the total only */}
+                  <span className="tabular-nums sm:hidden">
+                    {intl.formatMessage(messages.progressShort, {
+                      percent,
+                      size: formatBytes(item.size, 1),
+                    })}
+                  </span>
+                  <span className="hidden tabular-nums sm:inline">
                     {intl.formatMessage(messages.progressValue, {
                       done: doneText,
                       percent,
@@ -742,6 +753,7 @@ const DownloadCard = ({
                 <Detail
                   label={intl.formatMessage(messages.labelRelease)}
                   title={item.releaseTitle}
+                  className="hidden sm:grid"
                 >
                   {item.releaseTitle}
                 </Detail>
@@ -750,6 +762,7 @@ const DownloadCard = ({
                 <Detail
                   label={intl.formatMessage(messages.labelPath)}
                   title={item.outputPath}
+                  className="hidden sm:grid"
                 >
                   {item.outputPath}
                 </Detail>

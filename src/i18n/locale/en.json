@@ -200,6 +200,7 @@
   "components.Allseerr.Downloads.noMatches": "No downloads match these filters",
   "components.Allseerr.Downloads.openTitle": "Open Title Page",
   "components.Allseerr.Downloads.pickRelease": "Pick a Release",
+  "components.Allseerr.Downloads.progressShort": "{percent}% of {size}",
   "components.Allseerr.Downloads.progressValue": "{done} ({percent}%)",
   "components.Allseerr.Downloads.queued": "Queued",
   "components.Allseerr.Downloads.remove": "Remove",
