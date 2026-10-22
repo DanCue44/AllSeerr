@@ -10,6 +10,7 @@ import type {
 import type { ComicKind } from '@server/constants/media';
 import { MediaType as MainMediaType } from '@server/constants/media';
 import type Media from '@server/entity/Media';
+import type { ComicLibraryInfo } from '@server/models/Comic';
 
 export type MediaType =
   | 'tv'
@@ -150,6 +151,8 @@ export interface ComicResult {
   isAdult: boolean;
   posterPath: string | null;
   mediaInfo?: Media;
+  // Set when the series is in Talearr's library already
+  library?: ComicLibraryInfo;
 }
 
 export type Results =

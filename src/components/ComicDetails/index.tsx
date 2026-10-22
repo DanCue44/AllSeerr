@@ -6,6 +6,7 @@ import Button from '@app/components/Common/Button';
 import FormatIcon, { useFormatLabel } from '@app/components/Common/FormatIcon';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import { getComicStatus } from '@app/components/TitleCard/ComicTitleCard';
 import useComicsEnabled from '@app/hooks/useComicsEnabled';
 import useReadingAppPrompt from '@app/hooks/useReadingAppPrompt';
 import useToasts from '@app/hooks/useToasts';
@@ -125,7 +126,7 @@ const ComicDetails = () => {
   }
 
   const kind = kindChoice ?? data.kind;
-  const status = data.mediaInfo?.status;
+  const status = getComicStatus(data);
   const activeRequest = data.mediaInfo?.requests?.find(
     (request) =>
       request.status === MediaRequestStatus.PENDING ||
@@ -137,6 +138,8 @@ const ComicDetails = () => {
       type: 'or',
     }) &&
     !activeRequest &&
+    // A series Talearr has already needs no request
+    !data.library &&
     (!status ||
       status === MediaStatus.UNKNOWN ||
       status === MediaStatus.DELETED);

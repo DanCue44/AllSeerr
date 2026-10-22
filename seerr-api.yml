@@ -2236,6 +2236,25 @@ components:
           nullable: true
         mediaInfo:
           $ref: '#/components/schemas/MediaInfo'
+        library:
+          $ref: '#/components/schemas/ComicLibraryInfo'
+    ComicLibraryInfo:
+      type: object
+      description: What Talearr's comics library holds of a series, once it is there. A series found in the library is matched on its AniList or Hardcover id, or failing those its title, and cannot be requested.
+      properties:
+        seriesId:
+          type: number
+        volumeCount:
+          type: number
+        downloadedCount:
+          type: number
+        missingCount:
+          type: number
+        downloadingCount:
+          type: number
+        status:
+          type: number
+          description: Media status from the volume counts, available (5), partly available (4) or processing (3)
     ComicDetails:
       allOf:
         - $ref: '#/components/schemas/ComicResult'
@@ -2258,19 +2277,7 @@ components:
             hardcoverSeriesId:
               type: number
             library:
-              type: object
-              description: What Talearr's comics library holds of the series, once it was added there
-              properties:
-                seriesId:
-                  type: number
-                volumeCount:
-                  type: number
-                downloadedCount:
-                  type: number
-                missingCount:
-                  type: number
-                downloadingCount:
-                  type: number
+              $ref: '#/components/schemas/ComicLibraryInfo'
     BookResult:
       type: object
       properties:

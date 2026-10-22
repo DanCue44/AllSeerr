@@ -8,11 +8,12 @@ import MetadataAlbum from '@server/entity/MetadataAlbum';
 import { searchBooks } from '@server/lib/bookSearch';
 import {
   getComicsStatus,
-  mapComicResult,
+  mapComicResults,
   searchComics,
 } from '@server/lib/comics';
 import { rankMusicResult } from '@server/lib/musicSearchRank';
 import { findSearchProvider } from '@server/lib/search';
+import { rankCombinedResults } from '@server/lib/searchRank';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { mapAlbumResult, mapArtistResult } from '@server/models/Music';
@@ -124,15 +125,8 @@ export const searchComicResults = async (
   }
 
   const { results } = await searchComics({ query });
-  const shown = limit ? results.slice(0, limit) : results;
-  const media = await Media.getRelatedComics(
-    shown.map((result) => result.comicId)
-  );
-  const mediaById = new Map(media.map((m) => [m.comicId, m]));
 
-  return shown.map((result) =>
-    mapComicResult(result, mediaById.get(result.comicId))
-  );
+  return mapComicResults(limit ? results.slice(0, limit) : results);
 };
 
 searchRoutes.get('/', async (req, res, next) => {
@@ -220,24 +214,22 @@ searchRoutes.get('/', async (req, res, next) => {
           ).catch(() => undefined)
         : Promise.resolve(undefined);
 
-    // Music joins the first page when Lidarr can fulfil music requests
-    const musicResults =
+    // Music joins the first page when Lidarr can fulfil music requests, and
+    // books when a book service can fulfil book requests. All three sources
+    // are asked at once.
+    const [musicResults, bookResults, comicResults] = await Promise.all([
       !searchProvider && page === 1 && getSettings().lidarr.length > 0
-        ? await searchMusic({ query: queryString }).catch(() => undefined)
-        : undefined;
-
-    // Books join the first page when Chaptarr or LazyLibrarian can fulfil
-    // book requests
-    const bookResults =
+        ? searchMusic({ query: queryString }).catch(() => undefined)
+        : undefined,
       !searchProvider && page === 1 && getSettings().bookService
-        ? await searchBooks({
+        ? searchBooks({
             query: queryString,
             bookLimit: 10,
             authorLimit: 3,
           }).catch(() => undefined)
-        : undefined;
-
-    const comicResults = await comicSearch;
+        : undefined,
+      comicSearch,
+    ]);
 
     return res.status(200).json({
       page: results.page,
@@ -247,12 +239,13 @@ searchRoutes.get('/', async (req, res, next) => {
         (musicResults?.totalResults ?? 0) +
         (bookResults?.results.length ?? 0) +
         (comicResults?.length ?? 0),
-      results: [
+      // Close title matches first across kinds, see rankCombinedResults
+      results: rankCombinedResults(queryString, [
         ...mapSearchResults(results.results, media),
         ...(musicResults?.results ?? []),
         ...(bookResults?.results ?? []),
         ...(comicResults ?? []),
-      ],
+      ]),
     });
   } catch (e) {
     logger.debug('Something went wrong retrieving search results', {
