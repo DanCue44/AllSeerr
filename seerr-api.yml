@@ -14551,11 +14551,15 @@ paths:
                           nullable: true
                         mediaType:
                           type: string
-                          enum: [audiobook, ebook]
+                          enum: [audiobook, ebook, comic]
                           nullable: true
+                          description: From Talearr, or from the file extension when Talearr has no book
                         indexer:
                           type: string
                           nullable: true
+                        isFiller:
+                          type: boolean
+                          description: Seeded only to build ratio, not a library book
                           example: Example Tracker
                         isPrivateTracker:
                           type: boolean
@@ -14626,6 +14630,10 @@ paths:
                         type: number
                       privateUnsatisfied:
                         type: number
+                  talearrUrl:
+                    type: string
+                    nullable: true
+                    description: Talearr's public address from the book service settings
                   trackerAccount:
                     type: object
                     nullable: true

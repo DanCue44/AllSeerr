@@ -90,6 +90,7 @@ const torrent = (overrides: Record<string, unknown> = {}) => ({
   mediaType: 'audiobook',
   indexer: 'Example Tracker',
   isPrivateTracker: true,
+  isFiller: false,
   downloadClient: 'qBittorrent (VPN)',
   state: 'seeding',
   size: 803000000,
@@ -244,7 +245,12 @@ describe('GET /downloads/seeding', () => {
       mediaId: media.id,
       olId: 'OL900001W',
     });
-    assert.deepStrictEqual(res.body.torrents[1], payload.torrents[1]);
+    // Without a book, the title and format come from the release name
+    assert.deepStrictEqual(res.body.torrents[1], {
+      ...payload.torrents[1],
+      bookTitle: 'Unknown.Release',
+      mediaType: 'ebook',
+    });
   });
 
   it("adds each book's cover from Talearr", async () => {

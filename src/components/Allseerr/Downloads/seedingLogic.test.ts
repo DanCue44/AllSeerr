@@ -21,6 +21,7 @@ const torrent = (overrides: Partial<SeedingTorrent>): SeedingTorrent => ({
   mediaType: 'audiobook',
   indexer: 'Example Tracker',
   isPrivateTracker: true,
+  isFiller: false,
   downloadClient: 'qBittorrent',
   state: 'seeding',
   size: 100,
@@ -61,6 +62,7 @@ describe('getSeedProgress', () => {
     const progress = getSeedProgress(
       torrent({
         isPrivateTracker: false,
+        isFiller: false,
         requiredSeedingSeconds: null,
         seedGoalSeconds: 10 * HOUR,
         seedingSeconds: 5 * HOUR,
@@ -89,6 +91,7 @@ describe('sortSeeding', () => {
         downloadId: 'public',
         bookTitle: 'B',
         isPrivateTracker: false,
+        isFiller: false,
       }),
       torrent({ downloadId: 'far', seedingSeconds: HOUR }),
       torrent({ downloadId: 'close', seedingSeconds: 70 * HOUR }),

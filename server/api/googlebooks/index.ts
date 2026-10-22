@@ -240,6 +240,61 @@ class GoogleBooks extends ExternalAPI {
   }
 
   /**
+   * A cover for a book known only by its title and author, as an https
+   * address, or undefined when Google Books has none or cannot be asked
+   */
+  public async findCover(
+    title: string,
+    author: string | null
+  ): Promise<string | undefined> {
+    const cleanTitle = title.replace(/"/g, '').trim();
+
+    if (!cleanTitle || this.isQuotaExhausted()) {
+      return undefined;
+    }
+
+    const query = [
+      `intitle:"${cleanTitle}"`,
+      author ? `inauthor:"${author.replace(/"/g, '').trim()}"` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    try {
+      const data = await this.get<GoogleBooksVolumesResponse>(
+        '/volumes',
+        {
+          params: {
+            q: query,
+            maxResults: '5',
+            country: this.country,
+            printType: 'books',
+            fields: NEWEST_FIELDS,
+          },
+        },
+        CACHE_TTL
+      );
+      const thumbnail = data.items?.find(
+        (volume) => volume.volumeInfo?.imageLinks?.thumbnail
+      )?.volumeInfo?.imageLinks?.thumbnail;
+
+      return thumbnail?.replace(/^http:\/\//, 'https://');
+    } catch (e) {
+      if (isQuotaError(e)) {
+        quotaBlockedUntil.set(this.apiKey, getNextQuotaReset().getTime());
+      }
+
+      logger.debug('Failed to find a cover', {
+        label: 'Google Books',
+        title: cleanTitle,
+        errorMessage: getErrorMessage(e),
+      });
+
+      return undefined;
+    }
+  }
+
+  /**
    * Asks Google Books for an ebook edition of a book. Searches ebooks only
    * first, which finds editions the full search ranks too low, then every
    * volume, since many list a download format without being sold as one.

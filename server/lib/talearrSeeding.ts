@@ -1,3 +1,4 @@
+import { getGoogleBooks } from '@server/api/googlebooks';
 import ChaptarrAPI from '@server/api/servarr/chaptarr';
 import { isTalearrService } from '@server/constants/bookService';
 import { MediaType } from '@server/constants/media';
@@ -11,6 +12,8 @@ import type {
   TalearrSeeding,
   TrackerAccount,
 } from '@server/interfaces/api/downloadInterfaces';
+import { addLookupCovers } from '@server/lib/seedingCovers';
+import { parseSeedingFileName } from '@server/lib/seedingNames';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import { getDefaultChaptarr, getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -56,17 +59,26 @@ const parseState = (value: unknown): SeedingState =>
 
 export const parseSeedingTorrent = (raw: RawRecord): SeedingTorrent => {
   const mediaType = String(raw.mediaType ?? '').toLowerCase();
+  const title = asText(raw.title) ?? '';
+  const bookTitle = asText(raw.bookTitle);
+  const authorName = asText(raw.authorName);
+  // Without a book (ratio filler, unmatched torrents) the release name is all
+  // there is: read the title, author and format from it
+  const fromName = bookTitle ? null : parseSeedingFileName(title);
 
   return {
     downloadId: asText(raw.downloadId) ?? '',
-    title: asText(raw.title) ?? '',
+    title,
     bookId: asId(raw.bookId),
-    bookTitle: asText(raw.bookTitle),
-    authorName: asText(raw.authorName),
+    bookTitle: bookTitle ?? fromName?.title ?? null,
+    authorName: authorName ?? fromName?.author ?? null,
     mediaType:
-      mediaType === 'audiobook' || mediaType === 'ebook' ? mediaType : null,
+      mediaType === 'audiobook' || mediaType === 'ebook'
+        ? mediaType
+        : (fromName?.mediaType ?? null),
     indexer: asText(raw.indexer),
     isPrivateTracker: raw.isPrivateTracker === true,
+    isFiller: raw.isFiller === true,
     downloadClient: asText(raw.downloadClient),
     state: parseState(raw.state),
     size: asCount(raw.size),
@@ -281,7 +293,23 @@ export const collectSeeding = async (): Promise<SeedingResponse> => {
     });
   }
 
-  return { supported: true, ...seeding };
+  try {
+    await addLookupCovers(
+      { talearr: api, googleBooks: getGoogleBooks() },
+      seeding.torrents
+    );
+  } catch (e) {
+    logger.warn('Could not look up covers for the other seeding torrents', {
+      label: 'Downloads',
+      errorMessage: e.message,
+    });
+  }
+
+  return {
+    supported: true,
+    ...seeding,
+    talearrUrl: server.externalUrl?.trim().replace(/\/+$/, '') || null,
+  };
 };
 
 let cache: { at: number; data: SeedingResponse } | undefined;

@@ -150,6 +150,9 @@ export type SeedingState =
  * A torrent Talearr's download client is seeding, or should be. Bytes and
  * seconds, ISO 8601 times. Fields Talearr does not know are null.
  */
+// Comic only comes from a file name; Talearr itself reports audiobook or ebook
+export type SeedingMediaType = 'audiobook' | 'ebook' | 'comic';
+
 export interface SeedingTorrent {
   // The hash in the download client
   downloadId: string;
@@ -159,9 +162,11 @@ export interface SeedingTorrent {
   bookId: number | null;
   bookTitle: string | null;
   authorName: string | null;
-  mediaType: 'audiobook' | 'ebook' | null;
+  mediaType: SeedingMediaType | null;
   indexer: string | null;
   isPrivateTracker: boolean;
+  // Seeded only to build ratio (Talearr's MyAnonamouse filler), not a library book
+  isFiller: boolean;
   downloadClient: string | null;
   state: SeedingState;
   size: number;
@@ -210,6 +215,8 @@ export interface TalearrSeeding {
   summary: SeedingSummary;
   // Null when Talearr checks no tracker account
   trackerAccount: TrackerAccount | null;
+  // Talearr's public address from the book service settings, for links to it
+  talearrUrl?: string | null;
 }
 
 /**
