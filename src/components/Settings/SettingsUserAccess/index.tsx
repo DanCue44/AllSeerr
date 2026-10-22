@@ -3,6 +3,7 @@ import PageTitle from '@app/components/Common/PageTitle';
 import AppConnections from '@app/components/Settings/SettingsUserAccess/AppConnections';
 import Invites from '@app/components/Settings/SettingsUserAccess/Invites';
 import People from '@app/components/Settings/SettingsUserAccess/People';
+import PlexDefaultAccess from '@app/components/Settings/SettingsUserAccess/PlexDefaultAccess';
 import SignInWithAllseerr from '@app/components/Settings/SettingsUserAccess/SignInWithAllseerr';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -56,6 +57,7 @@ const SettingsUserAccess = () => {
           revalidateApps();
         }}
       />
+      <PlexDefaultAccess apps={apps} />
       <People apps={apps} />
       <Invites apps={apps} />
       <SignInWithAllseerr />

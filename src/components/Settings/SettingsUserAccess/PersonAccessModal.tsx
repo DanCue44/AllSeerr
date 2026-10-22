@@ -37,6 +37,8 @@ const messages = defineMessages(
       'Under a limit, comics and books without a rating are hidden unless this is on',
     access: 'Can use {app}',
     notConnected: 'Connect {app} first',
+    fromPlexDefault:
+      'Given by the default access for Plex users. Changing it here keeps it for this person only.',
     libraries: 'Libraries',
     lastError: 'Last sync: {error}',
     resetPassword: 'New password',
@@ -289,6 +291,13 @@ const PersonAccessModal = ({
                     </Badge>
                   </div>
                 </div>
+                {access.grantedBy === 'plex' && (
+                  <p className="mt-2 text-sm text-as-ink-faint">
+                    {intl.formatMessage(messages.fromPlexDefault, {
+                      app: APP_NAMES[app],
+                    })}
+                  </p>
+                )}
                 {!info?.connected && (
                   <p className="mt-2 text-sm text-as-ink-faint">
                     {intl.formatMessage(messages.notConnected, {

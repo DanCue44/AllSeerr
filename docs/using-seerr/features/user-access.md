@@ -24,6 +24,18 @@ Audiobookshelf and Kavita turn a locked account off, so it can no longer sign in
 
 The **User Access Sync** job (every 30 minutes) puts libraries, age limits and locks back the way Allseerr has them. It never creates accounts.
 
+## Everyone with access to my Plex server
+
+Turn this on to give apps to everyone your Plex server is shared with, without picking people one by one. Pick the apps, the libraries in each (all by default) and an age limit (none by default).
+
+- People who share the Plex server get the apps when they sign in with Plex for the first time or are imported with Import Plex Users, and again on every sync, every 30 minutes.
+- Someone removed from the Plex server loses the apps the default gave them, the same way as taking access away by hand.
+- A choice made for one person always wins: turning an app on or off for someone keeps it that way, whatever the default says.
+- The default age limit only fills in for people with no age limit of their own, and never for admins.
+- **Apply to everyone now** runs it at once and lists what changed.
+
+Allseerr reads the Plex server's shared list from the server owner's Plex account. A person counts when their entry names this server. When the list cannot be read, nothing is taken away. Accounts in the apps are linked when one already exists; with sign in with Allseerr turned on, the app makes the account the first time the person signs in.
+
 ## Invites
 
 An invite link lets someone who is not on your Plex server sign in to Allseerr with Plex and get the apps ticked on the invite. Links expire (7 days by default, at most 90) and can be revoked. A person who used an invite can keep signing in with Plex until the invite is revoked.
