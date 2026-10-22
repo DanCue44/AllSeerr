@@ -661,7 +661,7 @@ const DownloadCard = ({
             <PosterImage src={posterSrc} />
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
-            <dl className="flex min-w-0 flex-col gap-1">
+            <dl className="flex min-w-0 flex-col gap-1 pr-6">
               <Detail
                 label={intl.formatMessage(messages.labelService)}
                 className="hidden sm:grid"
