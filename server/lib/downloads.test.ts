@@ -165,12 +165,30 @@ describe('mapQueueRecords', () => {
     assert.strictEqual(item.title, 'Sample Movie');
     assert.strictEqual(item.mediaType, 'movie');
     assert.strictEqual(item.posterUrl, 'https://image.tmdb.org/p.jpg');
+    assert.strictEqual(item.backdropUrl, 'https://image.tmdb.org/f.jpg');
     assert.strictEqual(item.protocol, 'usenet');
     assert.strictEqual(item.downloadClient, 'NZBGet');
     assert.strictEqual(item.progress, 0.75);
     assert.strictEqual(item.timeLeftSeconds, 300);
     assert.strictEqual(item.needsAttention, false);
     assert.strictEqual(item.canSearch, true);
+  });
+
+  it('keeps the quality and the output path the arr reports', () => {
+    const [{ item }] = mapQueueRecords(radarr, [
+      record({
+        id: 8,
+        quality: { quality: { name: 'Bluray-1080p' } },
+        outputPath: '/downloads/completed/Movies/Sample.Movie.2024',
+      }),
+    ]);
+
+    assert.strictEqual(item.quality, 'Bluray-1080p');
+    assert.strictEqual(
+      item.outputPath,
+      '/downloads/completed/Movies/Sample.Movie.2024'
+    );
+    assert.strictEqual(item.backdropUrl, undefined);
   });
 
   it('gathers the episodes of a season pack into one download', () => {
