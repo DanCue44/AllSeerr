@@ -75,6 +75,9 @@ export const messages = defineMessages('components.Allseerr.Downloads', {
   labelFormat: 'Format',
   labelSize: 'Size',
   labelStatus: 'Status',
+  labelProgress: 'Progress',
+  labelEta: 'ETA',
+  progressValue: '{done} ({percent}%)',
   labelIndexer: 'Indexer',
   labelRelease: 'Release',
   labelPath: 'Path',
@@ -707,6 +710,23 @@ const DownloadCard = ({
                   </span>
                 )}
               </Detail>
+              {doneText && (
+                <Detail label={intl.formatMessage(messages.labelProgress)}>
+                  <span className="tabular-nums">
+                    {intl.formatMessage(messages.progressValue, {
+                      done: doneText,
+                      percent,
+                    })}
+                  </span>
+                </Detail>
+              )}
+              {timeText && (
+                <Detail label={intl.formatMessage(messages.labelEta)}>
+                  <span className="tabular-nums">
+                    {formatDuration(item.timeLeftSeconds ?? 0)}
+                  </span>
+                </Detail>
+              )}
               {item.indexer && (
                 <Detail label={intl.formatMessage(messages.labelIndexer)}>
                   {item.indexer}
@@ -763,18 +783,6 @@ const DownloadCard = ({
             </span>
           </div>
         </div>
-        {(timeText || doneText) && (
-          <div className="flex flex-none flex-col items-end gap-0.5 text-right text-xs leading-snug text-as-ink-soft">
-            {timeText && (
-              <span className="text-[13px] font-semibold text-as-ink">
-                {intl.formatMessage(messages.eta, {
-                  time: formatDuration(item.timeLeftSeconds ?? 0),
-                })}
-              </span>
-            )}
-            {doneText && <span className="tabular-nums">{doneText}</span>}
-          </div>
-        )}
         {item.requester && (
           <div
             className="flex flex-none items-center gap-2 pt-0.5 text-xs text-as-ink-soft"
