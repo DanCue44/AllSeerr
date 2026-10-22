@@ -34,6 +34,8 @@ tags:
     description: Endpoints related to retrieving albums, artists and their artwork.
   - name: books
     description: Endpoints related to retrieving books and authors from OpenLibrary.
+  - name: comics
+    description: Comic and manga series from Talearr's comics library.
   - name: downloads
     description: The queues of every arr in one list, for admins.
   - name: nobookends
@@ -2198,6 +2200,77 @@ components:
         artistBackdrop:
           type: string
           nullable: true
+    ComicResult:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Comic ID, al-<AniList ID> or hc-<Hardcover series ID>
+          example: al-30013
+        mediaType:
+          type: string
+          enum: [comic]
+        kind:
+          type: string
+          enum: [manga, comic]
+        title:
+          type: string
+          example: One Piece
+        authors:
+          type: string
+          example: Eiichiro Oda
+        year:
+          type: number
+          example: 1997
+        volumes:
+          type: number
+          example: 110
+        ageRating:
+          type: string
+          description: ComicInfo.xml age rating, such as Teen, or Unknown
+          example: Teen
+        isAdult:
+          type: boolean
+        posterPath:
+          type: string
+          nullable: true
+        mediaInfo:
+          $ref: '#/components/schemas/MediaInfo'
+    ComicDetails:
+      allOf:
+        - $ref: '#/components/schemas/ComicResult'
+        - type: object
+          properties:
+            kindKnown:
+              type: boolean
+              description: Whether the kind came from AniList, which only lists manga. A series only Hardcover knows can be filed as either kind with `comicKind` on the request.
+            alternateTitles:
+              type: array
+              items:
+                type: string
+            status:
+              type: string
+              example: Releasing
+            overview:
+              type: string
+            aniListId:
+              type: number
+            hardcoverSeriesId:
+              type: number
+            library:
+              type: object
+              description: What Talearr's comics library holds of the series, once it was added there
+              properties:
+                seriesId:
+                  type: number
+                volumeCount:
+                  type: number
+                downloadedCount:
+                  type: number
+                missingCount:
+                  type: number
+                downloadingCount:
+                  type: number
     BookResult:
       type: object
       properties:
@@ -10223,7 +10296,7 @@ paths:
           name: type
           schema:
             type: string
-            enum: [all, music, book]
+            enum: [all, music, book, comic]
             default: all
         - in: query
           name: language
@@ -11631,7 +11704,7 @@ paths:
           name: mediaType
           schema:
             type: string
-            enum: [movie, tv, music, book, all]
+            enum: [movie, tv, music, book, comic, all]
             nullable: true
             default: all
       responses:
@@ -11665,13 +11738,13 @@ paths:
               properties:
                 mediaType:
                   type: string
-                  enum: [movie, tv, music, book]
+                  enum: [movie, tv, music, book, comic]
                   example: movie
                 mediaId:
                   oneOf:
                     - type: number
                     - type: string
-                  description: TMDB ID for movies and series, MusicBrainz release group ID for music, OpenLibrary work ID for books
+                  description: TMDB ID for movies and series, MusicBrainz release group ID for music, OpenLibrary work ID for books, comic ID (such as `al-30013`) for comic and manga series
                   example: 123
                 tvdbId:
                   type: number
@@ -11742,6 +11815,10 @@ paths:
                   nullable: true
                   enum: [unabridged, abridged, both, null]
                   description: Audiobooks on Talearr only. The readings to ask for, honored when Audiobook Versions is set to `requester` (see `audiobookVersions` in the public settings and `books.audiobookVersions` in `GET /nobookends/status`) and ignored otherwise. Without one, such a request asks for both. Refused with 400 when unknown.
+                comicKind:
+                  type: string
+                  enum: [manga, comic]
+                  description: Comics only. Files a series only Hardcover knows as manga or as a comic (see `kindKnown` in `GET /comic/{comicId}`). Ignored for a series AniList knows, which is manga, and once a series has been requested.
                 serverId:
                   type: number
                 profileId:
@@ -11984,7 +12061,7 @@ paths:
               properties:
                 mediaType:
                   type: string
-                  enum: [movie, tv, music, book]
+                  enum: [movie, tv, music, book, comic]
                 seasons:
                   type: array
                   items:
@@ -12787,6 +12864,103 @@ paths:
                 type: object
                 additionalProperties:
                   $ref: '#/components/schemas/EbookAvailability'
+  /comic/status:
+    get:
+      summary: Get whether comics can be requested
+      description: Comics and manga can be requested while book requests go to Talearr and Talearr's comics library answers. The answer is kept for a minute. `reason` is `notTalearr`, `noServer` or `unavailable` when they cannot.
+      tags:
+        - comics
+      responses:
+        '200':
+          description: Whether comics are on
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  reason:
+                    type: string
+                    enum: [notTalearr, noServer, unavailable]
+                  message:
+                    type: string
+  /comic/search:
+    get:
+      summary: Search for comic and manga series
+      description: Searches Talearr's comics lookup (AniList and Hardcover). Without a kind both kinds are searched. Answers 404 while comics are off.
+      tags:
+        - comics
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+            example: One Piece
+        - in: query
+          name: kind
+          schema:
+            type: string
+            enum: [manga, comic]
+      responses:
+        '200':
+          description: Matching series
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ComicResult'
+                  notices:
+                    type: array
+                    description: Plain notes from Talearr, such as a metadata source being down
+                    items:
+                      type: string
+  /comic/library:
+    get:
+      summary: List the requested comic and manga series
+      description: The series requested through Allseerr, newest first. Answers 404 while comics are off.
+      tags:
+        - comics
+      responses:
+        '200':
+          description: Requested series
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ComicResult'
+  /comic/{comicId}:
+    get:
+      summary: Get comic or manga series details
+      description: Returns what Talearr's lookup said of the series when it was last found by a search, its request status and what Talearr's library holds of it.
+      tags:
+        - comics
+      parameters:
+        - in: path
+          name: comicId
+          required: true
+          description: Comic ID, al-<AniList ID> or hc-<Hardcover series ID>
+          schema:
+            type: string
+            example: al-30013
+      responses:
+        '200':
+          description: Series details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComicDetails'
+        '404':
+          description: Unknown comic ID, or a series no search has found
   /author/{authorId}:
     get:
       summary: Get author details

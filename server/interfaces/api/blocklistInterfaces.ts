@@ -5,7 +5,7 @@ export interface BlocklistItem {
   tmdbId: number;
   mbId?: string | null;
   olId?: string | null;
-  mediaType: 'movie' | 'tv' | 'music' | 'book';
+  mediaType: 'movie' | 'tv' | 'music' | 'book' | 'comic';
   title?: string;
   createdAt?: Date;
   user?: User;

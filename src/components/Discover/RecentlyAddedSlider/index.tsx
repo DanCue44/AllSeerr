@@ -53,6 +53,7 @@ const RecentlyAddedSlider = ({ mediaType }: RecentlyAddedSliderProps) => {
             tvdbId={item.tvdbId}
             mbId={item.mbId}
             olId={item.olId}
+            comicId={item.comicId}
             type={item.mediaType}
           />
         ))}

@@ -27,6 +27,7 @@ import {
   MediaRequestStatus,
   MediaStatus,
   MediaType,
+  isComicKind,
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import type { MediaRequestBody } from '@server/interfaces/api/requestInterfaces';
@@ -35,6 +36,11 @@ import {
   getBookNotificationDetails,
 } from '@server/lib/bookNotifications';
 import { getRequestStatusKey } from '@server/lib/bookRequests';
+import {
+  getComicNotificationDetails,
+  getComicsServer,
+  isComicId,
+} from '@server/lib/comics';
 import {
   MOVIE_RATINGS,
   TV_RATINGS,
@@ -65,7 +71,11 @@ import {
   isSameRecording,
 } from '@server/lib/talearrRecordings';
 import type { AgeLimit } from '@server/lib/userAccess/ageLimits';
-import { canRequestWork, isRestricted } from '@server/lib/userAccess/ageLimits';
+import {
+  canRequestComic,
+  canRequestWork,
+  isRestricted,
+} from '@server/lib/userAccess/ageLimits';
 import { getBlockingProviders } from '@server/lib/watchProviderBlock';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
@@ -89,6 +99,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import Media from './Media';
+import MetadataComic from './MetadataComic';
 import { episodeNumbersTransformer } from './Season';
 import SeasonRequest from './SeasonRequest';
 import { User } from './User';
@@ -104,6 +115,7 @@ export class ContentRatingRestrictedError extends Error {}
 export class InvalidBookLanguageError extends Error {}
 export class InvalidRecordingRequestError extends Error {}
 export class InvalidAudiobookVersionError extends Error {}
+export class InvalidComicRequestError extends Error {}
 
 type MediaRequestOptions = {
   isAutoRequest?: boolean;
@@ -194,6 +206,15 @@ export class MediaRequest {
       requestBody.recording !== null
     ) {
       return MediaRequest.createRecordingRequest(
+        requestBody,
+        user,
+        requestUser,
+        options
+      );
+    }
+
+    if (requestBody.mediaType === MediaType.COMIC) {
+      return MediaRequest.createComicRequest(
         requestBody,
         user,
         requestUser,
@@ -1089,6 +1110,159 @@ export class MediaRequest {
   }
 
   /**
+   * A comic or manga series, keyed on its comic id and sent to Talearr's
+   * comics library. Comics are books to Allseerr's permissions, quotas and
+   * approvals: they need the book request permission, count against the
+   * book quota and wait for approval from a person with an age limit.
+   */
+  private static async createComicRequest(
+    requestBody: MediaRequestBody,
+    user: User,
+    requestUser: User,
+    options: MediaRequestOptions
+  ): Promise<MediaRequest> {
+    const mediaRepository = getRepository(Media);
+    const requestRepository = getRepository(MediaRequest);
+    const comicId = String(requestBody.mediaId);
+
+    if (
+      !requestUser.hasPermission(
+        [Permission.REQUEST, Permission.REQUEST_BOOK],
+        { type: 'or' }
+      )
+    ) {
+      throw new RequestPermissionError(
+        'You do not have permission to make comic requests.'
+      );
+    }
+
+    if (requestBody.is4k || requestBody.isAudiobook) {
+      throw new InvalidComicRequestError(
+        'Comics are requested as a series, without formats.'
+      );
+    }
+
+    if (
+      requestBody.comicKind !== undefined &&
+      requestBody.comicKind !== null &&
+      !isComicKind(requestBody.comicKind)
+    ) {
+      throw new InvalidComicRequestError('Unknown comic kind.');
+    }
+
+    if (!getComicsServer()) {
+      throw new InvalidComicRequestError(
+        'Comics can only be requested from Talearr.'
+      );
+    }
+
+    // The series must have been found by a search, which saved its facts
+    const metadata = isComicId(comicId)
+      ? await getRepository(MetadataComic).findOne({ where: { comicId } })
+      : null;
+
+    if (!metadata) {
+      throw new InvalidComicRequestError('Unknown comic series.');
+    }
+
+    const ageLimit = await MediaRequest.getRequestAgeLimit(requestUser);
+
+    if (!canRequestComic(ageLimit, metadata)) {
+      throw new RequestPermissionError(
+        'This series is rated above the age limit of your account.'
+      );
+    }
+
+    const ignoreQuota = await MediaRequest.checkQuota(
+      requestBody,
+      user,
+      requestUser,
+      MediaType.BOOK
+    );
+
+    const needsApproval =
+      !!ageLimit && !user.hasPermission(Permission.MANAGE_REQUESTS);
+
+    let media = await mediaRepository.findOne({
+      where: { comicId, mediaType: MediaType.COMIC },
+      relations: ['requests'],
+    });
+
+    // A series AniList knows is manga. Any other may be filed either way,
+    // and keeps the kind it was first requested as.
+    const comicKind =
+      metadata.aniListId || media?.comicKind
+        ? (media?.comicKind ?? metadata.kind)
+        : (requestBody.comicKind ?? metadata.kind);
+
+    if (!media) {
+      media = new Media({
+        comicId,
+        comicKind,
+        mediaType: MediaType.COMIC,
+        status: MediaStatus.PENDING,
+      });
+    } else {
+      if (media.status === MediaStatus.BLOCKLISTED) {
+        throw new BlocklistedMediaError('This media is blocklisted.');
+      }
+
+      if (
+        media.status === MediaStatus.UNKNOWN ||
+        media.status === MediaStatus.DELETED
+      ) {
+        media.status = MediaStatus.PENDING;
+      }
+
+      media.comicKind = comicKind;
+    }
+
+    const existing = (media.requests ?? []).find(
+      (request) =>
+        request.status !== MediaRequestStatus.DECLINED &&
+        request.status !== MediaRequestStatus.COMPLETED
+    );
+
+    if (existing) {
+      logger.warn('Duplicate request for media blocked', {
+        comicId,
+        mediaType: requestBody.mediaType,
+        label: 'Media Request',
+      });
+
+      throw new DuplicateMediaRequestError(
+        'Request for this media already exists.'
+      );
+    }
+
+    const hasAutoApprovePermission =
+      !needsApproval &&
+      user.hasPermission(
+        [Permission.AUTO_APPROVE, Permission.MANAGE_REQUESTS],
+        { type: 'or' }
+      );
+
+    await mediaRepository.save(media);
+
+    const request = new MediaRequest({
+      type: MediaType.COMIC,
+      media,
+      requestedBy: requestUser,
+      status: hasAutoApprovePermission
+        ? MediaRequestStatus.APPROVED
+        : MediaRequestStatus.PENDING,
+      modifiedBy: hasAutoApprovePermission ? user : undefined,
+      is4k: false,
+      isAutoRequest: options.isAutoRequest ?? false,
+      ignoreQuota,
+      skipNotification: options.skipNotification,
+    });
+
+    await requestRepository.save(request);
+    return request;
+  }
+
+  /**
    * Another recording of an audiobook that is already available, such as
    * the unabridged reading of a book the library has abridged. Only Talearr
    * keeps more than one recording of a book. The request needs approval
@@ -1558,7 +1732,11 @@ export class MediaRequest {
             ? 'Album'
             : entity.type === MediaType.BOOK
               ? getBookFormatName(entity.isAudiobook, entity.recording)
-              : 'Series';
+              : entity.type === MediaType.COMIC
+                ? media.comicKind === 'manga'
+                  ? 'Manga'
+                  : 'Comic'
+                : 'Series';
       let event: string | undefined;
       let notifyAdmin = true;
       let notifySystem = true;
@@ -1695,6 +1873,25 @@ export class MediaRequest {
                     value: getBookLanguageName(entity.language),
                   },
                 ]
+              : []),
+            ...(declineReasonExtra ?? []),
+          ],
+        });
+      } else if (entity.type === MediaType.COMIC && media.comicId) {
+        const comic = await getComicNotificationDetails(media.comicId);
+        notificationManager.sendNotification(type, {
+          media,
+          request: entity,
+          notifyAdmin,
+          notifySystem,
+          notifyUser: notifyAdmin ? undefined : entity.requestedBy,
+          event,
+          subject: comic.subject,
+          message: comic.message,
+          image: comic.image,
+          extra: [
+            ...(comic.ageRating
+              ? [{ name: 'Age Rating', value: comic.ageRating }]
               : []),
             ...(declineReasonExtra ?? []),
           ],

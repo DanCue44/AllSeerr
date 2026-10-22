@@ -30,6 +30,7 @@ import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import Season from '@server/entity/Season';
 import SeasonRequest from '@server/entity/SeasonRequest';
+import { UserAccessProfile } from '@server/entity/UserAccessProfile';
 import {
   getBookFormatName,
   getBookNotificationDetails,
@@ -40,6 +41,11 @@ import {
   getChaptarrFormatSettings,
   sendBookToChaptarr,
 } from '@server/lib/chaptarrRequests';
+import {
+  getComicNotificationDetails,
+  getComicsServer,
+  sendComicToTalearr,
+} from '@server/lib/comics';
 import {
   formatRequestedSeasons,
   isPartialSeriesRequest,
@@ -56,6 +62,7 @@ import {
   requestAbridgedRecording,
   sendRecordingToTalearr,
 } from '@server/lib/talearrRecordings';
+import { isRestricted } from '@server/lib/userAccess/ageLimits';
 import { notifyWatchlistUsers } from '@server/lib/watchlistNotifications';
 import logger from '@server/logger';
 import { runInBackground } from '@server/utils/backgroundTasks';
@@ -397,6 +404,46 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         extra: [
           { name: 'Format', value: getBookFormatName(entity.isAudiobook) },
         ],
+      });
+    } catch (e) {
+      logger.error('Something went wrong sending media notification(s)', {
+        label: 'Notifications',
+        errorMessage: e.message,
+        mediaId: entity.id,
+      });
+    }
+  }
+
+  private async notifyAvailableComic(
+    entity: MediaRequest,
+    event?: UpdateEvent<MediaRequest>
+  ) {
+    const latestMedia =
+      (await event?.manager.findOne(Media, {
+        where: { id: entity.media.id },
+      })) ??
+      (await getRepository(Media).findOne({
+        where: { id: entity.media.id },
+      }));
+
+    if (!latestMedia?.comicId || latestMedia.status !== MediaStatus.AVAILABLE) {
+      return;
+    }
+
+    try {
+      const comic = await getComicNotificationDetails(latestMedia.comicId);
+      const kindName = latestMedia.comicKind === 'manga' ? 'Manga' : 'Comic';
+
+      notificationManager.sendNotification(Notification.MEDIA_AVAILABLE, {
+        event: `${kindName} Request Now Available`,
+        notifyAdmin: false,
+        notifySystem: true,
+        notifyUser: entity.requestedBy,
+        subject: comic.subject,
+        message: comic.message,
+        media: latestMedia,
+        image: comic.image,
+        request: entity,
       });
     } catch (e) {
       logger.error('Something went wrong sending media notification(s)', {
@@ -1880,6 +1927,157 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
   }
 
+  /**
+   * Sends an approved comic or manga series to Talearr's comics library: it
+   * is added with every volume monitored and searched for, and Talearr's id
+   * of it is kept on the media
+   */
+  public async sendToTalearrComics(
+    entity: MediaRequest,
+    manager: EntityManager
+  ): Promise<void> {
+    if (
+      entity.status !== MediaRequestStatus.APPROVED ||
+      entity.type !== MediaType.COMIC
+    ) {
+      return;
+    }
+
+    try {
+      const server = getComicsServer();
+
+      if (!server) {
+        logger.warn(
+          'Comics need book requests to go to Talearr. Is a default Talearr server set?',
+          {
+            label: 'Media Request',
+            requestId: entity.id,
+            mediaId: entity.media.id,
+          }
+        );
+        return;
+      }
+
+      const media = await manager.getRepository(Media).findOne({
+        where: { id: entity.media.id },
+      });
+
+      if (!media?.comicId) {
+        logger.error('Media data not found', {
+          label: 'Media Request',
+          requestId: entity.id,
+          mediaId: entity.media.id,
+        });
+        return;
+      }
+
+      if (media.status === MediaStatus.AVAILABLE) {
+        logger.warn('Media already exists, marking request as COMPLETED', {
+          label: 'Media Request',
+          requestId: entity.id,
+          mediaId: entity.media.id,
+        });
+
+        entity.status = MediaRequestStatus.COMPLETED;
+        await manager.getRepository(MediaRequest).save(entity);
+        return;
+      }
+
+      // A person with an age limit gets the kids library when there is one
+      const profile = await manager.getRepository(UserAccessProfile).findOne({
+        where: { user: { id: entity.requestedBy.id } },
+      });
+      const comicId = media.comicId;
+      const kind = media.comicKind ?? 'manga';
+
+      const sent = serviceQueue
+        .dispatch(chaptarrKey(server.id), () =>
+          sendComicToTalearr(server, {
+            comicId,
+            kind,
+            preferKids: isRestricted(profile?.ageLimit),
+          })
+        )
+        // Writes back only once the request's transaction has ended
+        .finally(() => transactionSettled(manager))
+        .then(async (result) => {
+          const latest = await getRepository(Media).findOne({
+            where: { id: entity.media.id },
+          });
+
+          if (!latest) {
+            throw new Error('Media data not found');
+          }
+
+          latest.serviceId = server.id;
+          latest.externalServiceId = result.seriesId;
+          await saveServiceColumns(latest, ['serviceId', 'externalServiceId']);
+        })
+        .catch(async (e) => {
+          try {
+            if (entity.status !== MediaRequestStatus.FAILED) {
+              entity.status = MediaRequestStatus.FAILED;
+              await getRepository(MediaRequest).save(entity);
+            }
+          } catch (saveError) {
+            logger.error('Failed to mark request as FAILED', {
+              label: 'Media Request',
+              requestId: entity.id,
+              errorMessage:
+                saveError instanceof Error
+                  ? saveError.message
+                  : String(saveError),
+            });
+          }
+
+          logger.warn(
+            'Something went wrong sending comic request to Talearr, marking status as FAILED',
+            {
+              label: 'Media Request',
+              requestId: entity.id,
+              mediaId: entity.media.id,
+              comicId,
+              errorMessage: e instanceof Error ? e.message : String(e),
+            }
+          );
+
+          MediaRequest.sendNotification(
+            entity,
+            media,
+            Notification.MEDIA_FAILED
+          );
+        });
+      runInBackground(sent);
+      logger.info('Sent request to Talearr comics', {
+        label: 'Media Request',
+        requestId: entity.id,
+        mediaId: entity.media.id,
+        comicId,
+      });
+    } catch (e) {
+      const media = await manager.getRepository(Media).findOne({
+        where: { id: entity.media.id },
+      });
+
+      if (media) {
+        entity.status = MediaRequestStatus.FAILED;
+        await manager.getRepository(MediaRequest).save(entity);
+
+        logger.warn(
+          'Failed to send comic request to Talearr due to connection or configuration error, marking status as FAILED',
+          {
+            label: 'Media Request',
+            requestId: entity.id,
+            mediaId: entity.media.id,
+            errorMessage: e instanceof Error ? e.message : String(e),
+          }
+        );
+
+        MediaRequest.sendNotification(entity, media, Notification.MEDIA_FAILED);
+      }
+    }
+  }
+
   public async updateParentStatus(
     manager: EntityManager,
     entity: MediaRequest
@@ -1923,7 +2121,8 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     if (
       (media.mediaType === MediaType.MOVIE ||
         media.mediaType === MediaType.MUSIC ||
-        media.mediaType === MediaType.BOOK) &&
+        media.mediaType === MediaType.BOOK ||
+        media.mediaType === MediaType.COMIC) &&
       entity.status === MediaRequestStatus.DECLINED &&
       media[mediaStatusKey] !== MediaStatus.DELETED
     ) {
@@ -2178,6 +2377,10 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         event.manager
       );
       await this.sendToChaptarr(event.entity as MediaRequest, event.manager);
+      await this.sendToTalearrComics(
+        event.entity as MediaRequest,
+        event.manager
+      );
     } catch (e) {
       logger.error('Error while sending to *arr in afterUpdate subscriber', {
         label: 'Media Request',
@@ -2203,6 +2406,9 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         }
         if (event.entity.media.mediaType === MediaType.BOOK) {
           await this.notifyAvailableBook(event.entity as MediaRequest, event);
+        }
+        if (event.entity.media.mediaType === MediaType.COMIC) {
+          await this.notifyAvailableComic(event.entity as MediaRequest, event);
         }
       }
     } catch (e) {
@@ -2231,6 +2437,10 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         event.manager
       );
       await this.sendToChaptarr(event.entity as MediaRequest, event.manager);
+      await this.sendToTalearrComics(
+        event.entity as MediaRequest,
+        event.manager
+      );
     } catch (e) {
       logger.error('Error while sending to *arr in afterInsert subscriber', {
         label: 'Media Request',

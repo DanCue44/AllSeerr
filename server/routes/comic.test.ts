@@ -1,0 +1,694 @@
+import assert from 'node:assert/strict';
+import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
+
+import OpenLibrary from '@server/api/openlibrary';
+import type {
+  TalearrComicAddBody,
+  TalearrComicLookupResponse,
+  TalearrComicRootFolder,
+  TalearrComicSeriesSummary,
+} from '@server/api/servarr/talearrComics';
+import TalearrComicsAPI from '@server/api/servarr/talearrComics';
+import TheMovieDb from '@server/api/themoviedb';
+import type { TmdbSearchMultiResponse } from '@server/api/themoviedb/interfaces';
+import type { ComicKind } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
+import { getRepository } from '@server/datasource';
+import Media from '@server/entity/Media';
+import { MediaRequest } from '@server/entity/MediaRequest';
+import MetadataComic from '@server/entity/MetadataComic';
+import { User } from '@server/entity/User';
+import { UserAccessProfile } from '@server/entity/UserAccessProfile';
+import { resetComicsStatusCache } from '@server/lib/comics';
+import { Permission } from '@server/lib/permissions';
+import type { ChaptarrSettings } from '@server/lib/settings';
+import { getSettings } from '@server/lib/settings';
+import { checkUser } from '@server/middleware/auth';
+import authRoutes from '@server/routes/auth';
+import comicRoutes from '@server/routes/comic';
+import requestRoutes from '@server/routes/request';
+import searchRoutes from '@server/routes/search';
+import { settleTestBackgroundTasks, setupTestDb } from '@server/test/db';
+import type { Express } from 'express';
+import express from 'express';
+import session from 'express-session';
+import request from 'supertest';
+
+const FRIEREN_ID = 'al-118586';
+const SAGA_ID = 'hc-4521';
+
+const sendNotificationMock = mock.method(
+  MediaRequest,
+  'sendNotification',
+  async () => undefined
+).mock;
+
+Object.defineProperty(TheMovieDb.prototype, 'searchMulti', {
+  set() {},
+  get() {
+    return async (): Promise<TmdbSearchMultiResponse> => ({
+      page: 1,
+      total_pages: 1,
+      total_results: 0,
+      results: [],
+    });
+  },
+  configurable: true,
+});
+// Books join the combined search too
+mock.method(OpenLibrary.prototype, 'searchBooks', async () => ({
+  numFound: 0,
+  start: 0,
+  docs: [],
+}));
+mock.method(OpenLibrary.prototype, 'searchAuthors', async () => ({
+  numFound: 0,
+  start: 0,
+  docs: [],
+}));
+
+// What Talearr answers and what it was asked
+let statusAnswer: { available: boolean; reason?: string };
+let lookups: { term: string; kind: ComicKind }[] = [];
+let library: TalearrComicSeriesSummary[] = [];
+let rootFolders: TalearrComicRootFolder[] = [];
+let addCalls: TalearrComicAddBody[] = [];
+let addImpl: (body: TalearrComicAddBody) => Promise<{ id: number }>;
+let searchCalls: number[] = [];
+let searchesOnAdd = true;
+
+const lookupAnswers: Record<ComicKind, TalearrComicLookupResponse> = {
+  manga: {
+    results: [
+      {
+        aniListId: 118586,
+        hardcoverSeriesId: 9001,
+        kind: 'manga',
+        title: 'Frieren: Beyond Journey’s End',
+        alternateTitles: ['Sousou no Frieren'],
+        year: 2020,
+        status: 'Releasing',
+        volumes: 13,
+        authors: 'Kanehito Yamada, Tsukasa Abe',
+        overview: 'An elf mage outlives her party.<br>',
+        coverUrl: 'https://s4.anilist.co/file/frieren.jpg',
+        ageRating: 'Teen',
+        isAdult: false,
+      },
+      // Hardcover only, so Talearr labels it with the kind it was asked for
+      {
+        hardcoverSeriesId: 4521,
+        kind: 'manga',
+        title: 'Saga',
+        alternateTitles: [],
+        volumes: 11,
+        authors: 'Brian K. Vaughan',
+        coverUrl: 'https://assets.hardcover.app/saga.jpg',
+        ageRating: 'Unknown',
+        isAdult: false,
+      },
+    ],
+    notices: ['AniList is slow'],
+  },
+  comic: {
+    results: [
+      {
+        hardcoverSeriesId: 4521,
+        kind: 'comic',
+        title: 'Saga',
+        alternateTitles: [],
+        volumes: 11,
+        authors: 'Brian K. Vaughan',
+        coverUrl: 'https://assets.hardcover.app/saga.jpg',
+        ageRating: 'Mature 17+',
+        isAdult: false,
+      },
+    ],
+    notices: [],
+  },
+};
+
+mock.method(TalearrComicsAPI.prototype, 'getStatus', async () => ({
+  ...statusAnswer,
+  ageRatings: [],
+}));
+mock.method(
+  TalearrComicsAPI.prototype,
+  'lookup',
+  async (term: string, kind: ComicKind) => {
+    lookups.push({ term, kind });
+    return lookupAnswers[kind];
+  }
+);
+mock.method(TalearrComicsAPI.prototype, 'getSeries', async () => library);
+mock.method(
+  TalearrComicsAPI.prototype,
+  'getRootFolders',
+  async () => rootFolders
+);
+mock.method(
+  TalearrComicsAPI.prototype,
+  'searchesOnAdd',
+  async () => searchesOnAdd
+);
+mock.method(
+  TalearrComicsAPI.prototype,
+  'addSeries',
+  async (body: TalearrComicAddBody) => {
+    addCalls.push(body);
+    return addImpl(body);
+  }
+);
+mock.method(
+  TalearrComicsAPI.prototype,
+  'searchSeries',
+  async (seriesId: number) => {
+    searchCalls.push(seriesId);
+  }
+);
+
+const talearrServer: ChaptarrSettings = {
+  id: 0,
+  name: 'Talearr',
+  hostname: 'talearr',
+  port: 8789,
+  apiKey: 'test-key',
+  useSsl: false,
+  activeProfileId: 1,
+  activeProfileName: 'E-Book',
+  activeDirectory: '/ebooks',
+  activeMetadataProfileId: 2,
+  activeMetadataProfileName: 'Ebook Default',
+  tags: [],
+  is4k: false,
+  isDefault: true,
+  syncEnabled: true,
+  preventSearch: false,
+  tagRequests: false,
+  overrideRule: [],
+};
+
+function configureBooks(service: 'talearr' | 'chaptarr' = 'talearr') {
+  const settings = getSettings();
+  settings.chaptarr = [{ ...talearrServer }];
+  settings.main.bookService = service;
+}
+
+let app: Express;
+
+function createApp() {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    session({ secret: 'test-secret', resave: false, saveUninitialized: false })
+  );
+  app.use(checkUser);
+  app.use('/auth', authRoutes);
+  app.use('/comic', comicRoutes);
+  app.use('/request', requestRoutes);
+  app.use('/search', searchRoutes);
+  app.use(
+    (
+      err: { status?: number; message?: string },
+      _req: express.Request,
+      res: express.Response,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      _next: express.NextFunction
+    ) => {
+      res.status(err.status ?? 500).json({ message: err.message });
+    }
+  );
+  return app;
+}
+
+async function loginAs(email: string) {
+  const settings = getSettings();
+  const priorLocalLogin = settings.main.localLogin;
+  settings.main.localLogin = true;
+
+  try {
+    const agent = request.agent(app);
+    const res = await agent
+      .post('/auth/local')
+      .send({ email, password: 'test1234' });
+    assert.strictEqual(res.status, 200);
+    return agent;
+  } finally {
+    settings.main.localLogin = priorLocalLogin;
+  }
+}
+
+async function waitFor(check: () => Promise<boolean> | boolean) {
+  await settleTestBackgroundTasks();
+  for (let i = 0; i < 100; i++) {
+    if (await check()) {
+      await settleTestBackgroundTasks();
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.fail('Condition was not met in time');
+}
+
+async function setRequester(permissions: number) {
+  const repository = getRepository(User);
+  const user = await repository.findOneOrFail({
+    where: { email: 'demo@seerr.dev' },
+  });
+  user.permissions = permissions;
+  await repository.save(user);
+  return user;
+}
+
+// A search saves what Talearr said of each series
+async function searchFirst() {
+  const agent = await loginAs('demo@seerr.dev');
+  const res = await agent.get('/comic/search').query({ query: 'frieren' });
+  assert.strictEqual(res.status, 200, res.body.message);
+}
+
+const findMedia = (comicId: string) =>
+  getRepository(Media).findOneOrFail({
+    where: { comicId, mediaType: MediaType.COMIC },
+  });
+
+before(() => {
+  app = createApp();
+});
+
+setupTestDb();
+
+beforeEach(async () => {
+  statusAnswer = { available: true };
+  lookups = [];
+  library = [];
+  rootFolders = [
+    { id: 1, path: '/comics', kind: 'comic', isKids: false },
+    { id: 2, path: '/manga', kind: 'manga', isKids: false },
+    { id: 3, path: '/kids', kind: 'any', isKids: true, maxAgeRating: 'Teen' },
+  ];
+  addCalls = [];
+  addImpl = async () => ({ id: 41 });
+  searchCalls = [];
+  searchesOnAdd = true;
+  sendNotificationMock.resetCalls();
+  resetComicsStatusCache();
+  configureBooks();
+  await setRequester(Permission.REQUEST_BOOK);
+});
+
+afterEach(() => {
+  getSettings().chaptarr = [];
+  getSettings().main.bookService = undefined;
+  resetComicsStatusCache();
+});
+
+describe('GET /comic/status', () => {
+  it('is on while book requests go to Talearr and its comics answer', async () => {
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get('/comic/status');
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body, { enabled: true });
+  });
+
+  it('is off for stock Chaptarr', async () => {
+    configureBooks('chaptarr');
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get('/comic/status');
+
+    assert.deepStrictEqual(res.body, { enabled: false, reason: 'notTalearr' });
+  });
+
+  it("is off while Talearr's comics library is", async () => {
+    statusAnswer = { available: false, reason: 'database is locked' };
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get('/comic/status');
+
+    assert.strictEqual(res.body.enabled, false);
+    assert.strictEqual(res.body.reason, 'unavailable');
+    assert.strictEqual(res.body.message, 'database is locked');
+  });
+});
+
+describe('GET /comic/search', () => {
+  it('searches both kinds, keeping a Hardcover only series as a comic', async () => {
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get('/comic/search').query({ query: 'saga' });
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.deepStrictEqual(lookups.map((lookup) => lookup.kind).sort(), [
+      'comic',
+      'manga',
+    ]);
+    assert.deepStrictEqual(
+      res.body.results.map((result: { id: string; kind: string }) => [
+        result.id,
+        result.kind,
+      ]),
+      [
+        [FRIEREN_ID, 'manga'],
+        [SAGA_ID, 'comic'],
+      ]
+    );
+    assert.deepStrictEqual(res.body.notices, ['AniList is slow']);
+
+    const saved = await getRepository(MetadataComic).findOneOrFail({
+      where: { comicId: SAGA_ID },
+    });
+    assert.strictEqual(saved.ageRating, 'Mature 17+');
+  });
+
+  it('searches one kind when asked', async () => {
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent
+      .get('/comic/search')
+      .query({ query: 'saga', kind: 'manga' });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(lookups, [{ term: 'saga', kind: 'manga' }]);
+    assert.strictEqual(res.body.results[1].kind, 'manga');
+  });
+
+  it('answers 404 while comics are off', async () => {
+    configureBooks('chaptarr');
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get('/comic/search').query({ query: 'saga' });
+
+    assert.strictEqual(res.status, 404);
+    assert.strictEqual(lookups.length, 0);
+  });
+
+  it('joins the combined search and has a search type of its own', async () => {
+    const agent = await loginAs('demo@seerr.dev');
+
+    const all = await agent.get('/search').query({ query: 'frieren' });
+    const comics = await agent
+      .get('/search')
+      .query({ query: 'frieren', type: 'comic' });
+
+    assert.strictEqual(all.status, 200, all.body.message);
+    assert.ok(
+      all.body.results.some(
+        (result: { mediaType: string; id: string }) =>
+          result.mediaType === 'comic' && result.id === FRIEREN_ID
+      )
+    );
+    assert.strictEqual(comics.status, 200);
+    assert.strictEqual(comics.body.results.length, 2);
+  });
+
+  it('leaves comics out of the combined search while they are off', async () => {
+    configureBooks('chaptarr');
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get('/search').query({ query: 'frieren' });
+
+    assert.strictEqual(res.status, 200);
+    assert.ok(
+      !res.body.results.some(
+        (result: { mediaType: string }) => result.mediaType === 'comic'
+      )
+    );
+  });
+});
+
+describe('GET /comic/:comicId', () => {
+  it('answers 404 for a series no search has found', async () => {
+    const agent = await loginAs('demo@seerr.dev');
+
+    assert.strictEqual((await agent.get('/comic/al-1')).status, 404);
+    assert.strictEqual((await agent.get('/comic/OL45804W')).status, 404);
+  });
+
+  it('shows the saved facts and what Talearr holds', async () => {
+    await searchFirst();
+    library = [
+      {
+        series: {
+          id: 41,
+          kind: 'manga',
+          title: 'Frieren',
+          aniListId: 118586,
+          monitored: true,
+        },
+        volumeCount: 13,
+        downloadedCount: 5,
+        missingCount: 8,
+        downloadingCount: 0,
+      },
+    ];
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get(`/comic/${FRIEREN_ID}`);
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.strictEqual(res.body.title, 'Frieren: Beyond Journey’s End');
+    assert.strictEqual(res.body.kindKnown, true);
+    assert.deepStrictEqual(res.body.library, {
+      seriesId: 41,
+      volumeCount: 13,
+      downloadedCount: 5,
+      missingCount: 8,
+      downloadingCount: 0,
+    });
+  });
+
+  it('moves a requested series on as its volumes arrive', async () => {
+    await searchFirst();
+    await getRepository(Media).save(
+      new Media({
+        comicId: FRIEREN_ID,
+        comicKind: 'manga',
+        mediaType: MediaType.COMIC,
+        status: MediaStatus.PROCESSING,
+      })
+    );
+    library = [
+      {
+        series: {
+          id: 41,
+          kind: 'manga',
+          title: 'Frieren',
+          aniListId: 118586,
+          monitored: true,
+        },
+        volumeCount: 13,
+        downloadedCount: 13,
+        missingCount: 0,
+        downloadingCount: 0,
+      },
+    ];
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get(`/comic/${FRIEREN_ID}`);
+
+    assert.strictEqual(res.body.mediaInfo.status, MediaStatus.AVAILABLE);
+    const media = await findMedia(FRIEREN_ID);
+    assert.strictEqual(media.status, MediaStatus.AVAILABLE);
+    assert.strictEqual(media.externalServiceId, 41);
+  });
+});
+
+describe('comic requests', () => {
+  it('waits for approval, then adds the series to Talearr', async () => {
+    await searchFirst();
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: FRIEREN_ID });
+
+    assert.strictEqual(created.status, 201, created.body.message);
+    assert.strictEqual(created.body.status, MediaRequestStatus.PENDING);
+    assert.strictEqual(created.body.type, MediaType.COMIC);
+    await settleTestBackgroundTasks();
+    assert.strictEqual(addCalls.length, 0);
+    assert.strictEqual(
+      (await findMedia(FRIEREN_ID)).status,
+      MediaStatus.PENDING
+    );
+
+    const admin = await loginAs('admin@seerr.dev');
+    const approved = await admin.post(`/request/${created.body.id}/approve`);
+    assert.strictEqual(approved.status, 200, approved.body.message);
+
+    await waitFor(
+      async () => (await findMedia(FRIEREN_ID)).externalServiceId === 41
+    );
+    assert.deepStrictEqual(addCalls, [
+      { aniListId: 118586, kind: 'manga', rootFolderId: 2, monitor: 'all' },
+    ]);
+    // Talearr searches by itself on add
+    assert.deepStrictEqual(searchCalls, []);
+    const media = await findMedia(FRIEREN_ID);
+    assert.strictEqual(media.status, MediaStatus.PROCESSING);
+    assert.strictEqual(media.serviceId, 0);
+  });
+
+  it('asks Talearr to search when it does not on its own', async () => {
+    await searchFirst();
+    searchesOnAdd = false;
+    await setRequester(Permission.REQUEST_BOOK | Permission.AUTO_APPROVE);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: FRIEREN_ID });
+
+    assert.strictEqual(created.status, 201, created.body.message);
+    assert.strictEqual(created.body.status, MediaRequestStatus.APPROVED);
+    await waitFor(() => searchCalls.length > 0);
+    assert.deepStrictEqual(searchCalls, [41]);
+  });
+
+  it('files a Hardcover only series as the kind the requester picked', async () => {
+    await searchFirst();
+    await setRequester(Permission.REQUEST_BOOK | Permission.AUTO_APPROVE);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await agent.post('/request').send({
+      mediaType: MediaType.COMIC,
+      mediaId: SAGA_ID,
+      comicKind: 'manga',
+    });
+
+    assert.strictEqual(created.status, 201, created.body.message);
+    await waitFor(() => addCalls.length > 0);
+    assert.deepStrictEqual(addCalls[0], {
+      hardcoverSeriesId: 4521,
+      kind: 'manga',
+      rootFolderId: 2,
+      monitor: 'all',
+    });
+    assert.strictEqual((await findMedia(SAGA_ID)).comicKind, 'manga');
+  });
+
+  it('files the series of a person with an age limit in the kids library', async () => {
+    await searchFirst();
+    const user = await setRequester(
+      Permission.REQUEST_BOOK | Permission.AUTO_APPROVE
+    );
+    await getRepository(UserAccessProfile).save(
+      new UserAccessProfile({ user, ageLimit: 'teen' })
+    );
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: FRIEREN_ID });
+
+    // An age limit always waits for someone who manages requests
+    assert.strictEqual(created.status, 201, created.body.message);
+    assert.strictEqual(created.body.status, MediaRequestStatus.PENDING);
+
+    const admin = await loginAs('admin@seerr.dev');
+    await admin.post(`/request/${created.body.id}/approve`);
+    await waitFor(() => addCalls.length > 0);
+    assert.strictEqual(addCalls[0].rootFolderId, 3);
+  });
+
+  it('refuses a series rated above the age limit', async () => {
+    await searchFirst();
+    const user = await setRequester(Permission.REQUEST_BOOK);
+    await getRepository(UserAccessProfile).save(
+      new UserAccessProfile({ user, ageLimit: 'teen' })
+    );
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: SAGA_ID });
+
+    assert.strictEqual(res.status, 403);
+  });
+
+  it('needs the book request permission', async () => {
+    await searchFirst();
+    await setRequester(Permission.REQUEST_MUSIC);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: FRIEREN_ID });
+
+    assert.strictEqual(res.status, 403);
+  });
+
+  it('refuses unknown series, a second request and stock Chaptarr', async () => {
+    await searchFirst();
+    const agent = await loginAs('demo@seerr.dev');
+
+    const unknown = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: 'al-1' });
+    assert.strictEqual(unknown.status, 400);
+
+    const first = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: FRIEREN_ID });
+    assert.strictEqual(first.status, 201);
+    const second = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: FRIEREN_ID });
+    assert.strictEqual(second.status, 409);
+
+    configureBooks('chaptarr');
+    const chaptarr = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: SAGA_ID });
+    assert.strictEqual(chaptarr.status, 400);
+  });
+
+  it('counts against the book quota', async () => {
+    await searchFirst();
+    const user = await setRequester(Permission.REQUEST_BOOK);
+    user.bookQuotaLimit = 1;
+    user.bookQuotaDays = 7;
+    await getRepository(User).save(user);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const first = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: FRIEREN_ID });
+    const second = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: SAGA_ID });
+
+    assert.strictEqual(first.status, 201, first.body.message);
+    assert.strictEqual(second.status, 403);
+    assert.match(second.body.message, /Book Quota/);
+  });
+
+  it('marks the request failed when Talearr refuses the series', async () => {
+    await searchFirst();
+    rootFolders = [];
+    await setRequester(Permission.REQUEST_BOOK | Permission.AUTO_APPROVE);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: FRIEREN_ID });
+
+    assert.strictEqual(created.status, 201, created.body.message);
+    await waitFor(
+      async () =>
+        (
+          await getRepository(MediaRequest).findOneOrFail({
+            where: { id: created.body.id },
+          })
+        ).status === MediaRequestStatus.FAILED
+    );
+    assert.strictEqual(addCalls.length, 0);
+  });
+});

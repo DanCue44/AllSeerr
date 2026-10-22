@@ -38,7 +38,11 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/solid';
 import { bookArrName } from '@server/constants/bookService';
-import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
@@ -923,20 +927,22 @@ const RequestCard = ({
         onDecline={(reason) => modifyRequest('decline', reason)}
         onCancel={() => setShowDeclineModal(false)}
       />
-      <RequestModal
-        show={showEditModal}
-        tmdbId={request.media.tmdbId}
-        mbId={request.media.mbId}
-        olId={request.media.olId}
-        type={request.type}
-        is4k={request.is4k}
-        editRequest={request}
-        onCancel={() => setShowEditModal(false)}
-        onComplete={() => {
-          revalidateList();
-          setShowEditModal(false);
-        }}
-      />
+      {request.type !== MediaType.COMIC && (
+        <RequestModal
+          show={showEditModal}
+          tmdbId={request.media.tmdbId}
+          mbId={request.media.mbId}
+          olId={request.media.olId}
+          type={request.type}
+          is4k={request.is4k}
+          editRequest={request}
+          onCancel={() => setShowEditModal(false)}
+          onComplete={() => {
+            revalidateList();
+            setShowEditModal(false);
+          }}
+        />
+      )}
       <article className={cardShell}>
         <div className="flex gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-2">

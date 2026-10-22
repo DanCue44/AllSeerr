@@ -80,4 +80,9 @@ export const issueTypesByMediaType: Record<MediaType, IssueType[]> = {
     IssueType.AUDIO,
     IssueType.OTHER,
   ],
+  [MediaType.COMIC]: [
+    IssueType.WRONG_CONTENT,
+    IssueType.MISSING_CONTENT,
+    IssueType.OTHER,
+  ],
 };

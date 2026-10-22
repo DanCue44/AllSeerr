@@ -42,6 +42,7 @@ import blocklistRoutes from './blocklist';
 import bookRoutes from './book';
 import calendarRoutes from './calendar';
 import collectionRoutes from './collection';
+import comicRoutes from './comic';
 import coverArtRoutes from './coverart';
 import discoverRoutes, { createTmdbWithRegionLanguage } from './discover';
 import downloadRoutes from './downloads';
@@ -184,6 +185,7 @@ router.use('/music', isAuthenticated(), musicRoutes);
 router.use('/artist', isAuthenticated(), artistRoutes);
 router.use('/coverart', isAuthenticated(), coverArtRoutes);
 router.use('/book', isAuthenticated(), bookRoutes);
+router.use('/comic', isAuthenticated(), comicRoutes);
 router.use('/nobookends', isAuthenticated(), nobookendsRoutes);
 router.use(
   '/user-access',

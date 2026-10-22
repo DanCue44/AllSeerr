@@ -148,6 +148,7 @@ const mediaTypeBadge = {
     message: 'album',
   },
   book: { className: 'border-amber-500 bg-amber-600/80', message: 'book' },
+  comic: { className: 'border-rose-500 bg-rose-600/80', message: 'comic' },
 } as const;
 
 const Blocklist = () => {

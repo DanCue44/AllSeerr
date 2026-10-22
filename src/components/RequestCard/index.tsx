@@ -33,7 +33,11 @@ import {
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid';
-import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import {} from '@server/lib/bookRequests';
@@ -399,20 +403,22 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
         onDecline={(reason) => modifyRequest('decline', reason)}
         onCancel={() => setShowDeclineModal(false)}
       />
-      <RequestModal
-        show={showEditModal}
-        tmdbId={request.media.tmdbId}
-        mbId={request.media.mbId}
-        olId={request.media.olId}
-        type={request.type}
-        is4k={request.is4k}
-        editRequest={request}
-        onCancel={() => setShowEditModal(false)}
-        onComplete={() => {
-          revalidate();
-          setShowEditModal(false);
-        }}
-      />
+      {request.type !== MediaType.COMIC && (
+        <RequestModal
+          show={showEditModal}
+          tmdbId={request.media.tmdbId}
+          mbId={request.media.mbId}
+          olId={request.media.olId}
+          type={request.type}
+          is4k={request.is4k}
+          editRequest={request}
+          onCancel={() => setShowEditModal(false)}
+          onComplete={() => {
+            revalidate();
+            setShowEditModal(false);
+          }}
+        />
+      )}
       <div
         className="relative flex w-72 overflow-hidden rounded-xl bg-gray-800 bg-cover bg-center p-4 text-gray-400 shadow ring-1 ring-gray-700 sm:w-96"
         data-testid="request-card"

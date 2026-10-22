@@ -20,7 +20,7 @@ import {
   UserIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid';
-import { MediaRequestStatus } from '@server/constants/media';
+import { MediaRequestStatus, MediaType } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import axios from 'axios';
 import Link from 'next/link';
@@ -100,22 +100,24 @@ const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
         onDecline={(reason) => updateRequest('decline', reason)}
         onCancel={() => setShowDeclineModal(false)}
       />
-      <RequestModal
-        show={showEditModal}
-        tmdbId={request.media.tmdbId}
-        mbId={request.media.mbId}
-        olId={request.media.olId}
-        type={request.type}
-        is4k={request.is4k}
-        editRequest={request}
-        onCancel={() => setShowEditModal(false)}
-        onComplete={() => {
-          if (onUpdate) {
-            onUpdate();
-          }
-          setShowEditModal(false);
-        }}
-      />
+      {request.type !== MediaType.COMIC && (
+        <RequestModal
+          show={showEditModal}
+          tmdbId={request.media.tmdbId}
+          mbId={request.media.mbId}
+          olId={request.media.olId}
+          type={request.type}
+          is4k={request.is4k}
+          editRequest={request}
+          onCancel={() => setShowEditModal(false)}
+          onComplete={() => {
+            if (onUpdate) {
+              onUpdate();
+            }
+            setShowEditModal(false);
+          }}
+        />
+      )}
       <div className="px-4 py-3 text-gray-300">
         <div className="flex items-center justify-between">
           <div className="mr-6 min-w-0 flex-1 flex-col items-center text-sm leading-5">

@@ -15,8 +15,6 @@ import type { ComponentType, SVGProps } from 'react';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.Common.FormatIcon', {
-  comic: 'Comic',
-  manga: 'Manga',
   person: 'Person',
 });
 
@@ -119,11 +117,13 @@ const sizeClasses: Record<FormatIconSize, { chip: string; icon: string }> = {
 };
 
 /**
- * The format of a request: a book request is for its ebook or its audiobook
+ * The format of a request: a book request is for its ebook or its
+ * audiobook, a comic request for a comic or a manga series
  */
 export const getRequestFormat = (request: {
   type: string;
   isAudiobook?: boolean;
+  media?: { comicKind?: string | null } | null;
 }): ItemFormat => {
   switch (request.type) {
     case 'movie':
@@ -134,6 +134,8 @@ export const getRequestFormat = (request: {
       return 'album';
     case 'book':
       return request.isAudiobook ? 'audiobook' : 'ebook';
+    case 'comic':
+      return request.media?.comicKind === 'manga' ? 'manga' : 'comic';
     default:
       return 'movie';
   }
@@ -153,8 +155,8 @@ export const useFormatLabel = (format: ItemFormat): string => {
       ebook: globalMessages.ebook,
       audiobook: globalMessages.audiobook,
       author: globalMessages.author,
-      comic: messages.comic,
-      manga: messages.manga,
+      comic: globalMessages.comic,
+      manga: globalMessages.manga,
       person: messages.person,
     }[format]
   );

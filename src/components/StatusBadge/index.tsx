@@ -37,7 +37,7 @@ interface StatusBadgeProps {
   // Books link to their page by OpenLibrary work id, and label their format
   olId?: string | null;
   bookFormat?: 'ebook' | 'audiobook';
-  mediaType?: 'movie' | 'tv' | 'music' | 'book';
+  mediaType?: 'movie' | 'tv' | 'music' | 'book' | 'comic';
   title?: string | string[];
   statusLabelOverride?: string;
 }
@@ -130,6 +130,7 @@ const StatusBadge = ({
       mediaType &&
       mediaType !== 'music' &&
       mediaType !== 'book' &&
+      mediaType !== 'comic' &&
       tmdbId
     ) {
       mediaLink = `/${mediaType}/${tmdbId}?manage=1`;

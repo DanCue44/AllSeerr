@@ -32,7 +32,11 @@ import {
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid';
-import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { RequestResultsResponse } from '@server/interfaces/api/requestInterfaces';
@@ -488,20 +492,22 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
         onDecline={(reason) => modifyRequest('decline', reason)}
         onCancel={() => setShowDeclineModal(false)}
       />
-      <RequestModal
-        show={showEditModal}
-        tmdbId={request.media.tmdbId}
-        mbId={request.media.mbId}
-        olId={request.media.olId}
-        type={request.type}
-        is4k={request.is4k}
-        editRequest={request}
-        onCancel={() => setShowEditModal(false)}
-        onComplete={() => {
-          revalidateList();
-          setShowEditModal(false);
-        }}
-      />
+      {request.type !== MediaType.COMIC && (
+        <RequestModal
+          show={showEditModal}
+          tmdbId={request.media.tmdbId}
+          mbId={request.media.mbId}
+          olId={request.media.olId}
+          type={request.type}
+          is4k={request.is4k}
+          editRequest={request}
+          onCancel={() => setShowEditModal(false)}
+          onComplete={() => {
+            revalidateList();
+            setShowEditModal(false);
+          }}
+        />
+      )}
       <div className="relative flex w-full flex-col justify-between overflow-hidden rounded-xl bg-gray-800 py-2 text-gray-400 shadow-md ring-1 ring-gray-700 xl:h-28 xl:flex-row">
         {(isMusic(title)
           ? title.artistBackdrop

@@ -1,5 +1,6 @@
 import TitleCard from '@app/components/TitleCard';
 import BookTitleCard from '@app/components/TitleCard/BookTitleCard';
+import { ComicIdTitleCard } from '@app/components/TitleCard/ComicTitleCard';
 import MusicBrainzTitleCard from '@app/components/TitleCard/MusicBrainzTitleCard';
 import MusicTitleCard from '@app/components/TitleCard/MusicTitleCard';
 import OpenLibraryTitleCard from '@app/components/TitleCard/OpenLibraryTitleCard';
@@ -19,7 +20,9 @@ export interface TmdbTitleCardProps {
   // come with their MusicBrainz artist or OpenLibrary author id, and the
   // name and photo to show.
   olId?: string | null;
-  type: 'movie' | 'tv' | 'music' | 'book' | 'artist' | 'author';
+  // Comic and manga series come with their comic id
+  comicId?: string | null;
+  type: 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'artist' | 'author';
   title?: string;
   image?: string | null;
   canExpand?: boolean;
@@ -41,6 +44,12 @@ const TmdbTitleCard = (props: TmdbTitleCardProps) => {
   if (props.type === 'book') {
     return props.olId ? (
       <OpenLibraryTitleCard olId={props.olId} canExpand={props.canExpand} />
+    ) : null;
+  }
+
+  if (props.type === 'comic') {
+    return props.comicId ? (
+      <ComicIdTitleCard comicId={props.comicId} canExpand={props.canExpand} />
     ) : null;
   }
 
