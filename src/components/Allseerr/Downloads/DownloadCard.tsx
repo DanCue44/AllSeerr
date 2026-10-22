@@ -231,12 +231,17 @@ export const Detail = ({
   label,
   children,
   title,
+  className = 'grid',
 }: {
   label: string;
   children: ReactNode;
   title?: string;
+  // Display classes, e.g. to leave a row out on phones
+  className?: string;
 }) => (
-  <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)] items-baseline gap-2">
+  <div
+    className={`min-w-0 grid-cols-[4.75rem_minmax(0,1fr)] items-baseline gap-2 sm:grid-cols-[5.5rem_minmax(0,1fr)] ${className}`}
+  >
     <dt className="text-[11px] font-bold uppercase tracking-wider text-as-ink-faint">
       {label}
     </dt>

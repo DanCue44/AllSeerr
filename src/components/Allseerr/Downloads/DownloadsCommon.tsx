@@ -31,7 +31,7 @@ export const StatTile = ({
       tone ?? 'bg-as-surface text-as-ink'
     }`}
   >
-    <span className="flex items-center gap-2 font-display text-2xl font-semibold tabular-nums leading-tight">
+    <span className="flex items-center gap-2 font-display text-xl font-semibold tabular-nums leading-tight sm:text-2xl">
       <span className="truncate">{value}</span>
       {extra}
     </span>

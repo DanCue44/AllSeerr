@@ -248,6 +248,15 @@ const SeedingCard = ({
           seeded: formatDuration(torrent.seedingSeconds),
         });
 
+  // The label already says seed time, so cards and rows drop the word
+  const seededShort =
+    progress.targetSeconds !== null
+      ? intl.formatMessage(messages.seededShort, {
+          seeded: formatDuration(torrent.seedingSeconds),
+          target: formatDuration(progress.targetSeconds),
+        })
+      : formatDuration(torrent.seedingSeconds);
+
   const title = href ? (
     <Link
       href={href}
@@ -409,18 +418,16 @@ const SeedingCard = ({
               </span>
             </div>
           )}
-          <div className="truncate text-xs text-as-ink-muted md:hidden">
-            {[seededText, goalText, ratioText].filter(Boolean).join(' · ')}
+          <div className="flex min-w-0 justify-between gap-3 text-xs text-as-ink-muted md:hidden">
+            <span className="truncate">
+              {[seededShort, goalText].filter(Boolean).join(' · ')}
+            </span>
+            <span className="flex-none tabular-nums">{ratioText}</span>
           </div>
         </div>
         {/* One fact per column, one line each */}
         <span className="hidden truncate text-[13px] tabular-nums text-as-ink-soft md:block">
-          {progress.targetSeconds !== null
-            ? intl.formatMessage(messages.seededShort, {
-                seeded: formatDuration(torrent.seedingSeconds),
-                target: formatDuration(progress.targetSeconds),
-              })
-            : formatDuration(torrent.seedingSeconds)}
+          {seededShort}
         </span>
         <span className="hidden min-w-0 text-[13px] text-as-ink-soft md:block">
           {goalButton('truncate text-left') ?? '-'}
@@ -471,11 +478,17 @@ const SeedingCard = ({
             }`}
           >
             <dl className="flex min-w-0 flex-col gap-1">
-              <Detail label={intl.formatMessage(messages.labelService)}>
+              <Detail
+                label={intl.formatMessage(messages.labelService)}
+                className="hidden sm:grid"
+              >
                 {intl.formatMessage(messages.talearr)}
               </Detail>
               {torrent.downloadClient && (
-                <Detail label={intl.formatMessage(messages.labelClient)}>
+                <Detail
+                  label={intl.formatMessage(messages.labelClient)}
+                  className="hidden sm:grid"
+                >
                   {torrent.downloadClient}
                 </Detail>
               )}
@@ -515,7 +528,7 @@ const SeedingCard = ({
                 </span>
               </Detail>
               <Detail label={intl.formatMessage(messages.labelSeedTime)}>
-                {seededText}
+                {seededShort}
               </Detail>
             </dl>
             {torrent.atRisk && (

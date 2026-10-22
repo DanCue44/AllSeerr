@@ -95,7 +95,8 @@ const StickySummary = ({
           aria-label={label}
           className={`${glass} flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl px-4 py-1.5 text-xs leading-snug text-as-ink-soft shadow-lg shadow-black/30 sm:text-[13px]`}
         >
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+          {/* Phones get the numbers on one swipeable line, with the switches below */}
+          <div className="flex w-full min-w-0 items-center gap-x-2 overflow-x-auto [scrollbar-width:none] sm:w-auto sm:flex-1 sm:flex-wrap sm:gap-y-0.5 sm:overflow-visible [&::-webkit-scrollbar]:hidden">
             {filled.map((group, index) => (
               <Fragment key={group[0].key}>
                 {index > 0 && (
