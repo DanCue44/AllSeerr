@@ -1,6 +1,11 @@
 import { getRepository } from '@server/datasource';
 import { NoBookEndsDevice } from '@server/entity/NoBookEndsDevice';
 import { User } from '@server/entity/User';
+import {
+  getNoBookEndsAppConnectUrl,
+  getNoBookEndsConnectUrl,
+} from '@server/lib/nobookends';
+import { getSettings } from '@server/lib/settings';
 import { generateUserApiKey, hashUserApiKey } from '@server/lib/userApiKey';
 import logger from '@server/logger';
 import { sanitizeNoBookEndsDeviceLabel } from '@server/utils/nobookendsDeviceLabel';
@@ -80,6 +85,36 @@ export const addNoBookEndsDevice = async (
   });
 
   return { apiKey, device: toResponse(device) };
+};
+
+/**
+ * Connects NoBookEnds on one more device of a user: its key, the link that
+ * sets the app up with it, and the app URL the connect page hands it back
+ * with
+ */
+export const connectNoBookEndsDevice = async (
+  user: User,
+  allseerrUrl: string,
+  label?: unknown
+): Promise<{
+  apiKey: string;
+  device: NoBookEndsDeviceResponse;
+  connectUrl: string;
+  appUrl: string;
+}> => {
+  const { apiKey, device } = await addNoBookEndsDevice(user, label);
+  const connectParams = {
+    audiobookshelfUrl: getSettings().audiobookshelf.url ?? '',
+    allseerrUrl,
+    apiKey,
+  };
+
+  return {
+    apiKey,
+    device,
+    connectUrl: getNoBookEndsConnectUrl(connectParams),
+    appUrl: getNoBookEndsAppConnectUrl(connectParams),
+  };
 };
 
 /**

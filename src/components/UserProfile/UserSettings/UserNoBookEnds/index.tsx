@@ -3,6 +3,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import CopyButton from '@app/components/Settings/CopyButton';
+import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -60,6 +61,7 @@ const messages = defineMessages(
     openGeneralSettings: 'Open General Settings',
     disconnectSuccess: 'NoBookEnds disconnected.',
     disconnectError: 'Something went wrong while disconnecting NoBookEnds.',
+    openNoBookEnds: 'Open NoBookEnds',
   }
 );
 
@@ -78,6 +80,13 @@ interface NoBookEndsConnection {
   applicationUrlMissing: boolean;
 }
 
+// Opens NoBookEnds at its sign in with this server's address filled in, or
+// the NoBookEnds site when the app is not installed
+const getSignInUrl = (applicationUrl: string): string =>
+  `https://nobookends.com/open/signin?allseerr=${encodeURIComponent(
+    applicationUrl.trim().replace(/\/+$/, '')
+  )}`;
+
 const dateFormat = {
   year: 'numeric',
   month: 'long',
@@ -88,6 +97,7 @@ const UserNoBookEnds = () => {
   const intl = useIntl();
   const router = useRouter();
   const { addToast } = useToasts();
+  const { currentSettings } = useSettings();
   const { user: currentUser, hasPermission } = useUser();
   const { user } = useUser({ id: Number(router.query.userId) });
   const [connectUrl, setConnectUrl] = useState<string | null>(null);
@@ -98,6 +108,9 @@ const UserNoBookEnds = () => {
   );
 
   const isOwnProfile = currentUser?.id === user?.id;
+  const signInUrl = currentSettings.applicationUrl?.trim()
+    ? getSignInUrl(currentSettings.applicationUrl)
+    : null;
 
   // Drawn here, so the link with its key never leaves the browser again
   useEffect(() => {
@@ -354,6 +367,18 @@ const UserNoBookEnds = () => {
               </Alert>
             )}
             <div className="flex flex-wrap gap-3">
+              {signInUrl && (
+                <Button
+                  as="a"
+                  href={signInUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  buttonType="default"
+                >
+                  <ArrowTopRightOnSquareIcon />
+                  <span>{intl.formatMessage(messages.openNoBookEnds)}</span>
+                </Button>
+              )}
               {isOwnProfile &&
                 data.available &&
                 !data.applicationUrlMissing && (

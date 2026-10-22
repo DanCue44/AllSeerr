@@ -62,6 +62,8 @@ tags:
 
       To connect, the app opens the Allseerr page `/nobookends/connect?device={name}` in a sign in window. It asks the user to sign in when needed, then to confirm, and sends the app to `nobookends://connect#abs=...&allseerr=...&key=asu_...` with the same values as a connect link, or to `nobookends://connect#error=cancelled`, `#error=unavailable` (books or Audiobookshelf are not set up) or `#error=no_app_url` (no address that works away from home). Each device gets its own key. Without a key `GET /nobookends/status` answers 403, which tells the app the address is an Allseerr that supports NoBookEnds.
 
+      On a Plex server the app can also connect with a Plex token it got itself: `POST /auth/nobookends/plex` answers the same `nobookends://connect#...` app URL. When an admin lists the server in the NoBookEnds directory, people who sign in to NoBookEnds with Plex find this Allseerr without typing its address. The directory checks the address with `GET /nobookends/directory`.
+
       When an admin set up NoBookEnds Sync, the status carries its public address in `nobookendsSync.url`. The app fetches Listen and Read alignments from there with the user's Audiobookshelf token. Allseerr queues each book on the Sync server, at user priority, once it has both an audiobook and an ebook in Audiobookshelf.
   - name: other
     description: Endpoints related to other TMDB data
@@ -1265,6 +1267,36 @@ components:
           $ref: '#/components/schemas/OidcClient'
         clientSecret:
           type: string
+    NoBookEndsDirectoryStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: The `nobookendsDirectory` user access setting, off by default
+          example: true
+        applicationUrlMissing:
+          type: boolean
+          description: The Application URL is not set, which the directory lists
+        plexMissing:
+          type: boolean
+          description: Plex is not the media server or the admin has no Plex token
+        lastResult:
+          type: object
+          nullable: true
+          description: How the last registration went, null before the first one and after taking the server out
+          properties:
+            date:
+              type: string
+              example: '2026-10-22T09:40:00.000Z'
+            registered:
+              type: number
+              nullable: true
+              description: The Plex servers listed, when it worked
+              example: 1
+            error:
+              type: string
+              nullable: true
+              description: Why it did not work
     OidcSettings:
       type: object
       properties:
@@ -6203,6 +6235,44 @@ paths:
                 $ref: '#/components/schemas/OidcClientWithSecret'
         '404':
           description: Client not found
+  /settings/user-access/nobookends-directory:
+    get:
+      summary: Get the NoBookEnds directory listing
+      description: Whether this server is listed in the NoBookEnds directory (`nobookendsDirectory` in the user access settings, off by default), what it still needs, and how the last registration went. The directory keeps the Application URL, the application title and a one-way code (SHA-256) of each Plex server the admin owns.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoBookEndsDirectoryStatus'
+    post:
+      summary: List this server in the NoBookEnds directory, or take it out
+      description: Turning it on registers right away with the Plex admin's token, the Application URL and a new code the directory checks at `GET /nobookends/directory`, and again every day while it is on (the NoBookEnds Directory job). Turning it off asks the directory to remove the listing. The registration result is in `lastResult`.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+              required:
+                - enabled
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoBookEndsDirectoryStatus'
+        '400':
+          description: The Application URL or Plex is not set up
   /settings/user-access/{app}/test:
     post:
       summary: Test an app connection for user access
@@ -8318,6 +8388,68 @@ paths:
                   description: The token of an invite link. It lets in a Plex account without access to the server; the invite is used up by `/auth/invite/{token}/redeem`.
               required:
                 - authToken
+  /auth/nobookends/plex:
+    post:
+      summary: Connect NoBookEnds with a Plex token
+      description: |
+        Signs the NoBookEnds app in with a Plex token the app got itself, for the same people `POST /auth/plex` lets in (an existing user by Plex id or email, a new Plex user with access to the Plex server when new Plex users may sign in), and connects the app on one more device the same way `POST /user/{userId}/settings/nobookends` does. No session cookie is set. At most 20 tries a minute from one address.
+      security: []
+      tags:
+        - auth
+        - nobookends
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                authToken:
+                  type: string
+                  description: The Plex token
+                device:
+                  type: string
+                  description: The device name the app shows for this connection
+                  example: 'iPhone 16'
+              required:
+                - authToken
+      responses:
+        '200':
+          description: Connected. The app handles `appUrl` like the result of the connect page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  appUrl:
+                    type: string
+                    example: 'nobookends://connect#abs=https%3A%2F%2Fbooks.example.com&allseerr=https%3A%2F%2Frequest.example.com&key=asu_...'
+        '400':
+          description: No Plex token
+        '403':
+          description: The Plex account may not sign in here, or this server does not sign in with Plex. `message` says why.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '409':
+          description: NoBookEnds cannot be connected here
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    enum: [unavailable, no_app_url]
+                    description: '`unavailable` when books or Audiobookshelf are not set up, `no_app_url` when there is no address that works away from home'
+                  message:
+                    type: string
+        '429':
+          description: Too many tries
   /auth/invite/{token}:
     get:
       summary: Describe an invite link
@@ -12418,6 +12550,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MusicDetails'
+  /nobookends/directory:
+    get:
+      summary: Answer the NoBookEnds directory check
+      description: While Allseerr registers with the NoBookEnds directory, the directory calls this with the code Allseerr sent it, to check the address belongs to this Allseerr. Answers only for a code made in the last 2 minutes that is still waiting, and 404 otherwise.
+      security: []
+      tags:
+        - nobookends
+      parameters:
+        - in: query
+          name: nonce
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The code is waiting
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nonce:
+                    type: string
+                  title:
+                    type: string
+                    description: The application title
+                    example: Allseerr
+        '404':
+          description: Unknown or expired code
   /nobookends/status:
     get:
       summary: Get what NoBookEnds may offer

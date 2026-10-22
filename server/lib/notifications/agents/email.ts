@@ -225,8 +225,13 @@ class EmailAgent
       type === Notification.APP_USERNAME_CHANGED
     ) {
       const appPath = getPayloadPath(payload);
+      // A changed username opens NoBookEnds when the message comes with it
+      const opensNoBookEnds =
+        type === Notification.APP_USERNAME_CHANGED && !!payload.externalLink;
       const adminActionUrl =
-        applicationUrl && (appPath || type === Notification.SCAN_FAILURE)
+        !opensNoBookEnds &&
+        applicationUrl &&
+        (appPath || type === Notification.SCAN_FAILURE)
           ? `${applicationUrl}${appPath}`
           : payload.externalLink?.url;
       const adminActionLabel =
@@ -236,7 +241,9 @@ class EmailAgent
           : type === Notification.ACCESS_GRANTED
             ? 'Set it up'
             : type === Notification.APP_USERNAME_CHANGED
-              ? 'Open Reading apps'
+              ? opensNoBookEnds
+                ? payload.externalLink?.title
+                : 'Open Reading apps'
               : appPath
                 ? undefined
                 : payload.externalLink?.title;

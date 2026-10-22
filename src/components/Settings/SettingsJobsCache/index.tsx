@@ -96,6 +96,7 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages(
     'recently-added-newsletter': 'Recently Added Newsletter',
     'followed-releases': 'Followed Artist and Author Releases',
     'user-access-sync': 'User Access Sync',
+    'nobookends-directory': 'NoBookEnds Directory',
     editJobSchedule: 'Modify Job',
     jobScheduleEditSaved: 'Job edited successfully!',
     jobScheduleEditFailed: 'Something went wrong while saving the job.',

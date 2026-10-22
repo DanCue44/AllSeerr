@@ -5,6 +5,10 @@ import recentlyAddedNewsletter from '@server/job/newsletter';
 import availabilitySync from '@server/lib/availabilitySync';
 import downloadTracker from '@server/lib/downloadtracker';
 import ImageProxy from '@server/lib/imageproxy';
+import {
+  isDirectoryJobRunning,
+  runDirectoryJob,
+} from '@server/lib/nobookendsDirectory';
 import { cleanUpOidcPayloads } from '@server/lib/oidc/adapter';
 import refreshToken from '@server/lib/refreshToken';
 import { chaptarrScanner } from '@server/lib/scanners/chaptarr';
@@ -379,6 +383,28 @@ export const startJobs = (): void => {
         });
     }),
     running: () => isSyncRunning(),
+  });
+
+  // Lists this server in the NoBookEnds directory again once a day while
+  // that is on, as the directory drops servers it has not heard from
+  scheduledJobs.push({
+    id: 'nobookends-directory',
+    name: 'NoBookEnds Directory',
+    type: 'process',
+    interval: 'days',
+    cronSchedule: jobs['nobookends-directory'].schedule,
+    job: schedule.scheduleJob(jobs['nobookends-directory'].schedule, () => {
+      logger.debug('Starting scheduled job: NoBookEnds Directory', {
+        label: 'Jobs',
+      });
+      runDirectoryJob().catch((e) => {
+        logger.error('Failed to update the NoBookEnds directory', {
+          label: 'Jobs',
+          errorMessage: e.message,
+        });
+      });
+    }),
+    running: () => isDirectoryJobRunning(),
   });
 
   logger.info('Scheduled jobs loaded', { label: 'Jobs' });

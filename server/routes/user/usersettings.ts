@@ -19,13 +19,12 @@ import {
 } from '@server/lib/contentRatingLimit';
 import {
   getNoBookEndsAllseerrUrl,
-  getNoBookEndsAppConnectUrl,
-  getNoBookEndsConnectUrl,
+  getNoBookEndsConnectTarget,
   isNoBookEndsAvailable,
 } from '@server/lib/nobookends';
 import type { NoBookEndsDeviceResponse } from '@server/lib/nobookendsDevices';
 import {
-  addNoBookEndsDevice,
+  connectNoBookEndsDevice,
   getNoBookEndsDevices,
 } from '@server/lib/nobookendsDevices';
 import { Permission } from '@server/lib/permissions';
@@ -1071,25 +1070,13 @@ userSettingsRoutes.post<
   },
   { device?: string } | undefined
 >('/nobookends', isOwnProfile(), async (req, res, next) => {
-  const settings = getSettings();
   const userRepository = getRepository(User);
 
   try {
-    if (!isNoBookEndsAvailable()) {
-      return next({
-        status: 400,
-        message: 'Books and Audiobookshelf must be set up first.',
-      });
-    }
+    const target = getNoBookEndsConnectTarget(noBookEndsRequest(req));
 
-    const allseerrUrl = getNoBookEndsAllseerrUrl(noBookEndsRequest(req));
-
-    if (!allseerrUrl) {
-      return next({
-        status: 400,
-        message:
-          'Set the Application URL in the General settings first, so the app can reach Allseerr away from home.',
-      });
+    if (target.error) {
+      return next({ status: 400, message: target.message });
     }
 
     const user = await userRepository.findOne({
@@ -1100,21 +1087,14 @@ userSettingsRoutes.post<
       return next({ status: 404, message: 'User not found.' });
     }
 
-    const { apiKey, device } = await addNoBookEndsDevice(
-      user,
-      req.body?.device
-    );
-    const connectParams = {
-      audiobookshelfUrl: settings.audiobookshelf.url ?? '',
-      allseerrUrl,
-      apiKey,
-    };
+    const { apiKey, device, connectUrl, appUrl } =
+      await connectNoBookEndsDevice(user, target.allseerrUrl, req.body?.device);
 
     return res.status(201).json({
       apiKey,
       createdAt: device.createdAt,
-      connectUrl: getNoBookEndsConnectUrl(connectParams),
-      appUrl: getNoBookEndsAppConnectUrl(connectParams),
+      connectUrl,
+      appUrl,
       device,
     });
   } catch (e) {

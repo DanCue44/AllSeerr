@@ -1,20 +1,24 @@
 import JellyfinAPI from '@server/api/jellyfin';
-import PlexTvAPI from '@server/api/plextv';
 import { ApiErrorCode } from '@server/constants/error';
 import { MediaServerType, ServerType } from '@server/constants/server';
 import { UserType } from '@server/constants/user';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import { startJobs } from '@server/job/schedule';
+import { getNoBookEndsConnectTarget } from '@server/lib/nobookends';
+import { connectNoBookEndsDevice } from '@server/lib/nobookendsDevices';
 import { Permission } from '@server/lib/permissions';
+import {
+  PlexSignInError,
+  isPlexLoginEnabled,
+  signInWithPlex,
+} from '@server/lib/plexSignIn';
 import { getSettings } from '@server/lib/settings';
 import {
   describeInvite,
   findValidInvite,
-  hasRedeemedInvite,
   redeemInvite,
 } from '@server/lib/userAccess/invites';
-import { grantPlexDefaults } from '@server/lib/userAccess/plexDefaults';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { checkAvatarChanged } from '@server/routes/avatarproxy';
@@ -23,6 +27,7 @@ import { getAppVersion } from '@server/utils/appVersion';
 import { getHostname } from '@server/utils/getHostname';
 import axios from 'axios';
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import net from 'net';
 import validator from 'validator';
 import { z } from 'zod';
@@ -77,8 +82,6 @@ authRoutes.get('/me', isAuthenticated(), async (req, res) => {
 });
 
 authRoutes.post('/plex', async (req, res, next) => {
-  const settings = getSettings();
-  const userRepository = getRepository(User);
   const body = req.body as { authToken?: string; inviteToken?: string };
 
   if (!body.authToken) {
@@ -88,155 +91,15 @@ authRoutes.post('/plex', async (req, res, next) => {
     });
   }
 
-  if (
-    settings.main.mediaServerType != MediaServerType.NOT_CONFIGURED &&
-    (settings.main.mediaServerLogin === false ||
-      settings.main.mediaServerType != MediaServerType.PLEX)
-  ) {
+  if (!isPlexLoginEnabled()) {
     return res.status(500).json({ error: 'Plex login is disabled' });
   }
   try {
-    // First we need to use this auth token to get the user's email from plex.tv
-    const plextv = new PlexTvAPI(body.authToken);
-    const account = await plextv.getUser();
-
-    // An invite lets a Plex account in that has no access to the server
-    const invite = body.inviteToken
-      ? await findValidInvite(body.inviteToken)
-      : null;
-
-    // Next let's see if the user already exists
-    let user = await userRepository
-      .createQueryBuilder('user')
-      .where('user.plexId = :id', { id: account.id })
-      .orWhere('user.email = :email', {
-        email: account.email.toLowerCase(),
-      })
-      .getOne();
-
-    if (!user && !(await userRepository.count())) {
-      user = new User({
-        email: account.email,
-        plexUsername: account.username,
-        plexId: account.id,
-        plexToken: account.authToken,
-        permissions: Permission.ADMIN,
-        avatar: account.thumb,
-        userType: UserType.PLEX,
-      });
-
-      settings.main.mediaServerType = MediaServerType.PLEX;
-      await settings.save();
-      startJobs();
-
-      await userRepository.save(user);
-    } else {
-      const mainUser = await userRepository.findOneOrFail({
-        select: { id: true, plexToken: true, plexId: true, email: true },
-        where: { id: 1 },
-      });
-      const mainPlexTv = new PlexTvAPI(mainUser.plexToken ?? '');
-
-      if (!account.id) {
-        logger.error('Plex ID was missing from Plex.tv response', {
-          label: 'API',
-          ip: req.ip,
-          email: account.email,
-          plexUsername: account.username,
-        });
-
-        return next({
-          status: 500,
-          message: 'Something went wrong. Try again.',
-        });
-      }
-
-      if (
-        account.id === mainUser.plexId ||
-        (account.email === mainUser.email && !mainUser.plexId) ||
-        !!invite ||
-        (!!user && (await hasRedeemedInvite(user.id))) ||
-        (await mainPlexTv.checkUserAccess(account.id))
-      ) {
-        if (user) {
-          if (!user.plexId) {
-            logger.info(
-              'Found matching Plex user; updating user with Plex data',
-              {
-                label: 'API',
-                ip: req.ip,
-                email: user.email,
-                userId: user.id,
-                plexId: account.id,
-                plexUsername: account.username,
-              }
-            );
-          }
-
-          user.plexToken = body.authToken;
-          user.plexId = account.id;
-          user.avatar = account.thumb;
-          user.email = account.email;
-          user.plexUsername = account.username;
-          user.userType = UserType.PLEX;
-
-          await userRepository.save(user);
-        } else if (!settings.main.newPlexLogin && !invite) {
-          logger.warn(
-            'Failed sign-in attempt by unimported Plex user with access to the media server',
-            {
-              label: 'API',
-              ip: req.ip,
-              email: account.email,
-              plexId: account.id,
-              plexUsername: account.username,
-            }
-          );
-          return next({
-            status: 403,
-            message: 'Access denied.',
-          });
-        } else {
-          logger.info(
-            'Sign-in attempt from Plex user with access to the media server; creating new Seerr user',
-            {
-              label: 'API',
-              ip: req.ip,
-              email: account.email,
-              plexId: account.id,
-              plexUsername: account.username,
-            }
-          );
-          user = new User({
-            email: account.email,
-            plexUsername: account.username,
-            plexId: account.id,
-            plexToken: account.authToken,
-            permissions: settings.main.defaultPermissions,
-            avatar: account.thumb,
-            userType: UserType.PLEX,
-          });
-
-          await userRepository.save(user);
-          await grantPlexDefaults(user.id);
-        }
-      } else {
-        logger.warn(
-          'Failed sign-in attempt by Plex user without access to the media server',
-          {
-            label: 'API',
-            ip: req.ip,
-            email: account.email,
-            plexId: account.id,
-            plexUsername: account.username,
-          }
-        );
-        return next({
-          status: 403,
-          message: 'Access denied.',
-        });
-      }
-    }
+    const user = await signInWithPlex({
+      authToken: body.authToken,
+      inviteToken: body.inviteToken,
+      ip: req.ip,
+    });
 
     // Set logged in session
     if (req.session) {
@@ -245,6 +108,9 @@ authRoutes.post('/plex', async (req, res, next) => {
 
     return res.status(200).json(user?.filter() ?? {});
   } catch (e) {
+    if (e instanceof PlexSignInError) {
+      return next({ status: e.status, message: e.message });
+    }
     logger.error('Something went wrong authenticating with Plex account', {
       label: 'API',
       errorMessage: e.message,
@@ -256,6 +122,93 @@ authRoutes.post('/plex', async (req, res, next) => {
     });
   }
 });
+
+/**
+ * Signs the NoBookEnds app in with a Plex token it got itself, for the same
+ * people POST /auth/plex lets in, and connects the app on that device. The
+ * answer is the app URL the connect page hands back, so the app sets itself
+ * up the same way. No session is made.
+ */
+authRoutes.post<
+  never,
+  { appUrl: string } | { error: string; message: string },
+  { authToken?: unknown; device?: unknown } | undefined
+>(
+  '/nobookends/plex',
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many sign in attempts. Try again in a minute.' },
+  }),
+  async (req, res, next) => {
+    const authToken = req.body?.authToken;
+
+    if (typeof authToken !== 'string' || !authToken) {
+      return next({ status: 400, message: 'Plex token required.' });
+    }
+
+    const applicationTitle = getSettings().main.applicationTitle;
+
+    if (getSettings().main.mediaServerType !== MediaServerType.PLEX) {
+      return next({
+        status: 403,
+        message: `${applicationTitle} does not use Plex to sign in.`,
+      });
+    }
+    if (!isPlexLoginEnabled()) {
+      return next({
+        status: 403,
+        message: `Signing in with Plex is turned off on ${applicationTitle}.`,
+      });
+    }
+
+    // Checked first, so nobody gets an account the app cannot use
+    const target = getNoBookEndsConnectTarget({
+      protocol: req.protocol,
+      hostname: req.hostname,
+      host: req.get('host'),
+    });
+
+    if (target.error) {
+      return res
+        .status(409)
+        .json({ error: target.error, message: target.message });
+    }
+
+    try {
+      const user = await signInWithPlex({
+        authToken,
+        ip: req.ip,
+        allowSetup: false,
+      });
+      const { appUrl } = await connectNoBookEndsDevice(
+        user,
+        target.allseerrUrl,
+        req.body?.device
+      );
+
+      return res.status(200).json({ appUrl });
+    } catch (e) {
+      if (e instanceof PlexSignInError) {
+        return next({
+          status: e.status,
+          message:
+            e.status === 403
+              ? `Your Plex account cannot sign in to ${applicationTitle}. Ask whoever runs it for access.`
+              : e.message,
+        });
+      }
+      logger.error('Failed to sign NoBookEnds in with Plex', {
+        label: 'API',
+        errorMessage: (e as Error).message,
+        ip: req.ip,
+      });
+      return next({ status: 500, message: 'Unable to authenticate.' });
+    }
+  }
+);
 
 /**
  * What an invite link opens, shown before signing in

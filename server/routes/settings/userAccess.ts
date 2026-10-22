@@ -13,6 +13,7 @@ import {
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import type {
+  NoBookEndsDirectoryStatus,
   OidcClientResponse,
   OidcSettingsResponse,
   PlexDefaultAccessResponse,
@@ -20,6 +21,11 @@ import type {
   UserAccessAppConnectionResponse,
   UserAccessSettingsResponse,
 } from '@server/interfaces/api/userAccessInterfaces';
+import {
+  getDirectoryStatus,
+  registerWithDirectory,
+  unregisterFromDirectory,
+} from '@server/lib/nobookendsDirectory';
 import type { OidcApp } from '@server/lib/oidc/claims';
 import { OIDC_APPS, isOidcApp } from '@server/lib/oidc/claims';
 import { getOidcIssuer, resetOidcProvider } from '@server/lib/oidc/provider';
@@ -330,6 +336,60 @@ userAccessSettingsRoutes.post<
   await settings.save();
 
   return res.status(200).json(getReadingAppChoices());
+});
+
+/**
+ * Whether this server is listed in the NoBookEnds directory, and how the
+ * last registration went
+ */
+userAccessSettingsRoutes.get<never, NoBookEndsDirectoryStatus>(
+  '/nobookends-directory',
+  async (_req, res) => {
+    res.status(200).json(await getDirectoryStatus());
+  }
+);
+
+/**
+ * Lists this server in the NoBookEnds directory right away, or takes it out.
+ * It needs the Application URL and Plex.
+ */
+userAccessSettingsRoutes.post<
+  never,
+  NoBookEndsDirectoryStatus,
+  { enabled?: boolean }
+>('/nobookends-directory', async (req, res, next) => {
+  const enabled = req.body?.enabled;
+
+  if (typeof enabled !== 'boolean') {
+    return next({ status: 400, message: 'Invalid setting.' });
+  }
+
+  const status = await getDirectoryStatus();
+
+  if (enabled && status.applicationUrlMissing) {
+    return next({
+      status: 400,
+      message: 'Set the Application URL in the General settings first.',
+    });
+  }
+  if (enabled && status.plexMissing) {
+    return next({ status: 400, message: 'Set up Plex first.' });
+  }
+
+  const settings = getSettings();
+  settings.userAccess = {
+    ...settings.userAccess,
+    nobookendsDirectory: enabled,
+  };
+  await settings.save();
+
+  if (enabled) {
+    await registerWithDirectory();
+  } else {
+    await unregisterFromDirectory();
+  }
+
+  return res.status(200).json(await getDirectoryStatus());
 });
 
 /**

@@ -53,7 +53,7 @@ import libraryRoutes from './library';
 import mediaRoutes from './media';
 import movieRoutes from './movie';
 import musicRoutes from './music';
-import nobookendsRoutes from './nobookends';
+import nobookendsRoutes, { nobookendsDirectoryCheck } from './nobookends';
 import oidcRoutes from './oidc';
 import personRoutes from './person';
 import removalRoutes from './removal';
@@ -186,6 +186,9 @@ router.use('/artist', isAuthenticated(), artistRoutes);
 router.use('/coverart', isAuthenticated(), coverArtRoutes);
 router.use('/book', isAuthenticated(), bookRoutes);
 router.use('/comic', isAuthenticated(), comicRoutes);
+// Public, for the NoBookEnds directory to check this address is the one
+// registering
+router.get('/nobookends/directory', nobookendsDirectoryCheck);
 router.use('/nobookends', isAuthenticated(), nobookendsRoutes);
 router.use(
   '/user-access',

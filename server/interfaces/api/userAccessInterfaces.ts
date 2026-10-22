@@ -216,3 +216,20 @@ export interface ReadingAppSetupResult {
   // The new password, shown once, when an account was made
   password?: NewAppPassword;
 }
+
+/**
+ * Whether this server is listed in the NoBookEnds directory
+ */
+export interface NoBookEndsDirectoryStatus {
+  enabled: boolean;
+  // What is missing before the server can be listed
+  applicationUrlMissing: boolean;
+  plexMissing: boolean;
+  // How the last registration went, null before the first one
+  lastResult: {
+    date: string;
+    // The Plex servers listed, when it worked
+    registered: number | null;
+    error: string | null;
+  } | null;
+}

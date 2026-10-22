@@ -8,6 +8,7 @@ import { USER_ACCESS_APP_NAMES } from '@server/constants/userAccess';
 import { getRepository } from '@server/datasource';
 import type { User } from '@server/entity/User';
 import { UserAppAccount } from '@server/entity/UserAppAccount';
+import { getNoBookEndsSignInUrl } from '@server/lib/nobookends';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
@@ -112,11 +113,13 @@ const TOLD_FOR_MS = 60 * 60 * 1000;
 /**
  * Tells the person their username changed. People use the apps through
  * Allseerr and NoBookEnds, so the message names NoBookEnds when it is set up
- * and no app otherwise.
+ * and no app otherwise. With NoBookEnds and an Application URL, the email
+ * opens NoBookEnds at its sign in with this server filled in.
  */
 export const sendUsernameChanged = (user: User, username: string): void => {
   const settings = getSettings();
   const withNoBookEnds = !!settings.nobookendsSync.enabled;
+  const applicationUrl = settings.main.applicationUrl?.trim();
   // NoBookEnds signs people in through Allseerr, with Plex on a Plex server
   const signIn =
     settings.main.mediaServerType === MediaServerType.PLEX
@@ -135,6 +138,14 @@ export const sendUsernameChanged = (user: User, username: string): void => {
     notifySystem: false,
     notifyUser: user,
     actionPath: '/profile/settings/apps',
+    ...(withNoBookEnds && applicationUrl
+      ? {
+          externalLink: {
+            url: getNoBookEndsSignInUrl(applicationUrl),
+            title: 'Open NoBookEnds',
+          },
+        }
+      : {}),
   });
 };
 

@@ -5,6 +5,7 @@ import Invites from '@app/components/Settings/SettingsUserAccess/Invites';
 import LinkExistingAccounts, {
   RenamedAccounts,
 } from '@app/components/Settings/SettingsUserAccess/LinkAccount';
+import NoBookEndsDirectory from '@app/components/Settings/SettingsUserAccess/NoBookEndsDirectory';
 import People from '@app/components/Settings/SettingsUserAccess/People';
 import PlexDefaultAccess from '@app/components/Settings/SettingsUserAccess/PlexDefaultAccess';
 import ReadingAppChoices from '@app/components/Settings/SettingsUserAccess/ReadingAppChoices';
@@ -66,6 +67,7 @@ const SettingsUserAccess = () => {
       <LinkExistingAccounts apps={apps} />
       <RenamedAccounts />
       <ReadingAppChoices />
+      <NoBookEndsDirectory />
       <Invites apps={apps} />
       <SignInWithAllseerr />
     </>

@@ -181,6 +181,19 @@ export interface UserAccessSettings {
   personAccounts?: Partial<Record<UserAccessApp, string[]>>;
   // The latest renames, so the admin can tell people their new usernames
   renames?: AppAccountRename[];
+  // Lists this server in the NoBookEnds directory, so people who sign in
+  // to NoBookEnds with Plex find it without its address. Off when missing.
+  nobookendsDirectory?: boolean;
+  // How the last registration with the directory went
+  nobookendsDirectoryResult?: NoBookEndsDirectoryResult | null;
+}
+
+// Every field is always written, as saved settings are merged into
+export interface NoBookEndsDirectoryResult {
+  date: string;
+  // The Plex servers listed, when it worked
+  registered: number | null;
+  error: string | null;
 }
 
 export interface AppAccountRename {
@@ -658,7 +671,8 @@ export type JobId =
   | 'process-blocklisted-tags'
   | 'recently-added-newsletter'
   | 'followed-releases'
-  | 'user-access-sync';
+  | 'user-access-sync'
+  | 'nobookends-directory';
 
 export interface AllSettings {
   clientId: string;
@@ -787,6 +801,7 @@ class Settings {
         },
         plexDefault: defaultPlexDefaultAccess(),
         readingApps: defaultReadingAppChoices(),
+        nobookendsDirectory: false,
       },
       metadataSettings: {
         tv: MetadataProviderType.TMDB,
@@ -969,6 +984,9 @@ class Settings {
         'user-access-sync': {
           schedule: '0 */30 * * * *',
         },
+        'nobookends-directory': {
+          schedule: '0 40 4 * * *',
+        },
       },
       newsletter: {},
       network: {
@@ -1074,6 +1092,7 @@ class Settings {
         oidc: { enabled: false, clients: [] },
         plexDefault: defaultPlexDefaultAccess(),
         readingApps: defaultReadingAppChoices(),
+        nobookendsDirectory: false,
       },
       this.data.userAccess ?? {}
     );

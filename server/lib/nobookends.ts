@@ -182,6 +182,49 @@ export const isNoBookEndsAvailable = (): boolean => {
   return !!settings.bookService && !!trimUrl(settings.audiobookshelf.url);
 };
 
+export type NoBookEndsConnectTarget =
+  | { allseerrUrl: string; error?: undefined }
+  | { error: 'unavailable' | 'no_app_url'; message: string };
+
+/**
+ * The Allseerr address a device connects NoBookEnds to, or why it cannot
+ * connect: books or Audiobookshelf are not set up, or there is no address
+ * that works away from home. The connect page checks the same.
+ */
+export const getNoBookEndsConnectTarget = (request: {
+  protocol: string;
+  hostname: string;
+  host?: string;
+}): NoBookEndsConnectTarget => {
+  if (!isNoBookEndsAvailable()) {
+    return {
+      error: 'unavailable',
+      message: 'Books and Audiobookshelf must be set up first.',
+    };
+  }
+
+  const allseerrUrl = getNoBookEndsAllseerrUrl(request);
+
+  if (!allseerrUrl) {
+    return {
+      error: 'no_app_url',
+      message:
+        'Set the Application URL in the General settings first, so the app can reach Allseerr away from home.',
+    };
+  }
+
+  return { allseerrUrl };
+};
+
+/**
+ * Opens NoBookEnds at its sign in with this Allseerr's address filled in,
+ * or the NoBookEnds site when the app is not installed
+ */
+export const getNoBookEndsSignInUrl = (allseerrUrl: string): string =>
+  `${NOBOOKENDS_OPEN_URL}/signin?allseerr=${encodeURIComponent(
+    trimUrl(allseerrUrl) ?? allseerrUrl
+  )}`;
+
 /**
  * A request quota as the app shows it: how many requests are allowed in
  * how many days (null days counts every request ever made)

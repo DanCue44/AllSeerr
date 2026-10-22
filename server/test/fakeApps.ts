@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 /**
  * Stand-ins for Audiobookshelf, Kavita and Komga that keep their accounts
  * in memory and answer the admin calls Allseerr makes, shaped like the real
- * apps' answers
+ * apps' answers, and for the NoBookEnds directory
  */
 
 export interface FakeApp {
@@ -45,14 +45,16 @@ const startFake = async (
     req: IncomingMessage,
     url: URL,
     body: unknown
-  ) => { status: number; body?: unknown }
+  ) =>
+    | { status: number; body?: unknown }
+    | Promise<{ status: number; body?: unknown }>
 ): Promise<FakeApp> => {
   const calls: FakeApp['calls'] = [];
   const server: Server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const body = await readBody(req);
     calls.push({ method: req.method ?? 'GET', path: url.pathname, body });
-    const { status, body: responseBody } = handle(req, url, body);
+    const { status, body: responseBody } = await handle(req, url, body);
     send(res, status, responseBody);
   });
 
@@ -564,4 +566,80 @@ export const startFakeKomga = async (apiKey: string) => {
   });
 
   return { ...app, users };
+};
+
+export interface FakeDirectoryEntry {
+  url: string;
+  title: string;
+}
+
+/**
+ * The NoBookEnds directory: takes registrations with the admin's Plex token,
+ * checks the address answers with the code it was sent, like the real one,
+ * and removes them again
+ */
+export const startFakeDirectory = async (plexToken: string) => {
+  const servers = new Map<string, FakeDirectoryEntry>();
+  // The answers the address check got, in order
+  const checks: { status: number; body: unknown }[] = [];
+  let refuse: string | null = null;
+
+  const app = await startFake(async (req, url, body) => {
+    const b = (body ?? {}) as Record<string, string>;
+
+    if (url.pathname !== '/v1/servers') {
+      return { status: 404 };
+    }
+    if (b.plexToken !== plexToken) {
+      return {
+        status: 401,
+        body: {
+          error: 'plex_unauthorized',
+          message: 'Plex refused the token.',
+        },
+      };
+    }
+    if (req.method === 'DELETE') {
+      const removed = servers.size;
+      servers.clear();
+      return { status: 200, body: { removed } };
+    }
+    if (req.method !== 'POST') {
+      return { status: 404 };
+    }
+    if (refuse) {
+      return { status: 422, body: { error: 'no_servers', message: refuse } };
+    }
+
+    const response = await fetch(
+      `${b.url}/api/v1/nobookends/directory?nonce=${encodeURIComponent(
+        b.nonce
+      )}`
+    );
+    const answer = response.ok ? await response.json() : null;
+    checks.push({ status: response.status, body: answer });
+
+    if (!answer || answer.nonce !== b.nonce) {
+      return {
+        status: 422,
+        body: {
+          error: 'url_check_failed',
+          message: 'The address did not answer with the code.',
+        },
+      };
+    }
+
+    servers.set('plex-server-hash', { url: b.url, title: answer.title });
+    return { status: 200, body: { registered: servers.size } };
+  });
+
+  return {
+    ...app,
+    servers,
+    checks,
+    // Makes the next registrations fail with this message, or work again
+    refuseWith: (message: string | null) => {
+      refuse = message;
+    },
+  };
 };

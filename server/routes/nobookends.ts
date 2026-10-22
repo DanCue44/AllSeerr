@@ -5,11 +5,13 @@ import {
   dismissAttentionItem,
   getAttentionItems,
 } from '@server/lib/nobookendsAttention';
+import { isPendingDirectoryNonce } from '@server/lib/nobookendsDirectory';
 import {
   findNoBookEndsItem,
   withNoBookEndsRecordings,
 } from '@server/lib/nobookendsItem';
 import { Permission } from '@server/lib/permissions';
+import { getSettings } from '@server/lib/settings';
 import {
   ReadingAppError,
   connectNoBookEnds,
@@ -19,6 +21,7 @@ import {
 } from '@server/lib/userAccess/readingApps';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import type { RequestHandler } from 'express';
 import { Router } from 'express';
 
 const nobookendsRoutes = Router();
@@ -28,6 +31,23 @@ const ITEM_ID = /^[\w-]{1,100}$/;
 
 // Stuck download keys: chaptarr:<server id>:<download id>:<state>
 const ATTENTION_KEY = /^chaptarr:\d+:.{1,300}:[a-z]+$/;
+
+/**
+ * Answers the NoBookEnds directory while Allseerr registers with it, which
+ * proves this address is the Allseerr registering. Needs no sign in, and
+ * says nothing for any other code.
+ */
+export const nobookendsDirectoryCheck: RequestHandler = (req, res, next) => {
+  const nonce = req.query.nonce;
+
+  if (typeof nonce !== 'string' || !isPendingDirectoryNonce(nonce)) {
+    return next({ status: 404, message: 'Not found.' });
+  }
+
+  return res
+    .status(200)
+    .json({ nonce, title: getSettings().main.applicationTitle });
+};
 
 const getHint = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim()
