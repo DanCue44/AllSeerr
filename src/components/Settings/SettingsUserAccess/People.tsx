@@ -31,7 +31,7 @@ const messages = defineMessages(
   {
     people: 'People',
     peopleDescription:
-      'Everyone who can sign in to Allseerr. Turning on an app makes their account in it, or links the one they already have.',
+      'Everyone who can sign in to Allseerr. Turning on an app lets them set up their account in one tap and tells them, or links the one they already have.',
     person: 'Person',
     ageLimit: 'Age limit',
     edit: 'Edit',

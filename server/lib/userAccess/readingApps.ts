@@ -32,6 +32,7 @@ import {
   syncAppAccount,
 } from '@server/lib/userAccess';
 import logger from '@server/logger';
+import { openSecret, sealSecret } from '@server/utils/secretBox';
 
 export type { ReadingAppStatus };
 
@@ -153,6 +154,9 @@ const toStatus = (
   const kinds = kindsServedBy(app, choices);
   const state = readingAppStateOf(account);
   const publicUrl = getAppPublicUrl(app);
+  // An account the person had before keeps the password they chose
+  const ownAccount =
+    state === ReadingAppState.READY && !account?.madeByAllseerr;
 
   return {
     app,
@@ -164,8 +168,12 @@ const toStatus = (
       ? { username: account.remoteUsername }
       : {}),
     ...(publicUrl ? { publicUrl } : {}),
-    message: MESSAGES[state](name),
+    message: ownAccount
+      ? `Your own ${name} account is linked. Sign in with your own password.`
+      : MESSAGES[state](name),
     signInWithAllseerr: hasSignInWithAllseerr(app),
+    ownAccount,
+    canResetPassword: state === ReadingAppState.READY && !ownAccount,
   };
 };
 
@@ -269,6 +277,14 @@ const resetOwnPassword = async (
   const name = USER_ACCESS_APP_NAMES[account.app];
   const client = getAppClient(account.app);
   const remote = remoteOf(account);
+
+  // Only an admin changes the password of an account Allseerr did not make
+  if (!account.madeByAllseerr) {
+    throw new ReadingAppError(
+      409,
+      `You already have a ${name} account. Sign in to ${name} with your own password.`
+    );
+  }
 
   if (client?.isAppAdmin && remote && (await client.isAppAdmin(remote))) {
     throw new ReadingAppError(
@@ -388,18 +404,35 @@ export interface NoBookEndsConnection {
 /**
  * The key Allseerr made for NoBookEnds before, while it still signs in
  */
-const savedKey = async (
+export const savedKey = async (
   account: UserAppAccount
 ): Promise<{ id: string | null; key: string } | null> => {
-  const saved = await getRepository(UserAppAccount)
+  const repository = getRepository(UserAppAccount);
+  const saved = await repository
     .createQueryBuilder('account')
     .addSelect('account.nobookendsToken')
     .where('account.id = :id', { id: account.id })
     .getOne();
 
-  return saved?.nobookendsToken
-    ? { id: saved.nobookendsTokenId ?? null, key: saved.nobookendsToken }
-    : null;
+  if (!saved?.nobookendsToken) {
+    return null;
+  }
+
+  const opened = openSecret(saved.nobookendsToken);
+
+  // A key sealed under another secret cannot be used, so a new one is made
+  if (!opened) {
+    return null;
+  }
+
+  // Keys saved before they were sealed are sealed now
+  if (opened.legacy) {
+    await repository.update(account.id, {
+      nobookendsToken: sealSecret(opened.plain),
+    });
+  }
+
+  return { id: saved.nobookendsTokenId ?? null, key: opened.plain };
 };
 
 /**
@@ -457,9 +490,10 @@ export const connectNoBookEnds = async (
       }
 
       // Kavita only makes a key for someone signed in as them, which needs
-      // their password. One Allseerr did not just make is changed first.
+      // their password. One Allseerr made itself is changed first; a
+      // person's own account keeps theirs.
       if (app === 'kavita' && !password) {
-        password = (await resetOwnPassword(user, account)).password;
+        password = (await resetForNoBookEnds(user, account)).password;
       }
 
       const key = await client.createUserKey(
@@ -469,7 +503,7 @@ export const connectNoBookEnds = async (
       );
 
       if (key) {
-        account.nobookendsToken = key.key;
+        account.nobookendsToken = sealSecret(key.key);
         account.nobookendsTokenId = key.id;
         await getRepository(UserAppAccount).save(account);
 
@@ -483,7 +517,7 @@ export const connectNoBookEnds = async (
     // No key to sign in with, so a password shown once does it
     return {
       ...connection,
-      password: password ?? (await resetOwnPassword(user, account)).password,
+      password: password ?? (await resetForNoBookEnds(user, account)).password,
     };
   } catch (e) {
     if (e instanceof ReadingAppError) {
@@ -500,6 +534,22 @@ export const connectNoBookEnds = async (
       `${name} could not sign NoBookEnds in right now. Try again later.`
     );
   }
+};
+
+const resetForNoBookEnds = (
+  user: User,
+  account: UserAppAccount
+): Promise<NewAppPassword> => {
+  const name = USER_ACCESS_APP_NAMES[account.app];
+
+  if (!account.madeByAllseerr) {
+    throw new ReadingAppError(
+      409,
+      `You already have a ${name} account. Sign in to ${name} in NoBookEnds with your own password.`
+    );
+  }
+
+  return resetOwnPassword(user, account);
 };
 
 const withKey = (

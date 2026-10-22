@@ -45,6 +45,8 @@ const messages = defineMessages(
     open: 'Open {app}',
     signInWithAllseerr:
       'On the {app} sign in page, use the "Sign in with Allseerr" button.',
+    ownAccount:
+      'This is the {app} account you already had. Sign in with the password you already use.',
     newPassword: 'Show a new password',
     confirmNewPassword: 'Replace my password',
     newPasswordHint: 'This replaces your current {app} password.',
@@ -221,6 +223,11 @@ const UserReadingApps = () => {
                               })}
                             </p>
                           )}
+                          {status.ownAccount && (
+                            <p className="mt-1 text-as-ink-muted">
+                              {intl.formatMessage(messages.ownAccount, { app })}
+                            </p>
+                          )}
                           {status.signInWithAllseerr && (
                             <p className="mt-1 text-as-ink-muted">
                               {intl.formatMessage(messages.signInWithAllseerr, {
@@ -243,27 +250,31 @@ const UserReadingApps = () => {
                                 </span>
                               </Button>
                             )}
-                            {!status.signInWithAllseerr && !password && (
-                              <ConfirmButton
-                                onClick={() => run(status, 'password')}
-                                confirmText={intl.formatMessage(
-                                  messages.confirmNewPassword
-                                )}
-                              >
-                                <KeyIcon />
-                                <span>
-                                  {intl.formatMessage(messages.newPassword)}
-                                </span>
-                              </ConfirmButton>
-                            )}
+                            {status.canResetPassword &&
+                              !status.signInWithAllseerr &&
+                              !password && (
+                                <ConfirmButton
+                                  onClick={() => run(status, 'password')}
+                                  confirmText={intl.formatMessage(
+                                    messages.confirmNewPassword
+                                  )}
+                                >
+                                  <KeyIcon />
+                                  <span>
+                                    {intl.formatMessage(messages.newPassword)}
+                                  </span>
+                                </ConfirmButton>
+                              )}
                           </div>
-                          {!status.signInWithAllseerr && !password && (
-                            <p className="mt-2 text-xs text-as-ink-faint">
-                              {intl.formatMessage(messages.newPasswordHint, {
-                                app,
-                              })}
-                            </p>
-                          )}
+                          {status.canResetPassword &&
+                            !status.signInWithAllseerr &&
+                            !password && (
+                              <p className="mt-2 text-xs text-as-ink-faint">
+                                {intl.formatMessage(messages.newPasswordHint, {
+                                  app,
+                                })}
+                              </p>
+                            )}
                         </>
                       )}
                       {status.state === 'available' && (

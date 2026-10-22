@@ -42,6 +42,9 @@ const messages = defineMessages(
     libraries: 'Libraries',
     lastError: 'Last sync: {error}',
     resetPassword: 'New password',
+    createNow: 'Create account now',
+    createNowHelp:
+      'Turning an app on lets {name} set up their own account in one tap. Create it now to get the password yourself.',
     removeAccount: 'Delete account',
     removeConfirm: 'Also deletes their reading progress. Sure?',
     save: 'Save',
@@ -142,6 +145,26 @@ const PersonAccessModal = ({
         emailed: boolean;
       }>(`/api/v1/user-access/people/${person.userId}/apps/${app}/password`);
       onSaved(person, { [app]: response.data });
+    } catch (e) {
+      addToast(
+        intl.formatMessage(messages.actionFailure, {
+          message: e.response?.data?.message ?? e.message,
+        }),
+        { autoDismiss: true, appearance: 'error' }
+      );
+    } finally {
+      setBusyApp(null);
+    }
+  };
+
+  // The old way: make the account now and show its password to the admin
+  const createNow = async (app: UserAccessApp) => {
+    setBusyApp(app);
+    try {
+      const response = await axios.post<PersonUpdateResult>(
+        `/api/v1/user-access/people/${person.userId}/apps/${app}/create`
+      );
+      onSaved(response.data.person, response.data.passwords);
     } catch (e) {
       addToast(
         intl.formatMessage(messages.actionFailure, {
@@ -336,6 +359,22 @@ const PersonAccessModal = ({
                         </label>
                       ))}
                     </div>
+                  </div>
+                )}
+                {!hasAccount && access.enabled && (
+                  <div className="mt-3">
+                    <Button
+                      buttonSize="sm"
+                      onClick={() => createNow(app)}
+                      disabled={!!busyApp}
+                    >
+                      {intl.formatMessage(messages.createNow)}
+                    </Button>
+                    <p className="mt-1 text-xs text-as-ink-faint">
+                      {intl.formatMessage(messages.createNowHelp, {
+                        name: person.displayName,
+                      })}
+                    </p>
                   </div>
                 )}
                 {hasAccount && (

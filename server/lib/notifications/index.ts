@@ -26,6 +26,7 @@ export enum Notification {
   SCAN_FAILURE = 524288,
   DOWNLOAD_NEEDS_ATTENTION = 1048576,
   ACCESS_REQUESTED = 2097152,
+  ACCESS_GRANTED = 4194304,
 }
 
 export const hasNotificationType = (

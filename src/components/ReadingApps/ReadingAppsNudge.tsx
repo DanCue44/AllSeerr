@@ -1,6 +1,6 @@
 import { dismiss, isDismissed } from '@app/components/ReadingApps/common';
 import useSettings from '@app/hooks/useSettings';
-import { Permission, useUser } from '@app/hooks/useUser';
+import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { BookOpenIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import type { ReadingAppsResponse } from '@server/interfaces/api/userAccessInterfaces';
@@ -16,21 +16,16 @@ const messages = defineMessages('components.ReadingApps.ReadingAppsNudge', {
 });
 
 /**
- * A small reminder for people who cannot request, so they still find their
- * Reading apps settings. Shown while an app waits to be set up or asked
+ * A small reminder that points everyone to their Reading apps settings.
+ * Shown while an app that serves a kind of book waits to be set up or asked
  * for, until they set it up or dismiss it for 30 days.
  */
 const ReadingAppsNudge = ({ className = '' }: { className?: string }) => {
   const intl = useIntl();
   const settings = useSettings();
-  const { user, hasPermission } = useUser();
+  const { user } = useUser();
   const [hidden, setHidden] = useState(true);
-  const canRequest = hasPermission(
-    [Permission.REQUEST, Permission.REQUEST_BOOK],
-    { type: 'or' }
-  );
-  const shouldCheck =
-    !!user && settings.currentSettings.readingAppsEnabled && !canRequest;
+  const shouldCheck = !!user && settings.currentSettings.readingAppsEnabled;
   const { data } = useSWR<ReadingAppsResponse>(
     shouldCheck ? `/api/v1/user/${user?.id}/settings/apps` : null
   );
@@ -40,8 +35,11 @@ const ReadingAppsNudge = ({ className = '' }: { className?: string }) => {
     setHidden(!user || isDismissed('nudge', user.id));
   }, [user]);
 
+  // Only apps that serve a kind of book, not one an admin keeps for testing
   const waiting = data?.apps.some(
-    (app) => app.state === 'available' || app.state === 'notGranted'
+    (app) =>
+      app.kinds.length > 0 &&
+      (app.state === 'available' || app.state === 'notGranted')
   );
 
   if (!shouldCheck || !waiting || hidden) {

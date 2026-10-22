@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { after, before, beforeEach, describe, it } from 'node:test';
+import { after, before, beforeEach, describe, it, mock } from 'node:test';
 
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import { UserAppAccount } from '@server/entity/UserAppAccount';
+import notificationManager, { Notification } from '@server/lib/notifications';
 import { Permission } from '@server/lib/permissions';
 import { defaultPlexDefaultAccess, getSettings } from '@server/lib/settings';
 import { appUsernameFor, generateAppPassword } from '@server/lib/userAccess';
@@ -23,6 +24,12 @@ import session from 'express-session';
 import request from 'supertest';
 
 let app: Express;
+
+const notifications = mock.method(
+  notificationManager,
+  'sendNotification',
+  () => undefined
+);
 let abs: Awaited<ReturnType<typeof startFakeAudiobookshelf>>;
 let kavita: Awaited<ReturnType<typeof startFakeKavita>>;
 let komga: Awaited<ReturnType<typeof startFakeKomga>>;
@@ -222,11 +229,44 @@ describe('user access people', () => {
     );
   });
 
+  it('only allows apps when an admin turns them on, and tells the person', async () => {
+    const agent = await loginAs('admin@seerr.dev');
+    const userId = await demoId();
+    notifications.mock.resetCalls();
+
+    const res = await agent
+      .post(`/user-access/people/${userId}`)
+      .send({ apps: { kavita: { enabled: true } } })
+      .expect(200);
+
+    assert.equal(res.body.person.apps.kavita.enabled, true);
+    assert.equal(res.body.person.apps.kavita.status, 'none');
+    assert.deepEqual(res.body.passwords, {});
+    assert.equal(kavita.members.length, 1);
+
+    assert.equal(notifications.mock.callCount(), 1);
+    const [type, payload] = notifications.mock.calls[0].arguments;
+    assert.equal(type, Notification.ACCESS_GRANTED);
+    assert.equal(payload?.notifyUser?.id, userId);
+    assert.equal(payload?.actionPath, '/profile/settings/apps?app=kavita');
+    assert.equal(
+      payload?.message,
+      'Your Kavita access is ready. Set it up in one tap.'
+    );
+
+    // Saving again tells nobody again
+    await agent
+      .post(`/user-access/people/${userId}`)
+      .send({ apps: { kavita: { enabled: true } } })
+      .expect(200);
+    assert.equal(notifications.mock.callCount(), 1);
+  });
+
   it('makes accounts with a password shown once, then limits and locks them', async () => {
     const agent = await loginAs('admin@seerr.dev');
     const userId = await demoId();
 
-    const res = await agent
+    await agent
       .post(`/user-access/people/${userId}`)
       .send({
         ageLimit: 'kids',
@@ -237,6 +277,18 @@ describe('user access people', () => {
         },
       })
       .expect(200);
+
+    // The admin makes the accounts now instead of the person
+    const passwords: Record<string, { password: string; emailed: boolean }> =
+      {};
+    for (const name of ['kavita', 'komga', 'audiobookshelf']) {
+      const created = await agent
+        .post(`/user-access/people/${userId}/apps/${name}/create`)
+        .expect(200);
+      passwords[name] = created.body.passwords[name];
+    }
+    const person = await agent.get(`/user-access/people/${userId}`).expect(200);
+    const res = { body: { person: person.body, passwords } };
 
     assert.equal(res.body.person.ageLimit, 'kids');
     assert.equal(res.body.person.apps.kavita.status, 'active');
@@ -326,6 +378,9 @@ describe('user access people', () => {
     await agent
       .post(`/user-access/people/${userId}`)
       .send({ apps: { komga: { enabled: true } } })
+      .expect(200);
+    await agent
+      .post(`/user-access/people/${userId}/apps/komga/create`)
       .expect(200);
 
     const reset = await agent

@@ -17,6 +17,7 @@ import notificationManager, {
 import { Permission } from '@server/lib/permissions';
 import { defaultPlexDefaultAccess, getSettings } from '@server/lib/settings';
 import enableAccessRequestAlerts from '@server/lib/settings/migrations/0014_enable_access_request_alerts';
+import enableAccessGrantedAlerts from '@server/lib/settings/migrations/0015_enable_access_granted_alerts';
 import { updatePerson } from '@server/lib/userAccess';
 import {
   applyPlexDefaults,
@@ -41,6 +42,7 @@ import {
   startFakeKavita,
   startFakeKomga,
 } from '@server/test/fakeApps';
+import { openSecret, sealSecret } from '@server/utils/secretBox';
 import type { Express } from 'express';
 import express from 'express';
 import session from 'express-session';
@@ -425,8 +427,10 @@ describe('reading apps settings', () => {
 
     const account = await accountOf(user.id, 'kavita');
     assert.equal(account?.accessRequestedAt, null);
+    // Allowed only: the person sets the account up themselves
     const list = await agent.get(`/user/${user.id}/settings/apps`);
-    assert.equal(list.body.apps[1].state, 'ready');
+    assert.equal(list.body.apps[1].state, 'available');
+    assert.equal(kavita.members.length, 1);
   });
 
   it('leaves an ask to the default for Plex users', async () => {
@@ -701,9 +705,7 @@ describe('NoBookEnds reading apps', () => {
     assert.equal(member.authKeys?.length, 1);
   });
 
-  it('changes the Kavita password once to make a key for a linked account', async () => {
-    const user = await demo();
-    await grant(user, 'kavita');
+  const ownKavitaAccount = () =>
     kavita.members.push({
       id: 50,
       username: 'demo',
@@ -715,6 +717,45 @@ describe('NoBookEnds reading apps', () => {
       identityProvider: 0,
       password: 'their-own-password',
     });
+
+  it("never changes the password of the person's own Kavita account", async () => {
+    const user = await demo();
+    await grant(user, 'kavita');
+    ownKavitaAccount();
+    const key = await noBookEndsKey(user);
+
+    const res = await request(app)
+      .post('/nobookends/reading-apps/kavita/connect')
+      .set('X-API-Key', key);
+
+    assert.equal(res.status, 409);
+    assert.equal(
+      res.body.message,
+      'You already have a Kavita account. Sign in to Kavita in NoBookEnds with your own password.'
+    );
+    assert.equal(kavita.members[1].password, 'their-own-password');
+    assert.equal(kavita.members[1].authKeys, undefined);
+
+    // The page shows it linked and ready, without a new password
+    const { agent } = await loginAs('demo@seerr.dev');
+    const list = await agent.get(`/user/${user.id}/settings/apps`);
+    assert.equal(list.body.apps[1].state, 'ready');
+    assert.equal(list.body.apps[1].ownAccount, true);
+    assert.equal(list.body.apps[1].canResetPassword, false);
+    await agent
+      .post(`/user/${user.id}/settings/apps/kavita/password`)
+      .expect(409);
+    assert.equal(kavita.members[1].password, 'their-own-password');
+  });
+
+  it('changes the password of a Kavita account Allseerr made to make a key', async () => {
+    const user = await demo();
+    await grant(user, 'kavita');
+    const { agent } = await loginAs('demo@seerr.dev');
+    const setup = await agent
+      .post(`/user/${user.id}/settings/apps/kavita/setup`)
+      .expect(200);
+    assert.equal(setup.body.app.canResetPassword, true);
     const key = await noBookEndsKey(user);
 
     const res = await request(app)
@@ -724,7 +765,114 @@ describe('NoBookEnds reading apps', () => {
     assert.equal(res.status, 200);
     assert.equal(res.body.apiKey, kavita.members[1].authKeys?.[0].key);
     assert.equal(res.body.password, kavita.members[1].password);
-    assert.notEqual(kavita.members[1].password, 'their-own-password');
+    assert.notEqual(res.body.password, setup.body.password.password);
+  });
+
+  it("signs in to the person's own Audiobookshelf account with a key only", async () => {
+    const user = await demo();
+    await grant(user, 'audiobookshelf');
+    abs.users.push({
+      id: 'own',
+      username: 'demo',
+      email: null,
+      type: 'user',
+      isActive: true,
+      password: 'their-own-password',
+      permissions: {},
+    });
+    const key = await noBookEndsKey(user);
+
+    const res = await request(app)
+      .post('/nobookends/reading-apps/audiobookshelf/connect')
+      .set('X-API-Key', key);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.token, abs.apiKeys[0].key);
+    assert.equal(res.body.password, undefined);
+    assert.equal(abs.users[1].password, 'their-own-password');
+
+    // Without API keys there is no way in that keeps their password
+    abs.server.version = '2.20.0';
+    await getRepository(UserAppAccount).update(
+      { user: { id: user.id }, app: 'audiobookshelf' },
+      { nobookendsToken: null, nobookendsTokenId: null }
+    );
+    const old = await request(app)
+      .post('/nobookends/reading-apps/audiobookshelf/connect')
+      .set('X-API-Key', key);
+    assert.equal(old.status, 409);
+    assert.equal(abs.users[1].password, 'their-own-password');
+  });
+
+  it("never changes the password of the person's own Komga account", async () => {
+    const settings = getSettings();
+    settings.userAccess = {
+      ...settings.userAccess,
+      komga: { url: komga.url, apiKey: 'komga-key' },
+    };
+    const user = await demo();
+    await grant(user, 'komga');
+    komga.users.push({
+      id: 'own',
+      email: 'demo@seerr.dev',
+      roles: ['PAGE_STREAMING'],
+      sharedAllLibraries: true,
+      sharedLibrariesIds: [],
+      password: 'their-own-password',
+    });
+    const key = await noBookEndsKey(user);
+
+    const res = await request(app)
+      .post('/nobookends/reading-apps/komga/connect')
+      .set('X-API-Key', key);
+
+    assert.equal(res.status, 409);
+    assert.match(res.body.message, /You already have a Komga account/);
+    assert.equal(komga.users[1].password, 'their-own-password');
+  });
+
+  it('keeps the NoBookEnds key sealed and seals keys saved before', async () => {
+    const user = await demo();
+    await grant(user, 'audiobookshelf');
+    const key = await noBookEndsKey(user);
+    const first = await request(app)
+      .post('/nobookends/reading-apps/audiobookshelf/connect')
+      .set('X-API-Key', key);
+
+    const stored = async () =>
+      (
+        await getRepository(UserAppAccount)
+          .createQueryBuilder('account')
+          .addSelect('account.nobookendsToken')
+          .where('account.app = :app', { app: 'audiobookshelf' })
+          .getOneOrFail()
+      ).nobookendsToken ?? '';
+
+    assert.match(await stored(), /^enc:v1:/);
+    assert.equal((await stored()).includes(first.body.token), false);
+
+    // A key saved in plain before sealing is used and sealed
+    await getRepository(UserAppAccount).update(
+      { user: { id: user.id }, app: 'audiobookshelf' },
+      { nobookendsToken: first.body.token }
+    );
+    const again = await request(app)
+      .post('/nobookends/reading-apps/audiobookshelf/connect')
+      .set('X-API-Key', key);
+    assert.equal(again.body.token, first.body.token);
+    assert.match(await stored(), /^enc:v1:/);
+    assert.equal(abs.apiKeys.length, 1);
+
+    // One sealed under another secret is replaced
+    await getRepository(UserAppAccount).update(
+      { user: { id: user.id }, app: 'audiobookshelf' },
+      { nobookendsToken: sealSecret(first.body.token, 'another-secret') }
+    );
+    const replaced = await request(app)
+      .post('/nobookends/reading-apps/audiobookshelf/connect')
+      .set('X-API-Key', key);
+    assert.equal(replaced.status, 200);
+    assert.notEqual(replaced.body.token, first.body.token);
   });
 
   it("never changes an app admin's password", async () => {
@@ -847,5 +995,51 @@ describe('access request notifications', () => {
       ).email.types,
       Notification.MEDIA_PENDING
     );
+  });
+});
+
+describe('sealed secrets', () => {
+  it('open with the secret they were sealed with', () => {
+    const sealed = sealSecret('a-key', 'secret-one');
+
+    assert.match(sealed, /^enc:v1:/);
+    assert.notEqual(sealSecret('a-key', 'secret-one'), sealed);
+    assert.deepEqual(openSecret(sealed, 'secret-one'), {
+      plain: 'a-key',
+      legacy: false,
+    });
+    assert.equal(openSecret(sealed, 'secret-two'), null);
+    assert.equal(openSecret(`${sealed.slice(0, -4)}AAAA`, 'secret-one'), null);
+    assert.deepEqual(openSecret('plain-key', 'secret-one'), {
+      plain: 'plain-key',
+      legacy: true,
+    });
+  });
+});
+
+describe('access granted notifications', () => {
+  it('are turned on once for agents that send approved requests', () => {
+    const migrated = enableAccessGrantedAlerts({
+      notifications: {
+        agents: {
+          email: { enabled: true, types: Notification.MEDIA_APPROVED },
+          slack: { enabled: true, types: Notification.MEDIA_PENDING },
+        },
+      },
+      migrations: [],
+    });
+    const agents = migrated.notifications.agents as unknown as Record<
+      string,
+      { types?: number }
+    >;
+
+    assert.equal(
+      agents.email.types,
+      Notification.MEDIA_APPROVED | Notification.ACCESS_GRANTED
+    );
+    assert.equal(agents.slack.types, Notification.MEDIA_PENDING);
+    assert.deepEqual(migrated.migrations, [
+      '0015_enable_access_granted_alerts',
+    ]);
   });
 });

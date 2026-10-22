@@ -23,6 +23,7 @@ import type {
   PersonAppAccess,
   PersonUpdateResult,
 } from '@server/interfaces/api/userAccessInterfaces';
+import notificationManager, { Notification } from '@server/lib/notifications';
 import { Permission } from '@server/lib/permissions';
 import type { UserAccessAppConnection } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -341,6 +342,7 @@ export const syncAppAccount = async (
         account.lastError = null;
         account.remoteUserId = null;
         account.remoteUsername = null;
+        account.madeByAllseerr = false;
         clearNoBookEndsToken(account);
         account.syncedAt = new Date();
         await repository.save(account);
@@ -380,6 +382,12 @@ export const syncAppAccount = async (
     if (account.remoteUserId && account.remoteUserId !== remote.id) {
       clearNoBookEndsToken(account);
     }
+    if (created) {
+      account.madeByAllseerr = true;
+    } else if (account.remoteUserId !== remote.id) {
+      // An account the person already had keeps the password they chose
+      account.madeByAllseerr = false;
+    }
     account.remoteUserId = remote.id;
     account.remoteUsername = remote.username;
     account.status = account.enabled
@@ -397,18 +405,40 @@ export const syncAppAccount = async (
 };
 
 /**
+ * Tells a person an app was turned on for them, with a link that sets it up
+ * in one tap
+ */
+export const sendAccessGranted = (user: User, app: UserAccessApp): void => {
+  const appName = USER_ACCESS_APP_NAMES[app];
+
+  notificationManager.sendNotification(Notification.ACCESS_GRANTED, {
+    event: 'Reading App Access Granted',
+    subject: `Your ${appName} access is ready`,
+    message: `Your ${appName} access is ready. Set it up in one tap.`,
+    notifyAdmin: false,
+    notifySystem: false,
+    notifyUser: user,
+    actionPath: `/profile/settings/apps?app=${app}`,
+  });
+};
+
+/**
  * Saves a person's age limit and app access, then brings their accounts in
- * line with it
+ * line with it. Turning an app on only allows it: the person sets the
+ * account up themselves, unless createAccounts asks for it now, as an invite
+ * does. Accounts the person already has are linked either way.
  */
 export const updatePerson = async (
   userId: number,
-  changes: PersonAccessChanges
+  changes: PersonAccessChanges,
+  options: { createAccounts?: boolean; notify?: boolean } = {}
 ): Promise<PersonUpdateResult> => {
   const user = await getRepository(User).findOneOrFail({
     where: { id: userId },
   });
   const profileRepository = getRepository(UserAccessProfile);
   const accountRepository = getRepository(UserAppAccount);
+  const granted: UserAccessApp[] = [];
 
   if (changes.ageLimit !== undefined || changes.includeUnrated !== undefined) {
     const profile =
@@ -447,6 +477,9 @@ export const updatePerson = async (
       });
 
     if (change.enabled !== undefined) {
+      if (change.enabled && !account.enabled) {
+        granted.push(app);
+      }
       account.enabled = change.enabled;
       // Turning access on or off answers an ask for it
       account.accessRequestedAt = null;
@@ -461,9 +494,52 @@ export const updatePerson = async (
     await accountRepository.save(account);
   }
 
-  const passwords = await syncPerson(user);
+  const passwords = await syncPerson(user, {
+    create: !!options.createAccounts,
+  });
+
+  if (options.notify) {
+    for (const app of granted) {
+      const account = await accountRepository.findOne({
+        where: { user: { id: userId }, app },
+      });
+
+      // Nothing to tell someone whose account was linked and is ready
+      if (account?.status !== UserAppAccountStatus.ACTIVE) {
+        sendAccessGranted(user, app);
+      }
+    }
+  }
 
   return { person: await getPerson(userId), passwords };
+};
+
+/**
+ * Makes the person's account in an app now, for an admin who wants to hand
+ * over the password themselves
+ */
+export const createAppAccountNow = async (
+  userId: number,
+  app: UserAccessApp
+): Promise<PersonUpdateResult> => {
+  const user = await getRepository(User).findOneOrFail({
+    where: { id: userId },
+  });
+  const account = await getRepository(UserAppAccount).findOne({
+    where: { user: { id: userId }, app },
+    relations: { user: true },
+  });
+
+  if (!account?.enabled) {
+    throw new Error(`Turn on ${USER_ACCESS_APP_NAMES[app]} for them first.`);
+  }
+
+  const created = await syncAppAccount(user, account, { create: true });
+
+  return {
+    person: await getPerson(userId),
+    passwords: created ? { [app]: created } : {},
+  };
 };
 
 /**
@@ -556,6 +632,7 @@ export const removeAppAccount = async (
     account.remoteUserId = null;
     account.remoteUsername = null;
     account.accessRequestedAt = null;
+    account.madeByAllseerr = false;
     clearNoBookEndsToken(account);
     account.status = UserAppAccountStatus.NONE;
     account.lastError = null;

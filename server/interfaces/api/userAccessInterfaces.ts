@@ -155,6 +155,12 @@ export interface ReadingAppStatus {
   message?: string;
   // Whether the app offers "Sign in with Allseerr"
   signInWithAllseerr: boolean;
+  // A ready account the person had before Allseerr linked it, which keeps
+  // the password they chose
+  ownAccount: boolean;
+  // Whether the person can get a new password here, only for accounts
+  // Allseerr made
+  canResetPassword: boolean;
 }
 
 export interface ReadingAppsResponse {

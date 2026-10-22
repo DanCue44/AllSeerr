@@ -61,6 +61,11 @@ export class UserAppAccount {
   @DbAwareColumn({ type: 'datetime', nullable: true })
   public syncedAt?: Date | null;
 
+  // Whether Allseerr made the account and so picked its first password. A
+  // person's own account it only linked keeps the password they chose.
+  @Column({ type: 'boolean', default: false })
+  public madeByAllseerr: boolean;
+
   // When the person asked an admin for access from their Reading apps
   // settings, until an admin answers by turning access on or off
   @DbAwareColumn({ type: 'datetime', nullable: true })

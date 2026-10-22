@@ -14,6 +14,7 @@ import type {
   PersonUpdateResult,
 } from '@server/lib/userAccess';
 import {
+  createAppAccountNow,
   getAppClient,
   getAppPublicUrl,
   getPerson,
@@ -180,7 +181,9 @@ userAccessRoutes.post<{ userId: string }, PersonUpdateResult>(
     }
 
     try {
-      return res.status(200).json(await updatePerson(userId, changes));
+      return res
+        .status(200)
+        .json(await updatePerson(userId, changes, { notify: true }));
     } catch (e) {
       logger.error('Failed to update user access', {
         label: 'User Access',
@@ -235,6 +238,31 @@ userAccessRoutes.post<
     return next({ status: 400, message: (e as Error).message });
   }
 });
+
+/**
+ * Makes the person's account in an app now and shows its password to the
+ * admin once, instead of the person setting it up themselves
+ */
+userAccessRoutes.post<{ userId: string; app: string }, PersonUpdateResult>(
+  '/people/:userId/apps/:app/create',
+  async (req, res, next) => {
+    const userId = parseUserId(req.params.userId);
+    const { app } = req.params;
+
+    if (!userId || !(await userExists(userId))) {
+      return next({ status: 404, message: 'User not found.' });
+    }
+    if (!isUserAccessApp(app)) {
+      return next({ status: 404, message: 'Unknown app.' });
+    }
+
+    try {
+      return res.status(200).json(await createAppAccountNow(userId, app));
+    } catch (e) {
+      return next({ status: 400, message: (e as Error).message });
+    }
+  }
+);
 
 /**
  * Deletes the person's account in the app, with its reading progress

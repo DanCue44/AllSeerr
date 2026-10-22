@@ -642,6 +642,8 @@ export type JobId =
 export interface AllSettings {
   clientId: string;
   sessionSecret?: string;
+  // Seals the keys apps make for people, such as NoBookEnds sign in keys
+  appKeySecret?: string;
   vapidPublic: string;
   vapidPrivate: string;
   main: MainSettings;
@@ -680,6 +682,7 @@ class Settings {
     this.data = {
       clientId: randomUUID(),
       sessionSecret: '',
+      appKeySecret: '',
       vapidPrivate: '',
       vapidPublic: '',
       main: {
@@ -1257,6 +1260,17 @@ class Settings {
     return this.data.sessionSecret!;
   }
 
+  /**
+   * Made once and kept with the other secrets. Settings loaded without one,
+   * as in tests, get one that is saved with the next save.
+   */
+  get appKeySecret(): string {
+    if (!this.data.appKeySecret) {
+      this.data.appKeySecret = randomBytes(32).toString('hex');
+    }
+    return this.data.appKeySecret;
+  }
+
   get vapidPublic(): string {
     return this.data.vapidPublic;
   }
@@ -1334,6 +1348,10 @@ class Settings {
     }
     if (!this.data.sessionSecret) {
       this.data.sessionSecret = randomBytes(32).toString('hex');
+      change = true;
+    }
+    if (!this.data.appKeySecret) {
+      this.data.appKeySecret = randomBytes(32).toString('hex');
       change = true;
     }
     if (!this.data.vapidPublic || !this.data.vapidPrivate) {

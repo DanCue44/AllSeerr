@@ -207,6 +207,7 @@ class WebPushAgent
       case Notification.SCAN_FAILURE:
       case Notification.DOWNLOAD_NEEDS_ATTENTION:
       case Notification.ACCESS_REQUESTED:
+      case Notification.ACCESS_GRANTED:
         message = payload.message;
         break;
       default:
@@ -220,7 +221,8 @@ class WebPushAgent
       ? `/issues/${payload.issue.id}`
       : payload.media ||
           type === Notification.SCAN_FAILURE ||
-          type === Notification.ACCESS_REQUESTED
+          type === Notification.ACCESS_REQUESTED ||
+          type === Notification.ACCESS_GRANTED
         ? getPayloadPath(payload) || undefined
         : undefined;
     const actionUrl = appActionUrl ?? payload.externalLink?.url;
@@ -230,7 +232,8 @@ class WebPushAgent
           payload.issue
             ? messages.viewIssue
             : type === Notification.SCAN_FAILURE ||
-                type === Notification.ACCESS_REQUESTED
+                type === Notification.ACCESS_REQUESTED ||
+                type === Notification.ACCESS_GRANTED
               ? messages.viewSettings
               : messages.viewMedia
         )

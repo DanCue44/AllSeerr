@@ -1159,6 +1159,12 @@ components:
         signInWithAllseerr:
           type: boolean
           description: Whether the app offers "Sign in with Allseerr"
+        ownAccount:
+          type: boolean
+          description: A ready account the person had before Allseerr linked it. It keeps the password they chose.
+        canResetPassword:
+          type: boolean
+          description: Whether the person can get a new password here, only for accounts Allseerr made
     NoBookEndsReadingApp:
       type: object
       required: [app, name, purpose, state]
@@ -5474,7 +5480,7 @@ paths:
           description: User not found
     post:
       summary: Update a person's app access
-      description: Saves the person's age limit and app access, then makes, links, updates or turns off their account in each app. Accounts made here get a new password, returned once and emailed when email is set up.
+      description: Saves the person's age limit and app access, then links, updates or turns off their account in each app. Turning an app on only allows it and tells the person (Reading App Access Granted notifications); they set up the account themselves from their Reading apps settings. Use `POST /user-access/people/{userId}/apps/{app}/create` to make the account now.
       tags:
         - user-access
       requestBody:
@@ -5556,6 +5562,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserAccessPerson'
+  /user-access/people/{userId}/apps/{app}/create:
+    post:
+      summary: Make a person's account in an app now
+      description: Turning an app on only allows it, and the person sets up their account themselves. This makes the account now instead and returns its password once, for the admin to pass on.
+      tags:
+        - user-access
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      responses:
+        '200':
+          description: The person and the new password, when an account was made
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccessUpdateResult'
+        '400':
+          description: The app is not turned on for the person
   /user-access/people/{userId}/apps/{app}/password:
     post:
       summary: Give a person a new password in an app
@@ -9628,7 +9661,7 @@ paths:
   /user/{userId}/settings/apps/{app}/password:
     post:
       summary: Give the user a new password in a reading app
-      description: Replaces the password of the user's ready account and returns it once. An app admin's account is left alone. At most 10 tries per app in 15 minutes.
+      description: Replaces the password of the user's ready account and returns it once. Only for accounts Allseerr made; the user's own linked account and an app admin's account are left alone (an admin can still change it in User Access). At most 10 tries per app in 15 minutes.
       tags:
         - users
         - user-access
@@ -12406,6 +12439,8 @@ paths:
         - Audiobookshelf 2.26 and later: `token`, an Audiobookshelf API key named "NoBookEnds (via Allseerr)" made for the user. Send it as `Authorization: Bearer {token}`.
         - Kavita: `apiKey`, a Kavita auth key named "NoBookEnds (via Allseerr)" on the user's account, for `POST /api/Plugin/authenticate?apiKey=...` or OPDS. Kavita only lets people make their own keys, so for an account Allseerr did not just make, Allseerr gives it a new password first and returns it.
         - Komga and older Audiobookshelf: `password`, a new password.
+
+        A password is never changed for an account the person had before Allseerr linked it: where a key cannot be made without changing it (Kavita, Komga, older Audiobookshelf), connect answers 409 and the person signs in with their own password. Keys are stored sealed with AES-256-GCM.
 
         Each device gets the same key while it works; one that stopped working is replaced. `password` is only present when Allseerr just made or changed the password; show it to the user once. An app admin's password is never changed. At most 10 tries per app in 15 minutes.
       tags:

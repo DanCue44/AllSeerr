@@ -104,6 +104,11 @@ const messages = defineMessages('components.NotificationTypeSelector', {
     'Send notifications when someone asks for access to Audiobookshelf, Kavita or Komga from their Reading apps settings.',
   useraccessrequestedDescription:
     'Get notified when someone asks for access to Audiobookshelf, Kavita or Komga from their Reading apps settings.',
+  accessgranted: 'Reading App Access Granted',
+  accessgrantedDescription:
+    'Send notifications to people when an admin gives them access to Audiobookshelf, Kavita or Komga.',
+  useraccessgrantedDescription:
+    'Get notified when an admin gives you access to Audiobookshelf, Kavita or Komga.',
   newsletter: 'Recently Added Newsletter',
   usernewsletterDescription:
     'Receive a periodic email listing the media which recently became available.',
@@ -158,6 +163,7 @@ export enum Notification {
   SCAN_FAILURE = 524288,
   DOWNLOAD_NEEDS_ATTENTION = 1048576,
   ACCESS_REQUESTED = 2097152,
+  ACCESS_GRANTED = 4194304,
 }
 
 export const ALL_NOTIFICATIONS = Object.values(Notification)
@@ -501,6 +507,17 @@ const NotificationTypeSelector = ({
         value: Notification.ACCESS_REQUESTED,
         hasNotifyUser: false,
         hidden: user && !hasPermission(Permission.MANAGE_USERS),
+      },
+      {
+        id: 'access-granted',
+        name: intl.formatMessage(messages.accessgranted),
+        description: intl.formatMessage(
+          user
+            ? messages.useraccessgrantedDescription
+            : messages.accessgrantedDescription
+        ),
+        value: Notification.ACCESS_GRANTED,
+        hasNotifyUser: true,
       },
       {
         id: 'newsletter',

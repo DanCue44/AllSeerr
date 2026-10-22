@@ -184,11 +184,15 @@ export const redeemInvite = async (
     }
   }
 
-  const { passwords } = await updatePerson(user.id, {
-    ageLimit: invite.ageLimit ?? null,
-    includeUnrated: invite.includeUnrated,
-    apps,
-  });
+  const { passwords } = await updatePerson(
+    user.id,
+    {
+      ageLimit: invite.ageLimit ?? null,
+      includeUnrated: invite.includeUnrated,
+      apps,
+    },
+    { createAccounts: true }
+  );
 
   return passwords;
 };
