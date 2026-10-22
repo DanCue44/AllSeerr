@@ -368,16 +368,6 @@ const SeedingCard = ({
                 </p>
               </div>
             )}
-            <div className="flex flex-col items-end text-right text-xs leading-snug text-as-ink-soft">
-              {goalText && (
-                <span className="font-semibold text-as-ink">{goalText}</span>
-              )}
-              <span className="tabular-nums">
-                {intl.formatMessage(messages.uploaded, {
-                  size: formatBytes(torrent.uploaded, 1),
-                })}
-              </span>
-            </div>
           </div>
         </div>
         {progress.fraction !== null && (
@@ -396,20 +386,34 @@ const SeedingCard = ({
           </div>
         )}
       </div>
-      <div className="flex min-w-0 flex-col gap-0.5 px-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <StateIcon
-            className={`h-4 w-4 flex-none ${stateText}`}
-            aria-hidden="true"
-          />
-          <div className="min-w-0 [&>*]:line-clamp-1 [&>*]:text-[15px]">
-            {title}
+      <div className="flex min-w-0 items-start gap-3 px-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <StateIcon
+              className={`h-4 w-4 flex-none ${stateText}`}
+              aria-hidden="true"
+            />
+            <div className="min-w-0 [&>*]:line-clamp-1 [&>*]:text-[15px]">
+              {title}
+            </div>
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-as-ink-muted">
+            <MediaIcon className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+            <span className="truncate" title={torrent.title}>
+              {torrent.authorName ?? torrent.title}
+            </span>
           </div>
         </div>
-        <div className="flex min-w-0 items-center gap-1.5 text-xs text-as-ink-muted">
-          <MediaIcon className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-          <span className="truncate" title={torrent.title}>
-            {torrent.authorName ?? torrent.title}
+        <div className="flex flex-none flex-col items-end gap-0.5 text-right text-xs leading-snug text-as-ink-soft">
+          {goalText && (
+            <span className="text-[13px] font-semibold text-as-ink">
+              {goalText}
+            </span>
+          )}
+          <span className="tabular-nums">
+            {intl.formatMessage(messages.uploaded, {
+              size: formatBytes(torrent.uploaded, 1),
+            })}
           </span>
         </div>
       </div>

@@ -690,16 +690,6 @@ const DownloadCard = ({
                 </div>
               </div>
             )}
-            <div className="flex flex-col items-end text-right text-xs leading-snug text-as-ink-soft">
-              {timeText && (
-                <span className="font-semibold text-as-ink">
-                  {intl.formatMessage(messages.eta, {
-                    time: formatDuration(item.timeLeftSeconds ?? 0),
-                  })}
-                </span>
-              )}
-              {doneText && <span className="tabular-nums">{doneText}</span>}
-            </div>
           </div>
           <div className="absolute right-2 top-2">{actionsMenu('')}</div>
         </div>
@@ -734,6 +724,18 @@ const DownloadCard = ({
             </span>
           </div>
         </div>
+        {(timeText || doneText) && (
+          <div className="flex flex-none flex-col items-end gap-0.5 text-right text-xs leading-snug text-as-ink-soft">
+            {timeText && (
+              <span className="text-[13px] font-semibold text-as-ink">
+                {intl.formatMessage(messages.eta, {
+                  time: formatDuration(item.timeLeftSeconds ?? 0),
+                })}
+              </span>
+            )}
+            {doneText && <span className="tabular-nums">{doneText}</span>}
+          </div>
+        )}
         {item.requester && (
           <div
             className="flex flex-none items-center gap-2 pt-0.5 text-xs text-as-ink-soft"
