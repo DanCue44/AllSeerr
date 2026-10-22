@@ -1,6 +1,7 @@
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import PageTitle from '@app/components/Common/PageTitle';
+import useComicsEnabled from '@app/hooks/useComicsEnabled';
 import useDiscover from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
@@ -11,6 +12,7 @@ import type {
   ArtistResult,
   AuthorResult,
   BookResult,
+  ComicResult,
   MovieResult,
   PersonResult,
   TvResult,
@@ -22,16 +24,20 @@ import { useIntl } from 'react-intl';
 const messages = defineMessages('components.Search', {
   search: 'Search',
   searchresults: 'Search Results',
+  comics: 'Comics',
 });
 
-type SearchType = 'all' | 'music' | 'book';
+type SearchType = 'all' | 'music' | 'book' | 'comic';
 
 const Search = () => {
   const intl = useIntl();
   const router = useRouter();
   const settings = useSettings();
+  const comicsEnabled = useComicsEnabled();
   const searchType: SearchType =
-    router.query.type === 'music' || router.query.type === 'book'
+    router.query.type === 'music' ||
+    router.query.type === 'book' ||
+    (router.query.type === 'comic' && comicsEnabled)
       ? router.query.type
       : 'all';
 
@@ -51,6 +57,7 @@ const Search = () => {
     | ArtistResult
     | BookResult
     | AuthorResult
+    | ComicResult
   >(
     `/api/v1/search`,
     {
@@ -73,6 +80,15 @@ const Search = () => {
           {
             type: 'book' as const,
             label: intl.formatMessage(globalMessages.books),
+          },
+        ]
+      : []),
+    // Comics are offered while Talearr's comics library is on
+    ...(comicsEnabled
+      ? [
+          {
+            type: 'comic' as const,
+            label: intl.formatMessage(messages.comics),
           },
         ]
       : []),

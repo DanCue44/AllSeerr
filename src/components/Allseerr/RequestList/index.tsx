@@ -3,6 +3,7 @@ import RequesterSelect from '@app/components/Allseerr/RequestList/RequesterSelec
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
+import useComicsEnabled from '@app/hooks/useComicsEnabled';
 import { useUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -61,7 +62,7 @@ type Sort = 'added' | 'modified';
 
 type SortDirection = 'asc' | 'desc';
 
-type MediaType = 'all' | 'movie' | 'tv' | 'music' | 'book';
+type MediaType = 'all' | 'movie' | 'tv' | 'music' | 'book' | 'comic';
 
 const pillControl =
   'inline-flex h-10 flex-none items-center justify-center rounded-full border border-as-line bg-transparent text-sm font-semibold text-as-ink transition hover:border-as-line-strong hover:bg-as-surface disabled:cursor-not-allowed disabled:opacity-40';
@@ -99,6 +100,7 @@ const PillSelect = ({
 const AmbientRequestList = () => {
   const router = useRouter();
   const intl = useIntl();
+  const comicsEnabled = useComicsEnabled();
   const { user } = useUser({ id: Number(router.query.userId) });
   const { user: currentUser, hasPermission } = useUser();
   const [currentFilter, setCurrentFilter] = useState<Filter>(Filter.PENDING);
@@ -158,7 +160,7 @@ const AmbientRequestList = () => {
       setCurrentFilter(filterSettings.currentFilter);
       setCurrentSort(filterSettings.currentSort);
       if (
-        ['all', 'movie', 'tv', 'music', 'book'].includes(
+        ['all', 'movie', 'tv', 'music', 'book', 'comic'].includes(
           filterSettings.currentMediaType
         )
       ) {
@@ -319,6 +321,11 @@ const AmbientRequestList = () => {
             <option value="book">
               {intl.formatMessage(globalMessages.books)}
             </option>
+            {comicsEnabled && (
+              <option value="comic">
+                {intl.formatMessage(globalMessages.comicsandmanga)}
+              </option>
+            )}
           </PillSelect>
           <PillSelect
             id="filter"

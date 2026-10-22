@@ -4,6 +4,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
 import RequestItem from '@app/components/RequestList/RequestItem';
+import useComicsEnabled from '@app/hooks/useComicsEnabled';
 import { useUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -56,11 +57,12 @@ type Sort = 'added' | 'modified';
 
 type SortDirection = 'asc' | 'desc';
 
-type MediaType = 'all' | 'movie' | 'tv' | 'music' | 'book';
+type MediaType = 'all' | 'movie' | 'tv' | 'music' | 'book' | 'comic';
 
 const RequestList = () => {
   const router = useRouter();
   const intl = useIntl();
+  const comicsEnabled = useComicsEnabled();
   const { user } = useUser({
     id: Number(router.query.userId),
   });
@@ -116,7 +118,7 @@ const RequestList = () => {
       setCurrentFilter(filterSettings.currentFilter);
       setCurrentSort(filterSettings.currentSort);
       if (
-        ['all', 'movie', 'tv', 'music', 'book'].includes(
+        ['all', 'movie', 'tv', 'music', 'book', 'comic'].includes(
           filterSettings.currentMediaType
         )
       ) {
@@ -269,6 +271,11 @@ const RequestList = () => {
               <option value="book">
                 {intl.formatMessage(globalMessages.books)}
               </option>
+              {comicsEnabled && (
+                <option value="comic">
+                  {intl.formatMessage(globalMessages.comicsandmanga)}
+                </option>
+              )}
             </select>
           </div>
           <div className="mb-2 flex flex-grow sm:mb-0 sm:mr-2 lg:flex-grow-0">

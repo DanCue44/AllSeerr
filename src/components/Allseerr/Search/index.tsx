@@ -1,6 +1,7 @@
 import { AmbientPageHeader, PillTabs } from '@app/components/Allseerr/ListPage';
 import ListView from '@app/components/Common/ListView';
 import PageTitle from '@app/components/Common/PageTitle';
+import useComicsEnabled from '@app/hooks/useComicsEnabled';
 import useDiscover from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
@@ -12,6 +13,7 @@ import type {
   AuthorResult,
   BookResult,
   CollectionResult,
+  ComicResult,
   MovieResult,
   PersonResult,
   TvResult,
@@ -28,11 +30,19 @@ const messages = defineMessages('components.Allseerr.Search', {
   movies: 'Movies',
   series: 'Series',
   people: 'People',
+  comics: 'Comics',
 });
 
-// Music and books have their own search; movies, series and people are the
-// matching part of the combined search
-type SearchType = 'all' | 'movie' | 'tv' | 'music' | 'book' | 'person';
+// Music, books and comics have their own search; movies, series and people
+// are the matching part of the combined search
+type SearchType =
+  | 'all'
+  | 'movie'
+  | 'tv'
+  | 'music'
+  | 'book'
+  | 'comic'
+  | 'person';
 
 const searchTypes: SearchType[] = [
   'all',
@@ -40,6 +50,7 @@ const searchTypes: SearchType[] = [
   'tv',
   'music',
   'book',
+  'comic',
   'person',
 ];
 
@@ -51,7 +62,8 @@ type SearchResult =
   | ArtistResult
   | BookResult
   | AuthorResult
-  | CollectionResult;
+  | CollectionResult
+  | ComicResult;
 
 /**
  * Ambient search results: the query as the heading, type tabs as pills and
@@ -63,15 +75,18 @@ const AmbientSearch = () => {
   const router = useRouter();
   const settings = useSettings();
   const booksEnabled = !!settings.currentSettings.booksEnabled;
+  const comicsEnabled = useComicsEnabled();
+  const isOffered = (type: SearchType) =>
+    type === 'book' ? booksEnabled : type === 'comic' ? comicsEnabled : true;
   const requested = router.query.type as SearchType | undefined;
   const searchType: SearchType =
-    requested &&
-    searchTypes.includes(requested) &&
-    (requested !== 'book' || booksEnabled)
+    requested && searchTypes.includes(requested) && isOffered(requested)
       ? requested
       : 'all';
   const apiType =
-    searchType === 'music' || searchType === 'book' ? searchType : undefined;
+    searchType === 'music' || searchType === 'book' || searchType === 'comic'
+      ? searchType
+      : undefined;
 
   const {
     isLoadingInitialData,
@@ -119,12 +134,14 @@ const AmbientSearch = () => {
     tv: intl.formatMessage(messages.series),
     music: intl.formatMessage(globalMessages.music),
     book: intl.formatMessage(globalMessages.books),
+    comic: intl.formatMessage(messages.comics),
     person: intl.formatMessage(messages.people),
   };
 
   const tabs = searchTypes
-    // Books are offered once LazyLibrarian can fulfil book requests
-    .filter((type) => type !== 'book' || booksEnabled)
+    // Books are offered once a book service can fulfil book requests, and
+    // comics while Talearr's comics library is on
+    .filter(isOffered)
     .map((type) => ({
       key: type,
       label: labels[type],

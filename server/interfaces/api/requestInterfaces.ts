@@ -2,6 +2,7 @@ import type { AudiobookVersion } from '@server/constants/audiobookVersion';
 import type { BookRecordingKind } from '@server/constants/bookRecording';
 import type {
   BookFormatChoice,
+  ComicKind,
   MediaRequestMonitorMode,
   MediaRequestStatus,
   MediaType,
@@ -25,7 +26,7 @@ export interface RequestResultsResponse extends PaginatedResponse {
 export type MediaRequestBody = {
   mediaType: MediaType;
   // TMDB id for movies and series, MusicBrainz release group id for music,
-  // OpenLibrary work id for books
+  // OpenLibrary work id for books and comic id for comics, such as al-30013
   mediaId: number | string;
   tvdbId?: number;
   seasons?: number[] | 'all';
@@ -47,6 +48,9 @@ export type MediaRequestBody = {
   // Audiobooks on Talearr only, with Audiobook Versions at `requester`:
   // the unabridged reading, the abridged one or both
   audiobookVersion?: AudiobookVersion | null;
+  // Comics only: files a series as manga or as a comic, for a series only
+  // Hardcover knows, whose kind the lookup could not tell
+  comicKind?: ComicKind;
   serverId?: number;
   profileId?: number;
   profileName?: string;

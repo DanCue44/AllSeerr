@@ -162,3 +162,37 @@ export const canRequestWork = (
   limit: AgeLimit | null | undefined,
   subjects: readonly string[] | undefined
 ): boolean => !isRestricted(limit) || !isAdultWork(subjects);
+
+// The youngest age each ComicInfo.xml AgeRating, as Talearr writes it, is
+// meant for
+const COMIC_RATING_AGES: Record<string, number> = {
+  'early childhood': 3,
+  everyone: 6,
+  'everyone 10+': 10,
+  teen: 13,
+  'mature 17+': 17,
+  'adults only 18+': 18,
+};
+
+/**
+ * Whether a person with this limit may request a comic or manga series.
+ * Adult series and series rated above the limit are refused. A series
+ * without a rating may be requested, and waits for approval like any request
+ * from a person with a limit.
+ */
+export const canRequestComic = (
+  limit: AgeLimit | null | undefined,
+  series: { ageRating?: string | null; isAdult?: boolean }
+): boolean => {
+  if (!isRestricted(limit)) {
+    return true;
+  }
+
+  if (series.isAdult) {
+    return false;
+  }
+
+  const age = COMIC_RATING_AGES[(series.ageRating ?? '').trim().toLowerCase()];
+
+  return age === undefined || age <= AGE_LIMIT_MAX_AGE[limit];
+};

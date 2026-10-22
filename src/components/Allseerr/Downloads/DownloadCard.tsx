@@ -5,6 +5,8 @@ import {
 import UserAvatar from '@app/components/Allseerr/RequestList/UserAvatar';
 import { statusTone } from '@app/components/Allseerr/Title/styles';
 import CachedImage from '@app/components/Common/CachedImage';
+import type { ItemFormat } from '@app/components/Common/FormatIcon';
+import FormatIcon from '@app/components/Common/FormatIcon';
 import Tooltip from '@app/components/Common/Tooltip';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -22,14 +24,9 @@ import {
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
-  BookOpenIcon,
   CheckCircleIcon,
   ClockIcon,
-  FilmIcon,
-  MusicalNoteIcon,
   PauseIcon,
-  SpeakerWaveIcon,
-  TvIcon,
   ExclamationTriangleIcon as WarningSolidIcon,
 } from '@heroicons/react/24/solid';
 import type {
@@ -296,15 +293,12 @@ const STATUS_ICON: Record<
   failed: WarningSolidIcon,
 };
 
-export const MEDIA_ICON: Record<
-  DownloadItem['mediaType'],
-  ComponentType<{ className?: string }>
-> = {
-  movie: FilmIcon,
-  tv: TvIcon,
-  music: MusicalNoteIcon,
-  audiobook: SpeakerWaveIcon,
-  ebook: BookOpenIcon,
+const DOWNLOAD_FORMAT: Record<DownloadItem['mediaType'], ItemFormat> = {
+  movie: 'movie',
+  tv: 'tv',
+  music: 'album',
+  audiobook: 'audiobook',
+  ebook: 'ebook',
 };
 
 export type DownloadsLayout = 'cards' | 'list';
@@ -588,8 +582,11 @@ const DownloadCard = ({
                 </span>
               )}
           </div>
-          <div className="truncate text-xs text-as-ink-muted">
-            {[detail, item.serverName].filter(Boolean).join(' · ')}
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-as-ink-muted">
+            <FormatIcon format={DOWNLOAD_FORMAT[item.mediaType]} size="small" />
+            <span className="truncate">
+              {[detail, item.serverName].filter(Boolean).join(' · ')}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-1 md:contents">
@@ -630,7 +627,6 @@ const DownloadCard = ({
   }
 
   const StatusIcon = STATUS_ICON[item.status] ?? ClockIcon;
-  const MediaIcon = MEDIA_ICON[item.mediaType] ?? FilmIcon;
   const doneText =
     item.size > 0
       ? intl.formatMessage(messages.sizeOfTotal, {
@@ -796,7 +792,7 @@ const DownloadCard = ({
             </div>
           </div>
           <div className="flex min-w-0 items-center gap-1.5 text-xs text-as-ink-muted">
-            <MediaIcon className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+            <FormatIcon format={DOWNLOAD_FORMAT[item.mediaType]} size="small" />
             <span className="truncate">
               {subline || (item.year ? String(item.year) : '')}
             </span>

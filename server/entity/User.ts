@@ -25,6 +25,7 @@ import {
   AfterLoad,
   Column,
   Entity,
+  In,
   Index,
   Not,
   OneToMany,
@@ -357,7 +358,7 @@ export class User {
     // Movies, albums and books are counted one request at a time. A book
     // requested in both formats is two requests, one per format.
     const countRequests = async (
-      type: MediaType,
+      type: MediaType | MediaType[],
       quotaLimit?: number,
       quotaDays?: number
     ): Promise<number> => {
@@ -376,7 +377,7 @@ export class User {
             id: this.id,
           },
           ...(quotaDays ? { createdAt: AfterDate(date) } : {}),
-          type,
+          type: Array.isArray(type) ? In(type) : type,
           status: Not(MediaRequestStatus.DECLINED),
           ignoreQuota: false,
         },
@@ -420,8 +421,9 @@ export class User {
       ? (this.bookQuotaLimit ?? defaultQuotas.book?.quotaLimit)
       : 0;
     const bookQuotaDays = this.bookQuotaDays ?? defaultQuotas.book?.quotaDays;
+    // Comic series count against the book quota
     const bookQuotaUsed = await countRequests(
-      MediaType.BOOK,
+      [MediaType.BOOK, MediaType.COMIC],
       bookQuotaLimit,
       bookQuotaDays
     );

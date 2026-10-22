@@ -95,6 +95,7 @@ const serviceNames: Record<MediaType, string> = {
   [MediaType.TV]: 'Sonarr',
   [MediaType.MUSIC]: 'Lidarr',
   [MediaType.BOOK]: 'LazyLibrarian',
+  [MediaType.COMIC]: 'Talearr',
 };
 
 const IssueDetails = () => {
@@ -542,47 +543,48 @@ const IssueDetails = () => {
                 )}
             </div>
           </div>
-          {hasPermission(Permission.MANAGE_REQUESTS) && (
-            <div className="mt-6">
-              <ArrActions
-                layout="card"
-                mediaId={issueData.media.id}
-                mediaType={issueData.media.mediaType}
-                issueId={issueData.id}
-                allow4k={
-                  (issueData.media.mediaType === MediaType.MOVIE
-                    ? settings.currentSettings.movie4kEnabled
-                    : issueData.media.mediaType === MediaType.TV &&
-                      settings.currentSettings.series4kEnabled) &&
-                  (issueData.media.status4k !== MediaStatus.UNKNOWN ||
-                    !!issueData.media.externalServiceId4k)
-                }
-                initialTarget={
-                  issueData.media.mediaType === MediaType.TV
-                    ? {
-                        seasonNumber:
-                          issueData.problemSeason > 0
-                            ? issueData.problemSeason
-                            : undefined,
-                        episodeNumber:
-                          issueData.problemSeason > 0 &&
-                          issueData.problemEpisode > 0
-                            ? issueData.problemEpisode
-                            : undefined,
-                      }
-                    : issueData.media.mediaType === MediaType.BOOK
+          {hasPermission(Permission.MANAGE_REQUESTS) &&
+            issueData.media.mediaType !== MediaType.COMIC && (
+              <div className="mt-6">
+                <ArrActions
+                  layout="card"
+                  mediaId={issueData.media.id}
+                  mediaType={issueData.media.mediaType}
+                  issueId={issueData.id}
+                  allow4k={
+                    (issueData.media.mediaType === MediaType.MOVIE
+                      ? settings.currentSettings.movie4kEnabled
+                      : issueData.media.mediaType === MediaType.TV &&
+                        settings.currentSettings.series4kEnabled) &&
+                    (issueData.media.status4k !== MediaStatus.UNKNOWN ||
+                      !!issueData.media.externalServiceId4k)
+                  }
+                  initialTarget={
+                    issueData.media.mediaType === MediaType.TV
                       ? {
-                          bookFormat:
-                            issueData.bookFormat === 'audiobook'
-                              ? 'audiobook'
-                              : 'ebook',
+                          seasonNumber:
+                            issueData.problemSeason > 0
+                              ? issueData.problemSeason
+                              : undefined,
+                          episodeNumber:
+                            issueData.problemSeason > 0 &&
+                            issueData.problemEpisode > 0
+                              ? issueData.problemEpisode
+                              : undefined,
                         }
-                      : undefined
-                }
-                onChange={() => revalidateIssue()}
-              />
-            </div>
-          )}
+                      : issueData.media.mediaType === MediaType.BOOK
+                        ? {
+                            bookFormat:
+                              issueData.bookFormat === 'audiobook'
+                                ? 'audiobook'
+                                : 'ebook',
+                          }
+                        : undefined
+                  }
+                  onChange={() => revalidateIssue()}
+                />
+              </div>
+            )}
           <div
             className={
               ambient

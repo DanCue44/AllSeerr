@@ -285,6 +285,7 @@ const AvailableMediaGrid = ({ mediaType }: { mediaType: 'music' | 'book' }) => {
               tvdbId={item.tvdbId}
               mbId={item.mbId}
               olId={item.olId}
+              comicId={item.comicId}
               type={item.mediaType}
               canExpand
             />

@@ -2,6 +2,9 @@ import Spinner from '@app/assets/spinner.svg';
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
+import FormatIcon, {
+  getRequestFormat,
+} from '@app/components/Common/FormatIcon';
 import Tooltip from '@app/components/Common/Tooltip';
 import DeclineRequestModal from '@app/components/DeclineRequestModal';
 import RequestModal from '@app/components/RequestModal';
@@ -30,11 +33,16 @@ import {
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid';
-import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import {} from '@server/lib/bookRequests';
 import type { BookDetails } from '@server/models/Book';
+import type { ComicDetails } from '@server/models/Comic';
 import type { MovieDetails } from '@server/models/Movie';
 import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
@@ -61,7 +69,12 @@ const messages = defineMessages('components.RequestCard', {
   unknowntitle: 'Unknown Title',
 });
 
-type RequestTitle = MovieDetails | TvDetails | MusicDetails | BookDetails;
+type RequestTitle =
+  | MovieDetails
+  | TvDetails
+  | MusicDetails
+  | BookDetails
+  | ComicDetails;
 
 const isMusic = (title: RequestTitle): title is MusicDetails => {
   return (title as MusicDetails).mediaType === 'album';
@@ -71,31 +84,41 @@ const isBook = (title: RequestTitle): title is BookDetails => {
   return (title as BookDetails).mediaType === 'book';
 };
 
+const isComic = (title: RequestTitle): title is ComicDetails =>
+  (title as ComicDetails).mediaType === 'comic';
+
 const isMovie = (movie: RequestTitle): movie is MovieDetails => {
   return (
     !isMusic(movie) &&
     !isBook(movie) &&
+    !isComic(movie) &&
     (movie as MovieDetails).title !== undefined
   );
 };
 
 const getTitleName = (title: RequestTitle): string =>
-  isMovie(title) || isMusic(title) || isBook(title) ? title.title : title.name;
+  isMovie(title) || isMusic(title) || isBook(title) || isComic(title)
+    ? title.title
+    : title.name;
 
 const getTitleYear = (title: RequestTitle): string | undefined =>
-  isBook(title)
-    ? title.firstPublishYear?.toString()
-    : (isMovie(title) || isMusic(title)
-        ? title.releaseDate
-        : title.firstAirDate
-      )?.slice(0, 4);
+  isComic(title)
+    ? title.year?.toString()
+    : isBook(title)
+      ? title.firstPublishYear?.toString()
+      : (isMovie(title) || isMusic(title)
+          ? title.releaseDate
+          : title.firstAirDate
+        )?.slice(0, 4);
 
 const getMediaPath = (request: NonFunctionProperties<MediaRequest>): string =>
   request.type === 'music'
     ? `/music/${request.media.mbId}`
     : request.type === 'book'
       ? `/book/${request.media.olId}`
-      : `/${request.type}/${request.media.tmdbId}`;
+      : request.type === 'comic'
+        ? `/comic/${request.media.comicId}`
+        : `/${request.type}/${request.media.tmdbId}`;
 
 const RequestCardPlaceholder = () => {
   return (
@@ -157,7 +180,9 @@ const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
                         ? globalMessages.album
                         : requestData?.type === 'book'
                           ? globalMessages.book
-                          : globalMessages.tvshow
+                          : requestData?.type === 'comic'
+                            ? globalMessages.comic
+                            : globalMessages.tvshow
                     : globalMessages.request
                 ),
               })}
@@ -279,7 +304,9 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
         ? `/api/v1/music/${request.media.mbId}`
         : request.type === 'book'
           ? `/api/v1/book/${request.media.olId}`
-          : `/api/v1/tv/${request.media.tmdbId}`;
+          : request.type === 'comic'
+            ? `/api/v1/comic/${request.media.comicId}`
+            : `/api/v1/tv/${request.media.tmdbId}`;
 
   const { data: title, error } = useSWR<RequestTitle>(inView ? `${url}` : null);
   const {
@@ -396,27 +423,29 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
         onDecline={(reason) => modifyRequest('decline', reason)}
         onCancel={() => setShowDeclineModal(false)}
       />
-      <RequestModal
-        show={showEditModal}
-        tmdbId={request.media.tmdbId}
-        mbId={request.media.mbId}
-        olId={request.media.olId}
-        type={request.type}
-        is4k={request.is4k}
-        editRequest={request}
-        onCancel={() => setShowEditModal(false)}
-        onComplete={() => {
-          revalidate();
-          setShowEditModal(false);
-        }}
-      />
+      {request.type !== MediaType.COMIC && (
+        <RequestModal
+          show={showEditModal}
+          tmdbId={request.media.tmdbId}
+          mbId={request.media.mbId}
+          olId={request.media.olId}
+          type={request.type}
+          is4k={request.is4k}
+          editRequest={request}
+          onCancel={() => setShowEditModal(false)}
+          onComplete={() => {
+            revalidate();
+            setShowEditModal(false);
+          }}
+        />
+      )}
       <div
         className="relative flex w-72 overflow-hidden rounded-xl bg-gray-800 bg-cover bg-center p-4 text-gray-400 shadow ring-1 ring-gray-700 sm:w-96"
         data-testid="request-card"
       >
         {(isMusic(title)
           ? title.artistBackdrop
-          : isBook(title)
+          : isBook(title) || isComic(title)
             ? undefined
             : title.backdropPath) && (
           <div className="absolute inset-0 z-0">
@@ -426,7 +455,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
               src={
                 isMusic(title)
                   ? (title.artistBackdrop ?? '')
-                  : isBook(title)
+                  : isBook(title) || isComic(title)
                     ? ''
                     : `https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${title.backdropPath}`
               }
@@ -446,8 +475,9 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           className="relative z-10 flex min-w-0 flex-1 flex-col pr-4"
           data-testid="request-card-title"
         >
-          <div className="hidden text-xs font-medium text-white sm:flex">
-            {getTitleYear(title)}
+          <div className="flex items-center gap-1.5 text-xs font-medium text-white">
+            <FormatIcon format={getRequestFormat(requestData)} size="small" />
+            <span className="hidden sm:inline">{getTitleYear(title)}</span>
           </div>
           <Link
             href={getMediaPath(requestData)}
@@ -510,6 +540,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           {!isMovie(title) &&
             !isMusic(title) &&
             !isBook(title) &&
+            !isComic(title) &&
             request.seasons.length > 0 && (
               <div className="my-0.5 hidden items-center text-sm sm:my-1 sm:flex">
                 <span className="mr-2 font-bold">
@@ -662,6 +693,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                 </>
               )}
             {requestData.status === MediaRequestStatus.PENDING &&
+              requestData.type !== 'comic' &&
               !hasPermission(Permission.MANAGE_REQUESTS) &&
               requestData.requestedBy.id === user?.id &&
               (requestData.type === 'tv' ||
@@ -737,7 +769,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                 height={500}
               />
             )
-          ) : isBook(title) ? (
+          ) : isBook(title) || isComic(title) ? (
             <CachedImage
               type="book"
               src={title.posterPath ?? '/images/allseerr_poster_not_found.png'}

@@ -29,6 +29,8 @@ describe('getSpaceForPath', () => {
     assert.equal(getSpaceForPath('/artist/[artistId]'), 'music');
     assert.equal(getSpaceForPath('/book/[bookId]'), 'books');
     assert.equal(getSpaceForPath('/author/[authorId]'), 'books');
+    assert.equal(getSpaceForPath('/comic/[comicId]'), 'books');
+    assert.equal(getSpaceForPath('/books/comics'), 'books');
   });
 
   it('keeps the older browse pages in their space', () => {

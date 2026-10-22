@@ -13,7 +13,7 @@ export interface WatchlistItem {
   // authors by OpenLibrary author
   mbId?: string | null;
   olId?: string | null;
-  mediaType: 'movie' | 'tv' | 'music' | 'book' | 'artist' | 'author';
+  mediaType: 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'artist' | 'author';
   title: string;
   // Photo of a followed artist or author
   image?: string | null;

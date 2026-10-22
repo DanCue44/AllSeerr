@@ -2,6 +2,7 @@ import { ambientGrid } from '@app/components/Allseerr/ListPage';
 import PersonCard from '@app/components/PersonCard';
 import TitleCard from '@app/components/TitleCard';
 import BookTitleCard from '@app/components/TitleCard/BookTitleCard';
+import ComicTitleCard from '@app/components/TitleCard/ComicTitleCard';
 import MusicTitleCard from '@app/components/TitleCard/MusicTitleCard';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
@@ -16,6 +17,7 @@ import type {
   AuthorResult,
   BookResult,
   CollectionResult,
+  ComicResult,
   MovieResult,
   PersonResult,
   TvResult,
@@ -32,6 +34,7 @@ type ListViewProps = {
     | ArtistResult
     | BookResult
     | AuthorResult
+    | ComicResult
   )[];
   plexItems?: WatchlistItem[];
   isEmpty?: boolean;
@@ -225,6 +228,20 @@ const ListView = ({
                     title={title.name}
                     subtitle={title.topWork}
                     image={title.profilePath}
+                    canExpand
+                  />
+                );
+                break;
+              case 'comic':
+                titleCard = (
+                  <ComicTitleCard
+                    id={title.id}
+                    kind={title.kind}
+                    title={title.title}
+                    subtitle={title.authors}
+                    year={title.year}
+                    image={title.posterPath}
+                    status={title.mediaInfo?.status}
                     canExpand
                   />
                 );

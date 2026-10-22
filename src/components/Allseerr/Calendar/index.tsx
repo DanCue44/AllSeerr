@@ -4,6 +4,8 @@ import {
   RoundIconButton,
 } from '@app/components/Allseerr/ListPage';
 import CachedImage from '@app/components/Common/CachedImage';
+import type { ItemFormat } from '@app/components/Common/FormatIcon';
+import FormatIcon from '@app/components/Common/FormatIcon';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import globalMessages from '@app/i18n/globalMessages';
@@ -46,11 +48,18 @@ const messages = defineMessages('components.Allseerr.Calendar', {
     'Show earlier this month ({count, plural, one {# day} other {# days}})',
 });
 
-// Small marker for each kind of release, in place of the classic colored edge
+// Small marker for each kind of release in the month grid, in place of the
+// classic colored edge
 const typeDot: Record<CalendarItemType, string> = {
   movie: 'bg-as-info',
   episode: 'bg-as-accent',
   album: 'bg-as-ok',
+};
+
+const calendarFormat: Record<CalendarItemType, ItemFormat> = {
+  movie: 'movie',
+  episode: 'tv',
+  album: 'album',
 };
 
 const getPosterSource = (posterUrl?: string): string =>
@@ -152,9 +161,7 @@ const Entry = ({
       <Poster item={item} className="h-[4.5rem] w-12 rounded-[10px]" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span
-            className={`h-2 w-2 flex-none rounded-full ${typeDot[item.type]}`}
-          />
+          <FormatIcon format={calendarFormat[item.type]} size="small" />
           <span className="truncate font-bold text-as-ink">{item.title}</span>
         </div>
         {details && (

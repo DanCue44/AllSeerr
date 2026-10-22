@@ -11,6 +11,8 @@ export enum MediaType {
   TV = 'tv',
   MUSIC = 'music',
   BOOK = 'book',
+  // Comic and manga series, sent to Talearr's comics library
+  COMIC = 'comic',
 }
 
 /**
@@ -59,3 +61,11 @@ export enum MediaRequestMonitorMode {
 export type BookFormatChoice = 'ebook' | 'audiobook' | 'both';
 
 export type BookFormat = Exclude<BookFormatChoice, 'both'>;
+
+/**
+ * The kinds of comic series Talearr keeps, as its comics API names them
+ */
+export type ComicKind = 'manga' | 'comic';
+
+export const isComicKind = (value: unknown): value is ComicKind =>
+  value === 'manga' || value === 'comic';

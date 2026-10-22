@@ -7,6 +7,7 @@ import type {
   TmdbTvDetails,
   TmdbTvResult,
 } from '@server/api/themoviedb/interfaces';
+import type { ComicKind } from '@server/constants/media';
 import { MediaType as MainMediaType } from '@server/constants/media';
 import type Media from '@server/entity/Media';
 
@@ -18,7 +19,8 @@ export type MediaType =
   | 'album'
   | 'artist'
   | 'book'
-  | 'author';
+  | 'author'
+  | 'comic';
 
 interface SearchResult {
   id: number;
@@ -134,6 +136,22 @@ export interface AuthorResult {
   profilePath: string | null;
 }
 
+// Comic and manga series from Talearr's comics lookup, keyed by their comic
+// id, such as al-30013
+export interface ComicResult {
+  id: string;
+  mediaType: 'comic';
+  kind: ComicKind;
+  title: string;
+  authors?: string;
+  year?: number;
+  volumes?: number;
+  ageRating?: string;
+  isAdult: boolean;
+  posterPath: string | null;
+  mediaInfo?: Media;
+}
+
 export type Results =
   | MovieResult
   | TvResult
@@ -142,7 +160,8 @@ export type Results =
   | AlbumResult
   | ArtistResult
   | BookResult
-  | AuthorResult;
+  | AuthorResult
+  | ComicResult;
 
 export const mapMovieResult = (
   movieResult: TmdbMovieResult,

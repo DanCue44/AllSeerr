@@ -10,6 +10,7 @@ import MetadataAlbum from '@server/entity/MetadataAlbum';
 import MetadataArtist from '@server/entity/MetadataArtist';
 import MetadataBookAudio from '@server/entity/MetadataBookAudio';
 import MetadataBookEbook from '@server/entity/MetadataBookEbook';
+import MetadataComic from '@server/entity/MetadataComic';
 import { NoBookEndsDevice } from '@server/entity/NoBookEndsDevice';
 import { OidcPayload } from '@server/entity/OidcPayload';
 import OverrideRule from '@server/entity/OverrideRule';
@@ -49,6 +50,7 @@ const entities = [
   MetadataArtist,
   MetadataBookAudio,
   MetadataBookEbook,
+  MetadataComic,
   NoBookEndsDevice,
   OidcPayload,
   OverrideRule,

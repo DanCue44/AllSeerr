@@ -16,6 +16,7 @@ import {
   linkChaptarrBook,
   matchChaptarrLibraryBook,
 } from '@server/lib/chaptarrRequests';
+import { syncComicAvailability } from '@server/lib/comics';
 import type {
   RunnableScanner,
   StatusBase,
@@ -199,6 +200,7 @@ class ChaptarrScanner
 
         if (server.isDefault) {
           await this.linkUnlinkedBooks(chaptarr, server);
+          await this.syncComics();
         }
       }
 
@@ -208,6 +210,24 @@ class ChaptarrScanner
       this.scanFailed(e);
     } finally {
       this.endRun(sessionId);
+    }
+  }
+
+  /**
+   * Follows the requested comic and manga series in Talearr's comics
+   * library, while book requests go to Talearr
+   */
+  private async syncComics(): Promise<void> {
+    try {
+      const changed = await syncComicAvailability();
+
+      if (changed) {
+        this.log(`Updated ${changed} comic series`, 'info');
+      }
+    } catch (e) {
+      this.log('Failed to check the requested comics', 'error', {
+        ...requestErrorLogFields(e),
+      });
     }
   }
 

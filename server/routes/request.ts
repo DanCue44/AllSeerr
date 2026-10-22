@@ -17,6 +17,7 @@ import {
   DuplicateMediaRequestError,
   InvalidAudiobookVersionError,
   InvalidBookLanguageError,
+  InvalidComicRequestError,
   InvalidRecordingRequestError,
   MediaRequest,
   NoSeasonsAvailableError,
@@ -218,6 +219,11 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
             type: MediaType.BOOK,
           });
           break;
+        case 'comic':
+          query = query.andWhere('request.type = :type', {
+            type: MediaType.COMIC,
+          });
+          break;
       }
 
       const [requests, requestCount] = await query
@@ -303,8 +309,10 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
                 ?.profiles?.find((profile) => profile.id === r.profileId)?.name,
             };
           }
-          case MediaType.BOOK: {
-            // LazyLibrarian has no quality profiles
+          case MediaType.BOOK:
+          case MediaType.COMIC: {
+            // LazyLibrarian has no quality profiles, and comics are filed
+            // by Talearr's own comics settings
             return { ...r, profileName: undefined };
           }
         }
@@ -345,8 +353,10 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
                 ),
               };
             }
-            case MediaType.BOOK: {
-              // Books are not removed from LazyLibrarian
+            case MediaType.BOOK:
+            case MediaType.COMIC: {
+              // Books are not removed from LazyLibrarian, nor comics from
+              // Talearr
               return { ...r, canRemove: false };
             }
           }
@@ -420,6 +430,7 @@ requestRoutes.post<never, MediaRequest, MediaRequestBody>(
           return next({ status: 409, message: error.message });
         case InvalidAudiobookVersionError:
         case InvalidBookLanguageError:
+        case InvalidComicRequestError:
         case InvalidRecordingRequestError:
           return next({ status: 400, message: error.message });
         case NoSeasonsAvailableError:
@@ -766,6 +777,22 @@ requestRoutes.put<{ requestId: string }>(
               }
 
               request.language = req.body.language;
+            }
+
+            request.requestedBy = requestUser as User;
+
+            await requestRepository.save(request);
+          } else if (req.body.mediaType === MediaType.COMIC) {
+            // Comics count against the book quota and take no options
+            if (ownerChanging && !request.ignoreQuota) {
+              const quotas = await requestUser.getQuota();
+
+              if (quotas.book.restricted) {
+                return next({
+                  status: 403,
+                  message: 'Book Quota exceeded.',
+                });
+              }
             }
 
             request.requestedBy = requestUser as User;

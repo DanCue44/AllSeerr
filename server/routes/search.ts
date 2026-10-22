@@ -6,12 +6,21 @@ import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import MetadataAlbum from '@server/entity/MetadataAlbum';
 import { searchBooks } from '@server/lib/bookSearch';
+import {
+  getComicsStatus,
+  mapComicResult,
+  searchComics,
+} from '@server/lib/comics';
 import { rankMusicResult } from '@server/lib/musicSearchRank';
 import { findSearchProvider } from '@server/lib/search';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { mapAlbumResult, mapArtistResult } from '@server/models/Music';
-import type { AlbumResult, ArtistResult } from '@server/models/Search';
+import type {
+  AlbumResult,
+  ArtistResult,
+  ComicResult,
+} from '@server/models/Search';
 import { mapSearchResults } from '@server/models/Search';
 import { Router } from 'express';
 import { In } from 'typeorm';
@@ -83,6 +92,49 @@ export const searchMusic = async ({
   };
 };
 
+// How long the combined search waits for Talearr's comics lookup
+const ALL_SEARCH_COMICS_BUDGET_MS = 8_000;
+// Comics shown in the combined search, best matches first
+const ALL_SEARCH_COMICS_LIMIT = 10;
+
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out')), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+
+/**
+ * Comic and manga series for a search, empty while comics are off
+ */
+export const searchComicResults = async (
+  query: string,
+  { limit }: { limit?: number } = {}
+): Promise<ComicResult[]> => {
+  if (!(await getComicsStatus()).enabled) {
+    return [];
+  }
+
+  const { results } = await searchComics({ query });
+  const shown = limit ? results.slice(0, limit) : results;
+  const media = await Media.getRelatedComics(
+    shown.map((result) => result.comicId)
+  );
+  const mediaById = new Map(media.map((m) => [m.comicId, m]));
+
+  return shown.map((result) =>
+    mapComicResult(result, mediaById.get(result.comicId))
+  );
+};
+
 searchRoutes.get('/', async (req, res, next) => {
   const queryString = req.query.query as string;
   const page = Number(req.query.page) || 1;
@@ -115,6 +167,19 @@ searchRoutes.get('/', async (req, res, next) => {
       });
     }
 
+    if (searchType === 'comic') {
+      const comicResults = await searchComicResults(queryString);
+
+      // Talearr's lookup answers the best matches at once, so comics are a
+      // single page
+      return res.status(200).json({
+        page: 1,
+        totalPages: 1,
+        totalResults: comicResults.length,
+        results: comicResults,
+      });
+    }
+
     if (searchProvider) {
       const [id] = queryString
         .toLowerCase()
@@ -142,6 +207,19 @@ searchRoutes.get('/', async (req, res, next) => {
       }))
     );
 
+    // Comics join the first page when Talearr's comics library is on. The
+    // lookup asks AniList and Hardcover, so a slow one is left out rather
+    // than holding the page up.
+    const comicSearch =
+      !searchProvider && page === 1
+        ? withTimeout(
+            searchComicResults(queryString, {
+              limit: ALL_SEARCH_COMICS_LIMIT,
+            }),
+            ALL_SEARCH_COMICS_BUDGET_MS
+          ).catch(() => undefined)
+        : Promise.resolve(undefined);
+
     // Music joins the first page when Lidarr can fulfil music requests
     const musicResults =
       !searchProvider && page === 1 && getSettings().lidarr.length > 0
@@ -159,17 +237,21 @@ searchRoutes.get('/', async (req, res, next) => {
           }).catch(() => undefined)
         : undefined;
 
+    const comicResults = await comicSearch;
+
     return res.status(200).json({
       page: results.page,
       totalPages: results.total_pages,
       totalResults:
         results.total_results +
         (musicResults?.totalResults ?? 0) +
-        (bookResults?.results.length ?? 0),
+        (bookResults?.results.length ?? 0) +
+        (comicResults?.length ?? 0),
       results: [
         ...mapSearchResults(results.results, media),
         ...(musicResults?.results ?? []),
         ...(bookResults?.results ?? []),
+        ...(comicResults ?? []),
       ],
     });
   } catch (e) {

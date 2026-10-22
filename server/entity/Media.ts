@@ -6,6 +6,7 @@ import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import { usesChaptarr } from '@server/constants/bookService';
+import type { ComicKind } from '@server/constants/media';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -144,6 +145,29 @@ class Media {
     }
   }
 
+  /**
+   * Comic counterpart of getRelatedMedia, matching series on their comic ids
+   */
+  public static async getRelatedComics(comicIds: string[]): Promise<Media[]> {
+    const mediaRepository = getRepository(Media);
+
+    try {
+      if (comicIds.length === 0) {
+        return [];
+      }
+
+      return await mediaRepository.find({
+        where: {
+          comicId: In([...new Set(comicIds)]),
+          mediaType: MediaType.COMIC,
+        },
+      });
+    } catch (e) {
+      logger.error(e.message);
+      return [];
+    }
+  }
+
   public static async getMedia(
     id: number | string,
     mediaType: MediaType
@@ -157,7 +181,9 @@ class Media {
             ? { mbId: String(id), mediaType }
             : mediaType === MediaType.BOOK
               ? { olId: String(id), mediaType }
-              : { tmdbId: Number(id), mediaType },
+              : mediaType === MediaType.COMIC
+                ? { comicId: String(id), mediaType }
+                : { tmdbId: Number(id), mediaType },
         relations: { requests: true, issues: true },
       });
 
@@ -174,7 +200,8 @@ class Media {
   @Column({ type: 'varchar' })
   public mediaType: MediaType;
 
-  // Music and books have no TMDB id, they are keyed on mbId and olId
+  // Music, books and comics have no TMDB id, they are keyed on mbId, olId
+  // and comicId
   @Column({ type: 'int', nullable: true })
   @Index()
   public tmdbId: number;
@@ -195,6 +222,16 @@ class Media {
   @Column({ type: 'varchar', nullable: true })
   @Index()
   public olId?: string | null;
+
+  // Comic and manga series are keyed on their AniList or Hardcover id, such
+  // as al-30013 or hc-4521, see comicIds in lib/comics
+  @Column({ type: 'varchar', nullable: true })
+  @Index()
+  public comicId?: string | null;
+
+  // manga or comic, as Talearr files the series
+  @Column({ type: 'varchar', nullable: true })
+  public comicKind?: ComicKind | null;
 
   @Column({ type: 'int', default: MediaStatus.UNKNOWN })
   @Index()
