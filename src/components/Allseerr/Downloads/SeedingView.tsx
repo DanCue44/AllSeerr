@@ -201,7 +201,7 @@ const SeedingView = ({ layout = 'cards' }: { layout?: DownloadsLayout }) => {
           ))}
         </ListFrame>
       ) : (
-        <div className="grid grid-cols-1 gap-x-4 gap-y-6 lg:grid-cols-2 2xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-6 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {torrents.map((torrent) => (
             <SeedingCard key={torrent.downloadId} torrent={torrent} />
           ))}

@@ -301,7 +301,7 @@ const SeedingCard = ({
       >
         <CardBackdrop src={cover} />
         <div className="relative flex gap-4 p-3 sm:p-4">
-          <div className="relative h-[150px] w-[100px] flex-none overflow-hidden rounded-[10px] bg-as-tile shadow-lg shadow-black/40 sm:h-[168px] sm:w-[112px]">
+          <div className="relative min-h-[150px] w-[104px] flex-none self-stretch overflow-hidden rounded-[10px] bg-as-tile shadow-lg shadow-black/40 sm:w-[128px]">
             <PosterImage src={cover} />
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
