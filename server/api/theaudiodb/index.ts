@@ -30,6 +30,7 @@ class TheAudioDb extends ExternalAPI {
       {},
       {
         nodeCache: cacheManager.getCache('tadb').data,
+        publicCatalog: true,
         // Kept under the per minute limit of each tier
         rateLimit: {
           maxRequests: IS_FREE_KEY ? 25 : 90,

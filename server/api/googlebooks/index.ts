@@ -134,6 +134,7 @@ class GoogleBooks extends ExternalAPI {
         // The key goes in a header so it stays out of URLs and cache keys
         headers: { 'X-Goog-Api-Key': apiKey },
         nodeCache: cacheManager.getCache('googlebooks').data,
+        publicCatalog: true,
         timeout: 10000,
         rateLimit: { maxRequests: MAX_RPS, maxRPS: MAX_RPS },
       }

@@ -45,6 +45,7 @@ class MusicBrainz extends ExternalAPI {
       {
         headers,
         nodeCache: cacheManager.getCache('musicbrainz').data,
+        publicCatalog: true,
         rateLimit: {
           maxRequests: MAX_RPS,
           maxRPS: MAX_RPS,

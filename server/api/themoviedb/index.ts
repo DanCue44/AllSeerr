@@ -189,6 +189,7 @@ class TheMovieDb extends ExternalAPI implements TvShowProvider {
       },
       {
         nodeCache: cacheManager.getCache('tmdb').data,
+        publicCatalog: true,
         rateLimit: {
           maxRequests: 20,
           maxRPS: 50,

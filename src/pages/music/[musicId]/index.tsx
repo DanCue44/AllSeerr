@@ -20,6 +20,11 @@ const MusicPage: NextPage<MusicPageProps> = ({ album }) => {
   );
 };
 
+// The page waits this long at most for the album before it is sent; after
+// that it shows its loading state and fetches the album itself, so a slow
+// catalog never leaves a blank screen
+const SERVER_PROPS_TIMEOUT = 1500;
+
 export const getServerSideProps: GetServerSideProps<MusicPageProps> = async (
   ctx
 ) => {
@@ -30,6 +35,7 @@ export const getServerSideProps: GetServerSideProps<MusicPageProps> = async (
         headers: ctx.req?.headers?.cookie
           ? { cookie: ctx.req.headers.cookie }
           : undefined,
+        timeout: SERVER_PROPS_TIMEOUT,
       }
     );
 

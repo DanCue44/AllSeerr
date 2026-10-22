@@ -31,6 +31,7 @@ class CoverArtArchive extends ExternalAPI {
       {
         headers: { 'User-Agent': getContactUserAgent() },
         nodeCache: cacheManager.getCache('coverartarchive').data,
+        publicCatalog: true,
         rateLimit: {
           maxRequests: 20,
           maxRPS: 50,

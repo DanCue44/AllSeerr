@@ -106,6 +106,7 @@ class Audible extends ExternalAPI {
       {},
       {
         nodeCache: cacheManager.getCache('audible').data,
+        publicCatalog: true,
         timeout: 10000,
         rateLimit: { maxRequests: MAX_RPS, maxRPS: MAX_RPS },
       }

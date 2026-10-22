@@ -20,6 +20,11 @@ const BookPage: NextPage<BookPageProps> = ({ book }) => {
   );
 };
 
+// The page waits this long at most for the book before it is sent; after
+// that it shows its loading state and fetches the book itself, so a slow
+// catalog never leaves a blank screen
+const SERVER_PROPS_TIMEOUT = 1500;
+
 export const getServerSideProps: GetServerSideProps<BookPageProps> = async (
   ctx
 ) => {
@@ -30,6 +35,7 @@ export const getServerSideProps: GetServerSideProps<BookPageProps> = async (
         headers: ctx.req?.headers?.cookie
           ? { cookie: ctx.req.headers.cookie }
           : undefined,
+        timeout: SERVER_PROPS_TIMEOUT,
       }
     );
 
