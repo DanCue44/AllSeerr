@@ -8,6 +8,7 @@ import type {
   AppConnectionInfo,
   AppLibrary,
   AppUserKey,
+  CurrentAppAccess,
   NewAppAccount,
   RemoteAccount,
   UserAccessAppClient,
@@ -26,6 +27,12 @@ interface AbsUser {
   email?: string | null;
   type?: string;
   isActive?: boolean;
+  permissions?: {
+    download?: boolean;
+    accessAllLibraries?: boolean;
+    librariesAccessible?: string[];
+  };
+  librariesAccessible?: string[];
 }
 
 /**
@@ -33,7 +40,7 @@ interface AbsUser {
  * changes to the library
  */
 export const absPermissions = (access: AppAccess) => ({
-  download: true,
+  download: access.canDownload ?? true,
   update: false,
   delete: false,
   upload: false,
@@ -125,6 +132,32 @@ export class AudiobookshelfAdminAPI implements UserAccessAppClient {
       email: user.email,
       isAdmin: user.type === 'admin' || user.type === 'root',
     }));
+  }
+
+  public async getAccountAccess(
+    account: RemoteAccount
+  ): Promise<CurrentAppAccess> {
+    const user = (await this.getUsers()).find((u) => u.id === account.id);
+
+    if (!user) {
+      throw new UserAccessAppError(
+        'Audiobookshelf no longer has this account.'
+      );
+    }
+
+    const all =
+      user.type === 'admin' ||
+      user.type === 'root' ||
+      user.permissions?.accessAllLibraries !== false;
+
+    return {
+      libraryIds: all
+        ? null
+        : (user.librariesAccessible ??
+          user.permissions?.librariesAccessible ??
+          []),
+      canDownload: user.permissions?.download !== false,
+    };
   }
 
   /**

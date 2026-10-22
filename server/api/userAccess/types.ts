@@ -29,8 +29,19 @@ export interface AppAccountSummary extends RemoteAccount {
 export interface AppAccess {
   enabled: boolean;
   libraryIds: string[] | null;
+  // Audiobookshelf only, null or missing for the default (yes)
+  canDownload?: boolean | null;
   ageLimit: AgeLimit | null;
   includeUnrated: boolean;
+}
+
+/**
+ * What an account may see in the app now: every library (null) or these,
+ * and in Audiobookshelf whether it may download
+ */
+export interface CurrentAppAccess {
+  libraryIds: string[] | null;
+  canDownload?: boolean;
 }
 
 export interface NewAppAccount extends AppAccess {
@@ -70,6 +81,8 @@ export interface UserAccessAppClient {
   updateAccount(account: RemoteAccount, access: AppAccess): Promise<void>;
   setPassword(account: RemoteAccount, password: string): Promise<void>;
   deleteAccount(account: RemoteAccount): Promise<void>;
+  // What the account may see now, so linking it changes nothing
+  getAccountAccess(account: RemoteAccount): Promise<CurrentAppAccess>;
   // Sets the email of an account, so the app can match the person by it
   // when they sign in with Allseerr. False when the app kept the old one.
   setEmail?(account: RemoteAccount, email: string): Promise<boolean>;

@@ -5,6 +5,7 @@ import type {
   AppAccountSummary,
   AppConnectionInfo,
   AppLibrary,
+  CurrentAppAccess,
   NewAppAccount,
   RemoteAccount,
   UserAccessAppClient,
@@ -21,6 +22,8 @@ interface KomgaUser {
   id: string;
   email: string;
   roles?: string[];
+  sharedAllLibraries?: boolean;
+  sharedLibrariesIds?: string[];
 }
 
 /**
@@ -129,6 +132,23 @@ export class KomgaAdminAPI implements UserAccessAppClient {
       email: user.email,
       isAdmin: !!user.roles?.includes('ADMIN'),
     }));
+  }
+
+  public async getAccountAccess(
+    account: RemoteAccount
+  ): Promise<CurrentAppAccess> {
+    const user = (await this.getUsers()).find((u) => u.id === account.id);
+
+    if (!user) {
+      throw new UserAccessAppError('Komga no longer has this account.');
+    }
+
+    return {
+      libraryIds:
+        user.roles?.includes('ADMIN') || user.sharedAllLibraries !== false
+          ? null
+          : (user.sharedLibrariesIds ?? []),
+    };
   }
 
   public async createAccount(account: NewAppAccount): Promise<RemoteAccount> {

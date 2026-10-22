@@ -341,6 +341,64 @@ describe('listing accounts for linking', () => {
     );
   });
 
+  it('reads what an account can see now', async () => {
+    const absClient = new AudiobookshelfAdminAPI({
+      url: abs.url,
+      apiKey: 'abs-key',
+    });
+    abs.users.push({
+      id: 'abs-limited',
+      username: 'limited',
+      email: null,
+      type: 'user',
+      isActive: true,
+      permissions: {
+        download: false,
+        accessAllLibraries: false,
+        librariesAccessible: ['lib-ebooks'],
+      },
+    });
+    assert.deepEqual(
+      await absClient.getAccountAccess({ id: 'abs-limited', username: '' }),
+      { libraryIds: ['lib-ebooks'], canDownload: false }
+    );
+    assert.deepEqual(
+      await absClient.getAccountAccess({ id: 'root', username: '' }),
+      { libraryIds: null, canDownload: true }
+    );
+
+    const kavitaClient = new KavitaAdminAPI({
+      url: kavita.url,
+      apiKey: 'kavita-key',
+    });
+    // Every library is all of them
+    assert.deepEqual(
+      await kavitaClient.getAccountAccess({ id: '1', username: 'admin' }),
+      { libraryIds: null }
+    );
+    assert.deepEqual(
+      await kavitaClient.getAccountAccess({ id: '5', username: 'reader' }),
+      { libraryIds: ['2'] }
+    );
+
+    const komgaClient = new KomgaAdminAPI({
+      url: komga.url,
+      apiKey: 'komga-key',
+    });
+    komga.users.push({
+      id: 'komga-kid',
+      email: 'kid@example.com',
+      roles: ['PAGE_STREAMING'],
+      sharedAllLibraries: false,
+      sharedLibrariesIds: ['km'],
+    });
+    assert.deepEqual(
+      await komgaClient.getAccountAccess({ id: 'komga-kid', username: '' }),
+      { libraryIds: ['km'] }
+    );
+    komga.users.pop();
+  });
+
   it('lists Komga accounts by their email', async () => {
     const client = new KomgaAdminAPI({ url: komga.url, apiKey: 'komga-key' });
 

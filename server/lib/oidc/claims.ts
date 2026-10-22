@@ -47,7 +47,11 @@ export interface OidcClaimsInput {
   picture?: string;
   isAdmin: boolean;
   // Access to the app the client signs in to, null when there is none
-  access: { enabled: boolean; libraryIds: string[] | null } | null;
+  access: {
+    enabled: boolean;
+    libraryIds: string[] | null;
+    canDownload?: boolean | null;
+  } | null;
   // Library names by id, for apps that grant libraries by name
   libraryNames?: Record<string, string>;
   ageLimit: AgeLimit | null;
@@ -93,7 +97,7 @@ export const kavitaRoleClaims = (input: OidcClaimsInput): string[] => {
  * Audiobookshelf's advanced permissions claim, for listeners
  */
 export const absPermissionsClaim = (input: OidcClaimsInput) => ({
-  canDownload: true,
+  canDownload: input.access?.canDownload ?? true,
   canUpload: false,
   canDelete: false,
   canUpdate: false,

@@ -66,6 +66,11 @@ export class UserAppAccount {
   @Column({ type: 'boolean', default: false })
   public madeByAllseerr: boolean;
 
+  // Audiobookshelf only: whether the person may download, null for the
+  // default (yes). Kept from the account when an existing one is linked.
+  @Column({ type: 'boolean', nullable: true })
+  public canDownload?: boolean | null;
+
   // When the person asked an admin for access from their Reading apps
   // settings, until an admin answers by turning access on or off
   @DbAwareColumn({ type: 'datetime', nullable: true })

@@ -257,6 +257,7 @@ const accessFor = (
 ): AppAccess => ({
   enabled: account.enabled,
   libraryIds: account.libraryIds ?? null,
+  canDownload: account.canDownload ?? null,
   ageLimit: limit.ageLimit,
   includeUnrated: limit.includeUnrated,
 });
@@ -882,8 +883,15 @@ export const linkAppAccount = async (
   if (account.remoteUserId && account.remoteUserId !== remote.id) {
     clearNoBookEndsToken(account);
   }
+  // What the account sees now becomes the person's access, so linking
+  // changes nothing they can see
+  const current = await client.getAccountAccess(remote);
+
   account.remoteUserId = remote.id;
   account.remoteUsername = remote.username;
+  account.libraryIds = current.libraryIds;
+  account.canDownload =
+    current.canDownload === undefined ? null : current.canDownload;
   // The account and its password are the person's own
   account.madeByAllseerr = false;
   account.enabled = true;

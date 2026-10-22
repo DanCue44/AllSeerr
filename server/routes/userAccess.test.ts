@@ -514,6 +514,51 @@ describe('linking existing app accounts', () => {
     );
   });
 
+  it('keeps what a linked account can see and whether it may download', async () => {
+    const family = abs.users.find((u) => u.id === 'abs-family');
+    if (family) {
+      family.permissions = {
+        download: false,
+        accessAllLibraries: false,
+        librariesAccessible: ['lib-audio'],
+      };
+    }
+    const agent = await loginAs('admin@seerr.dev');
+    const userId = await userIdOf('demo@seerr.dev');
+
+    const res = await agent
+      .post(`/user-access/people/${userId}/apps/audiobookshelf/link`)
+      .send({ remoteUserId: 'abs-family' })
+      .expect(200);
+    await agent
+      .post(`/user-access/people/${userId}/apps/kavita/link`)
+      .send({ remoteUserId: '7' })
+      .expect(200);
+
+    assert.deepEqual(res.body.person.apps.audiobookshelf.libraryIds, [
+      'lib-audio',
+    ]);
+    const saved = await getRepository(UserAppAccount).findOneOrFail({
+      where: { app: 'audiobookshelf' },
+    });
+    assert.equal(saved.canDownload, false);
+    // The sync that followed the link changed nothing they can do
+    const permissions = abs.users.find((u) => u.id === 'abs-family')
+      ?.permissions as Record<string, unknown>;
+    assert.equal(permissions.download, false);
+    assert.equal(permissions.accessAllLibraries, false);
+    assert.deepEqual(permissions.librariesAccessible, ['lib-audio']);
+
+    const kavitaAccount = await getRepository(UserAppAccount).findOneOrFail({
+      where: { app: 'kavita' },
+    });
+    assert.deepEqual(kavitaAccount.libraryIds, ['2']);
+    assert.deepEqual(
+      kavita.members.find((m) => m.id === 7)?.libraries.map((l) => l.id),
+      [2]
+    );
+  });
+
   it('refuses an account linked to someone else', async () => {
     const agent = await loginAs('admin@seerr.dev');
 

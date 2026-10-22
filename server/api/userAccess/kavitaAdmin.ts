@@ -7,6 +7,7 @@ import type {
   AppConnectionInfo,
   AppLibrary,
   AppUserKey,
+  CurrentAppAccess,
   NewAppAccount,
   RemoteAccount,
   UserAccessAppClient,
@@ -220,6 +221,32 @@ export class KavitaAdminAPI implements UserAccessAppClient {
       email: member.email,
       isAdmin: !!member.roles?.includes('Admin'),
     }));
+  }
+
+  /**
+   * The libraries the account sees. Kavita has no "all libraries", so an
+   * account with every library it has now counts as all of them, as do
+   * admins.
+   */
+  public async getAccountAccess(
+    account: RemoteAccount
+  ): Promise<CurrentAppAccess> {
+    const member = await this.findMember({ remoteUserId: account.id });
+
+    if (!member) {
+      throw new UserAccessAppError('Kavita no longer has this account.');
+    }
+
+    const ids = (member.libraries ?? []).map((library) => String(library.id));
+    const all = (await this.getLibraries()).map((library) => library.id);
+
+    return {
+      libraryIds:
+        member.roles?.includes('Admin') ||
+        (ids.length > 0 && all.every((id) => ids.includes(id)))
+          ? null
+          : ids,
+    };
   }
 
   /**

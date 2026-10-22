@@ -223,7 +223,11 @@ const findAccount = async (
         picture: absoluteUrl(user.avatar),
         isAdmin: user.hasPermission(Permission.ADMIN),
         access: account
-          ? { enabled: account.enabled, libraryIds: account.libraryIds ?? null }
+          ? {
+              enabled: account.enabled,
+              libraryIds: account.libraryIds ?? null,
+              canDownload: account.canDownload ?? null,
+            }
           : null,
         libraryNames: await libraryNamesFor(app),
         ageLimit: limit.ageLimit,
