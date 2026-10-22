@@ -196,6 +196,7 @@ const SeedingView = ({ layout = 'cards' }: { layout?: DownloadsLayout }) => {
             <SeedingCard
               key={torrent.downloadId}
               torrent={torrent}
+              talearrUrl={data.talearrUrl}
               layout="list"
             />
           ))}
@@ -203,7 +204,11 @@ const SeedingView = ({ layout = 'cards' }: { layout?: DownloadsLayout }) => {
       ) : (
         <div className="grid grid-cols-1 gap-x-4 gap-y-6 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {torrents.map((torrent) => (
-            <SeedingCard key={torrent.downloadId} torrent={torrent} />
+            <SeedingCard
+              key={torrent.downloadId}
+              torrent={torrent}
+              talearrUrl={data.talearrUrl}
+            />
           ))}
         </div>
       )}

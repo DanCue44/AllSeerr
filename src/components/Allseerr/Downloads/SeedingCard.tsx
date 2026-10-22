@@ -21,6 +21,7 @@ import defineMessages from '@app/utils/defineMessages';
 import { formatBytes } from '@app/utils/numberHelpers';
 import {
   ExclamationTriangleIcon,
+  InformationCircleIcon,
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import {
@@ -32,11 +33,13 @@ import {
   ExclamationTriangleIcon as WarningSolidIcon,
 } from '@heroicons/react/24/solid';
 import type {
+  SeedingMediaType,
   SeedingState,
   SeedingTorrent,
 } from '@server/interfaces/api/downloadInterfaces';
 import Link from 'next/link';
 import type { ComponentType } from 'react';
+import { useState } from 'react';
 import { useIntl } from 'react-intl';
 
 export const messages = defineMessages(
@@ -68,6 +71,18 @@ export const messages = defineMessages(
     labelSeedTime: 'Seed Time',
     labelUploaded: 'Uploaded',
     talearr: 'Talearr',
+    comic: 'Comic',
+    stateSeedingFiller: 'Seeding (Filler)',
+    fillerExplain:
+      'Ratio filler: not in your library. Talearr downloaded this freeleech torrent from MyAnonamouse only to seed it and keep your ratio healthy.',
+    fillerTurnOff:
+      'Turn this off in Talearr: Settings > Indexers > MyAnonamouse > Freeleech Seeding Filler.',
+    fillerOpenSettings: 'Open Talearr indexer settings',
+    goalHint:
+      'Time left until this torrent reaches the seeding time {indexer} asks for: {target} ({done} done). Removing it before then counts against your account as a hit and run.',
+    goalMetHint:
+      'This torrent has seeded the {target} {indexer} asks for. You can remove it without a penalty.',
+    indexerFallback: 'the tracker',
   }
 );
 
@@ -102,6 +117,15 @@ const STATE_MESSAGES: Record<SeedingState, keyof typeof messages> = {
   downloading: 'stateDownloading',
 };
 
+const SEEDING_MEDIA_ICON: Record<
+  SeedingMediaType,
+  ComponentType<{ className?: string }>
+> = {
+  audiobook: MEDIA_ICON.audiobook,
+  ebook: MEDIA_ICON.ebook,
+  comic: BookOpenIcon,
+};
+
 const BAR_STYLE: Record<SeedingTone, string> = {
   bad: 'bg-[#f2b0aa]',
   warn: 'bg-[#f0d9a8]',
@@ -116,12 +140,15 @@ const BAR_STYLE: Record<SeedingTone, string> = {
  */
 const SeedingCard = ({
   torrent,
+  talearrUrl,
   layout = 'cards',
 }: {
   torrent: SeedingTorrent;
+  talearrUrl?: string | null;
   layout?: DownloadsLayout;
 }) => {
   const intl = useIntl();
+  const [fillerOpen, setFillerOpen] = useState(false);
   const bookCover = useBookCover(torrent.posterUrl ? undefined : torrent.olId);
   const cover = torrent.posterUrl ?? bookCover;
   const tone = getSeedingTone(torrent);
@@ -147,17 +174,60 @@ const SeedingCard = ({
       )
       .join(' ');
 
-  const detail = [
-    torrent.mediaType &&
-      intl.formatMessage(
+  const formatText = torrent.mediaType
+    ? intl.formatMessage(
         torrent.mediaType === 'audiobook'
           ? globalMessages.audiobook
-          : globalMessages.ebook
-      ),
-    torrent.authorName,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+          : torrent.mediaType === 'comic'
+            ? messages.comic
+            : globalMessages.ebook
+      )
+    : undefined;
+
+  const isFillerSeeding = torrent.isFiller && torrent.state === 'seeding';
+  const fillerText = `${intl.formatMessage(messages.fillerExplain)} ${intl.formatMessage(messages.fillerTurnOff)}`;
+  const stateLabel = intl.formatMessage(
+    torrent.atRisk
+      ? messages.atRisk
+      : isFillerSeeding
+        ? messages.stateSeedingFiller
+        : messages[STATE_MESSAGES[torrent.state]]
+  );
+
+  // Hover shows the explanation, a tap (touch) opens it, and screen readers
+  // read it as the button's description
+  const fillerStatus = (className: string) => (
+    <button
+      type="button"
+      className={`inline-flex items-center gap-1 ${className}`}
+      title={fillerText}
+      aria-expanded={fillerOpen}
+      aria-label={`${stateLabel}. ${fillerText}`}
+      onClick={() => setFillerOpen((open) => !open)}
+    >
+      {stateLabel}
+      <InformationCircleIcon className="h-3.5 w-3.5 flex-none" />
+    </button>
+  );
+
+  const fillerPanel = fillerOpen ? (
+    <div className="rounded-[12px] bg-black/40 px-2.5 py-2 text-xs leading-relaxed text-as-ink-soft">
+      <p>{intl.formatMessage(messages.fillerExplain)}</p>
+      <p className="mt-1">{intl.formatMessage(messages.fillerTurnOff)}</p>
+      {talearrUrl && (
+        <a
+          href={`${talearrUrl}/settings/indexers`}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 inline-block font-semibold text-as-accent hover:underline"
+        >
+          {intl.formatMessage(messages.fillerOpenSettings)}
+        </a>
+      )}
+    </div>
+  ) : null;
+
+  const detail = [formatText, torrent.authorName].filter(Boolean).join(' · ');
 
   const seededText =
     progress.targetSeconds !== null
@@ -182,18 +252,13 @@ const SeedingCard = ({
     </span>
   );
 
-  const stateBadge = (
-    <span
-      className={`flex-none whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${
-        torrent.atRisk ? statusTone.bad : statusTone[tone]
-      }`}
-    >
-      {intl.formatMessage(
-        torrent.atRisk
-          ? messages.atRisk
-          : messages[STATE_MESSAGES[torrent.state]]
-      )}
-    </span>
+  const badgeClass = `flex-none whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${
+    torrent.atRisk ? statusTone.bad : statusTone[tone]
+  }`;
+  const stateBadge = isFillerSeeding ? (
+    fillerStatus(badgeClass)
+  ) : (
+    <span className={badgeClass}>{stateLabel}</span>
   );
 
   const goalText =
@@ -204,6 +269,42 @@ const SeedingCard = ({
         : intl.formatMessage(messages.timeLeft, {
             time: formatDuration(progress.remainingSeconds),
           });
+
+  const goalHint =
+    progress.targetSeconds === null
+      ? undefined
+      : intl.formatMessage(
+          progress.met ? messages.goalMetHint : messages.goalHint,
+          {
+            indexer:
+              torrent.indexer ?? intl.formatMessage(messages.indexerFallback),
+            target: formatDuration(progress.targetSeconds),
+            done: formatDuration(torrent.seedingSeconds),
+          }
+        );
+
+  // Same treatment as the filler status: hover title, a tap opens the
+  // explanation, and screen readers get it in the label
+  const [goalOpen, setGoalOpen] = useState(false);
+  const goalButton = (className: string) =>
+    goalText && goalHint ? (
+      <button
+        type="button"
+        className={`text-right ${className}`}
+        title={goalHint}
+        aria-expanded={goalOpen}
+        aria-label={`${goalText}. ${goalHint}`}
+        onClick={() => setGoalOpen((open) => !open)}
+      >
+        {goalText}
+      </button>
+    ) : null;
+  const goalPanel =
+    goalOpen && goalHint ? (
+      <p className="rounded-[12px] bg-black/40 px-2.5 py-2 text-left text-xs leading-relaxed text-as-ink-soft">
+        {goalHint}
+      </p>
+    ) : null;
 
   const ratioText = intl.formatMessage(messages.ratio, {
     ratio: formatRatio(torrent.ratio),
@@ -249,7 +350,8 @@ const SeedingCard = ({
               <div
                 className="h-2 w-full overflow-hidden rounded-full bg-as-tile"
                 role="progressbar"
-                aria-label={seededText}
+                title={goalHint}
+                aria-label={goalHint ?? seededText}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={percent}
@@ -264,13 +366,16 @@ const SeedingCard = ({
               </span>
             </div>
           )}
-          <div className="truncate text-xs text-as-ink-muted md:hidden">
+          <div
+            className="truncate text-xs text-as-ink-muted md:hidden"
+            title={goalHint}
+          >
             {[seededText, goalText, ratioText].filter(Boolean).join(' · ')}
           </div>
         </div>
         <div className="hidden min-w-0 flex-col text-xs text-as-ink-muted md:flex">
           <span className="truncate">{seededText}</span>
-          {goalText && <span className="truncate">{goalText}</span>}
+          {goalButton('truncate text-left hover:underline')}
         </div>
         <div className="hidden min-w-0 flex-col text-xs text-as-ink-muted md:flex">
           <span className="truncate tabular-nums">{ratioText}</span>
@@ -280,6 +385,8 @@ const SeedingCard = ({
               .join(' · ')}
           </span>
         </div>
+        {fillerPanel && <div className="col-span-full">{fillerPanel}</div>}
+        {goalPanel && <div className="col-span-full">{goalPanel}</div>}
       </article>
     );
   }
@@ -288,7 +395,7 @@ const SeedingCard = ({
     ? WarningSolidIcon
     : (STATE_ICON[torrent.state] ?? ArrowUpTrayIcon);
   const MediaIcon = torrent.mediaType
-    ? MEDIA_ICON[torrent.mediaType]
+    ? SEEDING_MEDIA_ICON[torrent.mediaType]
     : BookOpenIcon;
   const stateText = torrent.atRisk ? TONE_TEXT.bad : TONE_TEXT[tone];
 
@@ -314,26 +421,22 @@ const SeedingCard = ({
                   {torrent.downloadClient}
                 </Detail>
               )}
-              {torrent.mediaType && (
+              {formatText && (
                 <Detail label={intl.formatMessage(messages.labelFormat)}>
-                  {intl.formatMessage(
-                    torrent.mediaType === 'audiobook'
-                      ? globalMessages.audiobook
-                      : globalMessages.ebook
-                  )}
+                  {formatText}
                 </Detail>
               )}
               <Detail label={intl.formatMessage(messages.labelSize)}>
                 {formatBytes(torrent.size, 1)}
               </Detail>
               <Detail label={intl.formatMessage(messages.labelStatus)}>
-                <span className={`font-semibold ${stateText}`}>
-                  {intl.formatMessage(
-                    torrent.atRisk
-                      ? messages.atRisk
-                      : messages[STATE_MESSAGES[torrent.state]]
-                  )}
-                </span>
+                {isFillerSeeding ? (
+                  fillerStatus(`font-semibold ${stateText} hover:underline`)
+                ) : (
+                  <span className={`font-semibold ${stateText}`}>
+                    {stateLabel}
+                  </span>
+                )}
               </Detail>
               {torrent.indexer && (
                 <Detail label={intl.formatMessage(messages.labelIndexer)}>
@@ -357,6 +460,7 @@ const SeedingCard = ({
                 {seededText}
               </Detail>
             </dl>
+            {fillerPanel}
             {torrent.atRisk && (
               <div
                 className={`flex gap-2 rounded-[12px] px-2.5 py-1.5 text-xs leading-relaxed ${statusTone.bad}`}
@@ -374,7 +478,8 @@ const SeedingCard = ({
           <div
             className="relative h-1 w-full bg-black/40"
             role="progressbar"
-            aria-label={seededText}
+            title={goalHint}
+            aria-label={goalHint ?? seededText}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={percent}
@@ -400,16 +505,15 @@ const SeedingCard = ({
           <div className="flex min-w-0 items-center gap-1.5 text-xs text-as-ink-muted">
             <MediaIcon className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
             <span className="truncate" title={torrent.title}>
-              {torrent.authorName ?? torrent.title}
+              {torrent.authorName ??
+                (name !== torrent.title ? formatText : undefined) ??
+                torrent.title}
             </span>
           </div>
+          {goalPanel}
         </div>
         <div className="flex flex-none flex-col items-end gap-0.5 text-right text-xs leading-snug text-as-ink-soft">
-          {goalText && (
-            <span className="text-[13px] font-semibold text-as-ink">
-              {goalText}
-            </span>
-          )}
+          {goalButton('text-[13px] font-semibold text-as-ink hover:underline')}
           <span className="tabular-nums">
             {intl.formatMessage(messages.uploaded, {
               size: formatBytes(torrent.uploaded, 1),
