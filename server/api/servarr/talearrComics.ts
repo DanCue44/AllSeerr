@@ -286,6 +286,34 @@ class TalearrComicsAPI extends ExternalAPI {
   }
 
   /**
+   * Monitors a series in the library and every volume of it that is not,
+   * so its missing volumes are wanted. Answers how many volumes it turned
+   * on.
+   */
+  public async monitorMissingVolumes(seriesId: number): Promise<number> {
+    await this.axios.put(`/talearr/comics/series/${seriesId}`, {
+      monitored: true,
+      monitorNewVolumes: true,
+    });
+
+    const series = await this.axios.get<{
+      volumes?: { id: number; monitored?: boolean; state?: string }[] | null;
+    }>(`/talearr/comics/series/${seriesId}`);
+    const volumeIds = (series.data?.volumes ?? [])
+      .filter((volume) => !volume.monitored && volume.state !== 'downloaded')
+      .map((volume) => volume.id);
+
+    if (volumeIds.length > 0) {
+      await this.axios.put('/talearr/comics/volumes/monitor', {
+        volumeIds,
+        monitored: true,
+      });
+    }
+
+    return volumeIds.length;
+  }
+
+  /**
    * Searches the indexers for the series' wanted volumes and grabs the best
    * releases
    */
