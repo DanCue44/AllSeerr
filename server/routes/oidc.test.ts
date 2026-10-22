@@ -164,6 +164,26 @@ describe('sign in with Allseerr', () => {
     assert.equal(res.body.token_endpoint, `${base}/oidc/token`);
   });
 
+  it('gives the public address behind a proxy it does not trust', async () => {
+    const settings = getSettings();
+    settings.main.applicationUrl = 'https://requests.example.com';
+    settings.network.trustProxy = false;
+
+    const res = await request(server)
+      .get('/oidc/.well-known/openid-configuration')
+      .expect(200);
+
+    assert.equal(res.body.issuer, 'https://requests.example.com/oidc');
+    assert.equal(
+      res.body.token_endpoint,
+      'https://requests.example.com/oidc/token'
+    );
+    assert.equal(
+      res.body.authorization_endpoint,
+      'https://requests.example.com/oidc/auth'
+    );
+  });
+
   it('sends people who are not signed in to the Allseerr login', async () => {
     const agent = request.agent(server);
     const start = await agent.get('/oidc/auth').query({

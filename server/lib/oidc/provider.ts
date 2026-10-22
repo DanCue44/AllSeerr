@@ -292,10 +292,9 @@ const buildProvider = async (
     },
   });
 
-  // Behind a reverse proxy the address people use comes from its headers
-  if (settings.network.trustProxy) {
-    (instance as unknown as { proxy: boolean }).proxy = true;
-  }
+  // Addresses come from the forwarded headers, which the middleware sets
+  // from the issuer so they always match the application address
+  (instance as unknown as { proxy: boolean }).proxy = true;
 
   instance.on('server_error', (_ctx, error) => {
     logger.error('OpenID Connect provider error', {
@@ -355,6 +354,15 @@ export const oidcMiddleware = async (
     if (!instance) {
       res.status(404).json({ message: 'Sign in with Allseerr is off.' });
       return;
+    }
+
+    // The endpoints must share the issuer's address even when the reverse
+    // proxy's headers are not trusted, or apps are sent to http addresses
+    const issuer = new URL(getOidcIssuer() as string);
+    req.headers['x-forwarded-proto'] = issuer.protocol.replace(':', '');
+    req.headers['x-forwarded-host'] = issuer.host;
+    if (!getSettings().network.trustProxy) {
+      delete req.headers['x-forwarded-for'];
     }
 
     instance.callback()(req, res);

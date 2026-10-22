@@ -53,7 +53,7 @@ const messages = defineMessages(
     needsPublicUrl:
       'Add {app}’s public address in its connection above, so Allseerr knows where to send people back.',
     stepsAudiobookshelf:
-      'In Audiobookshelf, open Settings, Authentication and turn on OpenID Connect Authentication. Set Issuer URL to the issuer address and press Auto-populate, then fill in the Client ID and Client Secret. Set Match existing users by to email, turn on Auto Register, set Group Claim to abs_groups and Advanced Permission Claim to abs_permissions, then save.',
+      'In Audiobookshelf, open Settings, Authentication and turn on OpenID Connect Authentication. Set Issuer URL to the issuer address and press Auto-populate, then fill in the Client ID and Client Secret. Set Match existing users by to email, turn on Auto Register, set Group Claim to abs_groups and Advanced Permission Claim to abs_permissions. Leave Subfolder for Redirect URLs empty unless Audiobookshelf runs under a subfolder, then save.',
     stepsKavita:
       'In Kavita, open Server Settings, OpenID Connect. Set Authority to the issuer address, Client ID and Secret to the values here, turn on Provision accounts and Sync user settings, and save. Kavita then restarts. Kavita reads libraries by name and the age limit from Allseerr at every sign in.',
     stepsKomga:
