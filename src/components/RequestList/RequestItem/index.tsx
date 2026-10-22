@@ -3,6 +3,9 @@ import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
+import FormatIcon, {
+  getRequestFormat,
+} from '@app/components/Common/FormatIcon';
 import DeclineRequestModal from '@app/components/DeclineRequestModal';
 import RequestModal from '@app/components/RequestModal';
 import RequestSeasonBadges from '@app/components/RequestSeasonBadges';
@@ -581,7 +584,11 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               )}
             </Link>
             <div className="flex flex-col justify-center overflow-hidden pl-2 xl:pl-4">
-              <div className="pt-0.5 text-xs font-medium text-white sm:pt-1">
+              <div className="flex items-center gap-1.5 pt-0.5 text-xs font-medium text-white sm:pt-1">
+                <FormatIcon
+                  format={getRequestFormat(requestData)}
+                  size="small"
+                />
                 {getTitleYear(title)}
               </div>
               <Link

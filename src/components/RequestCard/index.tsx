@@ -2,6 +2,9 @@ import Spinner from '@app/assets/spinner.svg';
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
+import FormatIcon, {
+  getRequestFormat,
+} from '@app/components/Common/FormatIcon';
 import Tooltip from '@app/components/Common/Tooltip';
 import DeclineRequestModal from '@app/components/DeclineRequestModal';
 import RequestModal from '@app/components/RequestModal';
@@ -446,8 +449,9 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           className="relative z-10 flex min-w-0 flex-1 flex-col pr-4"
           data-testid="request-card-title"
         >
-          <div className="hidden text-xs font-medium text-white sm:flex">
-            {getTitleYear(title)}
+          <div className="flex items-center gap-1.5 text-xs font-medium text-white">
+            <FormatIcon format={getRequestFormat(requestData)} size="small" />
+            <span className="hidden sm:inline">{getTitleYear(title)}</span>
           </div>
           <Link
             href={getMediaPath(requestData)}

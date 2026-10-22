@@ -1,6 +1,7 @@
 import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
+import FormatIcon from '@app/components/Common/FormatIcon';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import RequestModal from '@app/components/RequestModal';
 import useAlbumCover from '@app/hooks/useAlbumCover';
@@ -165,17 +166,21 @@ const MusicTitleCard = ({
             </div>
           )}
           <div className="absolute left-0 right-0 flex items-center justify-between p-2">
-            <div
-              className={`pointer-events-none z-40 self-start rounded-full border border-emerald-500 bg-emerald-600/80 shadow-md ${
-                ambient ? 'invisible' : ''
-              }`}
-            >
-              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
-                {isArtist
-                  ? intl.formatMessage(globalMessages.artist)
-                  : (albumType ?? intl.formatMessage(globalMessages.album))}
+            {ambient ? (
+              <FormatIcon
+                format={isArtist ? 'artist' : 'album'}
+                size="card"
+                className="z-40 self-start"
+              />
+            ) : (
+              <div className="pointer-events-none z-40 self-start rounded-full border border-emerald-500 bg-emerald-600/80 shadow-md">
+                <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                  {isArtist
+                    ? intl.formatMessage(globalMessages.artist)
+                    : (albumType ?? intl.formatMessage(globalMessages.album))}
+                </div>
               </div>
-            </div>
+            )}
             {currentStatus && currentStatus !== MediaStatus.UNKNOWN && (
               <div className="pointer-events-none z-40 flex">
                 <StatusBadgeMini

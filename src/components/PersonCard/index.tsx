@@ -1,4 +1,5 @@
 import CachedImage from '@app/components/Common/CachedImage';
+import FormatIcon from '@app/components/Common/FormatIcon';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { UserCircleIcon } from '@heroicons/react/24/solid';
 import Link from 'next/link';
@@ -48,6 +49,9 @@ const PersonCard = ({
           ) : (
             <UserCircleIcon className="h-full w-full text-as-ink-faint" />
           )}
+          <div className="absolute inset-x-0 top-2 flex justify-center">
+            <FormatIcon format="person" size="card" />
+          </div>
         </div>
         <div className="mt-2.5 line-clamp-2 break-words text-center font-bold text-as-ink group-hover:underline">
           {name}

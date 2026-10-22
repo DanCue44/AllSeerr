@@ -2,6 +2,9 @@ import Spinner from '@app/assets/spinner.svg';
 import UserAvatar from '@app/components/Allseerr/RequestList/UserAvatar';
 import { statusTone } from '@app/components/Allseerr/Title/styles';
 import CachedImage from '@app/components/Common/CachedImage';
+import FormatIcon, {
+  getRequestFormat,
+} from '@app/components/Common/FormatIcon';
 import Tooltip from '@app/components/Common/Tooltip';
 import DeclineRequestModal from '@app/components/DeclineRequestModal';
 import DownloadBlock from '@app/components/DownloadBlock';
@@ -524,7 +527,8 @@ const TypeLine = ({
   const created = new Date(request.createdAt);
 
   return (
-    <div className="text-xs text-as-ink-muted">
+    <div className="flex items-center gap-1.5 text-xs text-as-ink-muted">
+      <FormatIcon format={getRequestFormat(request)} size="small" />
       {intl.formatMessage(messages.typeDate, {
         type: intl.formatMessage(typeMessage(request)),
         date: intl.formatDate(created, {

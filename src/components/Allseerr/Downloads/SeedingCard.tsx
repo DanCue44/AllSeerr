@@ -3,7 +3,6 @@ import {
   CardBackdrop,
   messages as cardMessages,
   Detail,
-  MEDIA_ICON,
   PosterImage,
   SEEDING_LIST_GRID,
   useBookCover,
@@ -17,6 +16,7 @@ import {
 } from '@app/components/Allseerr/Downloads/seedingLogic';
 import UserAvatar from '@app/components/Allseerr/RequestList/UserAvatar';
 import { statusTone } from '@app/components/Allseerr/Title/styles';
+import FormatIcon from '@app/components/Common/FormatIcon';
 import Tooltip from '@app/components/Common/Tooltip';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -29,13 +29,11 @@ import {
 import {
   ArrowPathIcon,
   ArrowUpTrayIcon,
-  BookOpenIcon,
   ClockIcon,
   PauseIcon,
   ExclamationTriangleIcon as WarningSolidIcon,
 } from '@heroicons/react/24/solid';
 import type {
-  SeedingMediaType,
   SeedingState,
   SeedingTorrent,
 } from '@server/interfaces/api/downloadInterfaces';
@@ -117,15 +115,6 @@ const STATE_MESSAGES: Record<SeedingState, keyof typeof messages> = {
   checking: 'stateChecking',
   error: 'stateError',
   downloading: 'stateDownloading',
-};
-
-const SEEDING_MEDIA_ICON: Record<
-  SeedingMediaType,
-  ComponentType<{ className?: string }>
-> = {
-  audiobook: MEDIA_ICON.audiobook,
-  ebook: MEDIA_ICON.ebook,
-  comic: BookOpenIcon,
 };
 
 const BAR_STYLE: Record<SeedingTone, string> = {
@@ -451,9 +440,6 @@ const SeedingCard = ({
   const StateIcon = torrent.atRisk
     ? WarningSolidIcon
     : (STATE_ICON[torrent.state] ?? ArrowUpTrayIcon);
-  const MediaIcon = torrent.mediaType
-    ? SEEDING_MEDIA_ICON[torrent.mediaType]
-    : BookOpenIcon;
   const stateText = torrent.atRisk ? TONE_TEXT.bad : TONE_TEXT[tone];
 
   return (
@@ -572,7 +558,7 @@ const SeedingCard = ({
             </div>
           </div>
           <div className="flex min-w-0 items-center gap-1.5 text-xs text-as-ink-muted">
-            <MediaIcon className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+            <FormatIcon format={torrent.mediaType ?? 'book'} size="small" />
             <span className="truncate" title={torrent.title}>
               {torrent.authorName ??
                 (name !== torrent.title ? formatText : undefined) ??

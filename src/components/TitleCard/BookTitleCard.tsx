@@ -2,6 +2,7 @@ import Spinner from '@app/assets/spinner.svg';
 import BookFormatIndicators from '@app/components/Common/BookFormatIndicators';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
+import FormatIcon from '@app/components/Common/FormatIcon';
 import RequestModal from '@app/components/RequestModal';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import { useIsTouch } from '@app/hooks/useIsTouch';
@@ -162,17 +163,21 @@ const BookTitleCard = ({
             </div>
           )}
           <div className="absolute left-0 right-0 flex items-center justify-between p-2">
-            <div
-              className={`pointer-events-none z-40 self-start rounded-full border border-amber-500 bg-amber-600/80 shadow-md ${
-                ambient ? 'invisible' : ''
-              }`}
-            >
-              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
-                {intl.formatMessage(
-                  isAuthor ? globalMessages.author : globalMessages.book
-                )}
+            {ambient ? (
+              <FormatIcon
+                format={isAuthor ? 'author' : 'book'}
+                size="card"
+                className={`z-40 self-start ${isAuthor ? 'mx-auto' : ''}`}
+              />
+            ) : (
+              <div className="pointer-events-none z-40 self-start rounded-full border border-amber-500 bg-amber-600/80 shadow-md">
+                <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                  {intl.formatMessage(
+                    isAuthor ? globalMessages.author : globalMessages.book
+                  )}
+                </div>
               </div>
-            </div>
+            )}
             {!isAuthor && (
               <div className="pointer-events-none z-40 flex">
                 <BookFormatIndicators
