@@ -180,6 +180,8 @@ export interface SeedingTorrent {
   // Added by Allseerr: the book in Allseerr, when it has the Talearr book
   mediaId?: number;
   olId?: string;
+  // Added by Allseerr: the book's cover from Talearr
+  posterUrl?: string;
 }
 
 export interface SeedingSummary {

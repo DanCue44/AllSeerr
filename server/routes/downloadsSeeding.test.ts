@@ -247,6 +247,47 @@ describe('GET /downloads/seeding', () => {
     assert.deepStrictEqual(res.body.torrents[1], payload.torrents[1]);
   });
 
+  it("adds each book's cover from Talearr", async () => {
+    handlers['talearr GET /book?bookIds=3757'] = () => ({
+      status: 200,
+      data: [
+        {
+          id: 3757,
+          images: [
+            {
+              coverType: 'cover',
+              remoteUrl: 'https://covers.example/3757.jpg',
+            },
+          ],
+        },
+      ],
+    });
+    const apiKey = await admin();
+
+    const res = await request(app)
+      .get('/downloads/seeding')
+      .set('X-Api-Key', apiKey);
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.strictEqual(
+      res.body.torrents[0].posterUrl,
+      'https://covers.example/3757.jpg'
+    );
+    assert.strictEqual(res.body.torrents[1].posterUrl, undefined);
+  });
+
+  it('shows the torrents without covers when Talearr cannot list the books', async () => {
+    const apiKey = await admin();
+
+    const res = await request(app)
+      .get('/downloads/seeding')
+      .set('X-Api-Key', apiKey);
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.strictEqual(res.body.torrents.length, 2);
+    assert.strictEqual(res.body.torrents[0].posterUrl, undefined);
+  });
+
   it('answers from a 30 second cache', async () => {
     const apiKey = await admin();
 

@@ -122,7 +122,8 @@ const SeedingCard = ({
   layout?: DownloadsLayout;
 }) => {
   const intl = useIntl();
-  const cover = useBookCover(torrent.olId);
+  const bookCover = useBookCover(torrent.posterUrl ? undefined : torrent.olId);
+  const cover = torrent.posterUrl ?? bookCover;
   const tone = getSeedingTone(torrent);
   const progress = getSeedProgress(torrent);
   const percent =

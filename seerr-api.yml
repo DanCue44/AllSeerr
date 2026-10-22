@@ -14612,6 +14612,9 @@ paths:
                           description: The book in Allseerr, when it has the Talearr book
                         olId:
                           type: string
+                        posterUrl:
+                          type: string
+                          description: The book's cover from Talearr
                   summary:
                     type: object
                     properties:

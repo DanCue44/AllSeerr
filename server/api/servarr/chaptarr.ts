@@ -995,6 +995,40 @@ class ChaptarrAPI extends ServarrBase<{ bookId: number }> {
   }
 
   /**
+   * The cover of each book, by book id, for books that have a web cover.
+   * Asked in one request.
+   */
+  public async getBookCovers(bookIds: number[]): Promise<Map<number, string>> {
+    const covers = new Map<number, string>();
+
+    if (!bookIds.length) {
+      return covers;
+    }
+
+    const query = bookIds.map((id) => `bookIds=${id}`).join('&');
+    const response = await this.axios.get<
+      {
+        id: number;
+        images?: { coverType?: string; remoteUrl?: string }[];
+      }[]
+    >(`/book?${query}`);
+
+    for (const book of response.data) {
+      const cover = book.images?.find(
+        (image) =>
+          ['cover', 'poster'].includes(image.coverType?.toLowerCase() ?? '') &&
+          /^https?:\/\//.test(image.remoteUrl ?? '')
+      )?.remoteUrl;
+
+      if (cover) {
+        covers.set(book.id, cover);
+      }
+    }
+
+    return covers;
+  }
+
+  /**
    * A book in the library, or undefined when Chaptarr does not have it
    */
   public async getBook(bookId: number): Promise<ChaptarrBook | undefined> {

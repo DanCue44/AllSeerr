@@ -201,6 +201,38 @@ const linkBooks = async (
 };
 
 /**
+ * Adds each torrent's book cover from Talearr, so torrents show a cover
+ * even when Allseerr has no request for the book
+ */
+export const addCovers = async (
+  api: Pick<ChaptarrAPI, 'getBookCovers'>,
+  torrents: SeedingTorrent[]
+): Promise<void> => {
+  const bookIds = [
+    ...new Set(
+      torrents
+        .map((torrent) => torrent.bookId)
+        .filter((id): id is number => id !== null)
+    ),
+  ];
+
+  if (!bookIds.length) {
+    return;
+  }
+
+  const covers = await api.getBookCovers(bookIds);
+
+  for (const torrent of torrents) {
+    const cover =
+      torrent.bookId !== null ? covers.get(torrent.bookId) : undefined;
+
+    if (cover) {
+      torrent.posterUrl = cover;
+    }
+  }
+};
+
+/**
  * Asks Talearr what it seeds, unsupported when the book service is not
  * Talearr or the Talearr server has no seeding route yet
  */
@@ -235,6 +267,15 @@ export const collectSeeding = async (): Promise<SeedingResponse> => {
   } catch (e) {
     // Covers and links are extras, the torrents are shown without them
     logger.warn('Could not match the seeding torrents to books', {
+      label: 'Downloads',
+      errorMessage: e.message,
+    });
+  }
+
+  try {
+    await addCovers(api, seeding.torrents);
+  } catch (e) {
+    logger.warn('Could not get the covers of the seeding books', {
       label: 'Downloads',
       errorMessage: e.message,
     });
