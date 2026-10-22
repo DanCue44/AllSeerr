@@ -51,6 +51,7 @@ import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfac
 import {} from '@server/lib/bookRequests';
 import type { DownloadingItem } from '@server/lib/downloadtracker';
 import type { BookDetails } from '@server/models/Book';
+import type { ComicDetails } from '@server/models/Comic';
 import type { MovieDetails } from '@server/models/Movie';
 import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
@@ -106,7 +107,12 @@ const messages = defineMessages('components.Allseerr.RequestList', {
   unknownTitle: 'Unknown Title',
 });
 
-type RequestTitle = MovieDetails | TvDetails | MusicDetails | BookDetails;
+type RequestTitle =
+  | MovieDetails
+  | TvDetails
+  | MusicDetails
+  | BookDetails
+  | ComicDetails;
 type RequestData = NonFunctionProperties<MediaRequest> & {
   profileName?: string;
   canRemove?: boolean;
@@ -118,28 +124,38 @@ const isMusic = (title: RequestTitle): title is MusicDetails =>
 const isBook = (title: RequestTitle): title is BookDetails =>
   (title as BookDetails).mediaType === 'book';
 
+const isComic = (title: RequestTitle): title is ComicDetails =>
+  (title as ComicDetails).mediaType === 'comic';
+
 const isMovie = (title: RequestTitle): title is MovieDetails =>
   !isMusic(title) &&
   !isBook(title) &&
+  !isComic(title) &&
   (title as MovieDetails).title !== undefined;
 
 const getTitleName = (title: RequestTitle): string =>
-  isMovie(title) || isMusic(title) || isBook(title) ? title.title : title.name;
+  isMovie(title) || isMusic(title) || isBook(title) || isComic(title)
+    ? title.title
+    : title.name;
 
 const getTitleYear = (title: RequestTitle): string | undefined =>
-  isBook(title)
-    ? title.firstPublishYear?.toString()
-    : (isMovie(title) || isMusic(title)
-        ? title.releaseDate
-        : title.firstAirDate
-      )?.slice(0, 4);
+  isComic(title)
+    ? title.year?.toString()
+    : isBook(title)
+      ? title.firstPublishYear?.toString()
+      : (isMovie(title) || isMusic(title)
+          ? title.releaseDate
+          : title.firstAirDate
+        )?.slice(0, 4);
 
 const getMediaPath = (request: NonFunctionProperties<MediaRequest>): string =>
   request.type === 'music'
     ? `/music/${request.media.mbId}`
     : request.type === 'book'
       ? `/book/${request.media.olId}`
-      : `/${request.type}/${request.media.tmdbId}`;
+      : request.type === 'comic'
+        ? `/comic/${request.media.comicId}`
+        : `/${request.type}/${request.media.tmdbId}`;
 
 const arrName = (type: MediaRequest['type'], bookService?: string) =>
   type === 'movie'
@@ -148,7 +164,9 @@ const arrName = (type: MediaRequest['type'], bookService?: string) =>
       ? 'Lidarr'
       : type === 'book'
         ? bookArrName(bookService)
-        : 'Sonarr';
+        : type === 'comic'
+          ? 'Talearr'
+          : 'Sonarr';
 
 const serviceName = (type: MediaRequest['type']) =>
   type === 'movie'
@@ -455,7 +473,9 @@ const RequestStatus = ({
                 ? requestData.isAudiobook
                   ? messages.readyListen
                   : messages.readyRead
-                : messages.readyWatch
+                : requestData.type === 'comic'
+                  ? messages.readyRead
+                  : messages.readyWatch
           )}
         </span>
       );
@@ -513,13 +533,17 @@ const typeMessage = (request: NonFunctionProperties<MediaRequest>) =>
         : messages.typeTv
       : request.type === 'music'
         ? messages.typeAlbum
-        : {
-            ebook: messages.typeBook,
-            audiobook: messages.typeAudiobook,
-            unabridgedaudiobook: messages.typeUnabridgedAudiobook,
-            abridgedaudiobook: messages.typeAbridgedAudiobook,
-            audiobookrecording: messages.typeAudiobookRecording,
-          }[getBookRequestFormat(request)];
+        : request.type === 'comic'
+          ? request.media.comicKind === 'manga'
+            ? globalMessages.manga
+            : globalMessages.comic
+          : {
+              ebook: messages.typeBook,
+              audiobook: messages.typeAudiobook,
+              unabridgedaudiobook: messages.typeUnabridgedAudiobook,
+              abridgedaudiobook: messages.typeAbridgedAudiobook,
+              audiobookrecording: messages.typeAudiobookRecording,
+            }[getBookRequestFormat(request)];
 
 /** First line of the card: "{Type} · {short date}". */
 const TypeLine = ({
@@ -589,7 +613,9 @@ const RequestCardError = ({
                   ? globalMessages.album
                   : requestData.type === 'book'
                     ? globalMessages.book
-                    : globalMessages.tvshow
+                    : requestData.type === 'comic'
+                      ? globalMessages.comic
+                      : globalMessages.tvshow
               : globalMessages.request
           ),
         })}
@@ -676,7 +702,9 @@ const RequestCard = ({
         ? `/api/v1/music/${request.media.mbId}`
         : request.type === 'book'
           ? `/api/v1/book/${request.media.olId}`
-          : `/api/v1/tv/${request.media.tmdbId}`;
+          : request.type === 'comic'
+            ? `/api/v1/comic/${request.media.comicId}`
+            : `/api/v1/tv/${request.media.tmdbId}`;
   const { data: title, error } = useSWR<RequestTitle>(inView ? url : null);
   const { data: requestData, mutate: revalidate } = useSWR<RequestData>(
     `/api/v1/request/${request.id}`,
@@ -824,7 +852,7 @@ const RequestCard = ({
               ? Permission.REQUEST_MOVIE
               : requestData.type === 'music'
                 ? Permission.REQUEST_MUSIC
-                : requestData.type === 'book'
+                : requestData.type === 'book' || requestData.type === 'comic'
                   ? Permission.REQUEST_BOOK
                   : Permission.REQUEST_TV,
           ],
@@ -873,7 +901,7 @@ const RequestCard = ({
         fill
       />
     ) : null
-  ) : isBook(title) ? (
+  ) : isBook(title) || isComic(title) ? (
     <CachedImage
       type="book"
       src={title.posterPath ?? '/images/allseerr_poster_not_found.png'}
@@ -900,18 +928,24 @@ const RequestCard = ({
     ? title.artistCredit
       ? intl.formatMessage(messages.byArtist, { artist: title.artistCredit })
       : undefined
-    : isBook(title)
-      ? [
-          intl.formatMessage(globalMessages[getBookRequestFormat(requestData)]),
-          title.authors.map((author) => author.name).join(', '),
-        ]
-          .filter(Boolean)
-          .join(' · ')
-      : isMovie(title)
-        ? year
-        : undefined;
+    : isComic(title)
+      ? title.authors
+      : isBook(title)
+        ? [
+            intl.formatMessage(
+              globalMessages[getBookRequestFormat(requestData)]
+            ),
+            title.authors.map((author) => author.name).join(', '),
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : isMovie(title)
+          ? year
+          : undefined;
 
+  // Comic requests take no options
   const canEdit =
+    requestData.type !== 'comic' &&
     isPending &&
     (isManager ||
       (isOwn &&

@@ -22,6 +22,7 @@ import type {
   UserWatchDataResponse,
 } from '@server/interfaces/api/userInterfaces';
 import type { BookDetails } from '@server/models/Book';
+import type { ComicDetails } from '@server/models/Comic';
 import type { MovieDetails } from '@server/models/Movie';
 import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
@@ -49,7 +50,12 @@ const messages = defineMessages('components.UserProfile', {
     'Media added to your <PlexWatchlistSupportLink>Plex Watchlist</PlexWatchlistSupportLink> will appear here.',
 });
 
-type MediaTitle = MovieDetails | TvDetails | MusicDetails | BookDetails;
+type MediaTitle =
+  | MovieDetails
+  | TvDetails
+  | MusicDetails
+  | BookDetails
+  | ComicDetails;
 
 const UserProfile = () => {
   const intl = useIntl();

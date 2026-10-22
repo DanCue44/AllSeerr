@@ -49,10 +49,17 @@ export const SPACES: Record<SpaceKey, SpaceDefinition> = {
   books: {
     mediaType: 'book',
     path: '/books',
-    matches: /^\/(books|book|author|discover\/books)(\/|$)/,
+    // Comic and manga series live in the books space too
+    matches: /^\/(books|book|author|comic|discover\/books)(\/|$)/,
     sections: SPACE_SECTIONS,
   },
 };
+
+/**
+ * Comics and manga sit in the books space, beside the books, rather than in
+ * a space of their own
+ */
+export const COMICS_PATH = '/books/comics';
 
 /**
  * The space a page belongs to, so the matching tab stays lit on its title
