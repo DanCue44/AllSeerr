@@ -10,6 +10,7 @@ import type { UserAccessApp } from '@server/constants/userAccess';
 import {
   USER_ACCESS_APPS,
   USER_ACCESS_APP_NAMES,
+  UserAppAccountGrant,
   UserAppAccountStatus,
 } from '@server/constants/userAccess';
 import { getRepository } from '@server/datasource';
@@ -28,6 +29,7 @@ import { getSettings } from '@server/lib/settings';
 import type { AgeLimit } from '@server/lib/userAccess/ageLimits';
 import { isRestricted } from '@server/lib/userAccess/ageLimits';
 import { sendAppAccountEmail } from '@server/lib/userAccess/email';
+import { applyPlexDefaults } from '@server/lib/userAccess/plexDefaults';
 import logger from '@server/logger';
 import { randomInt } from 'crypto';
 
@@ -142,6 +144,7 @@ const emptyAppAccess = (): PersonAppAccess => ({
   remoteUsername: null,
   lastError: null,
   syncedAt: null,
+  grantedBy: null,
 });
 
 const toPersonAccess = (
@@ -163,6 +166,7 @@ const toPersonAccess = (
               remoteUsername: account.remoteUsername ?? null,
               lastError: account.lastError ?? null,
               syncedAt: account.syncedAt ?? null,
+              grantedBy: account.grantedBy ?? null,
             }
           : emptyAppAccess(),
       ];
@@ -427,6 +431,9 @@ export const updatePerson = async (
     if (change.enabled !== undefined) {
       account.enabled = change.enabled;
     }
+    // A choice made for this person wins over the default access for Plex
+    // users from now on
+    account.grantedBy = UserAppAccountGrant.ADMIN;
     if (change.libraryIds !== undefined) {
       account.libraryIds = change.libraryIds?.length ? change.libraryIds : null;
     }
@@ -553,6 +560,16 @@ export const syncEveryone = async (): Promise<void> => {
   syncRunning = true;
 
   try {
+    // Plex shares can change any time, so the default access is checked
+    // before the accounts are brought in line
+    try {
+      await applyPlexDefaults();
+    } catch (e) {
+      logger.error('Could not apply default access for Plex users', {
+        label: 'User Access',
+        errorMessage: (e as Error).message,
+      });
+    }
     await syncAllAccounts();
   } finally {
     syncRunning = false;

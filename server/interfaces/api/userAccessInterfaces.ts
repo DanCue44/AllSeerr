@@ -1,5 +1,6 @@
 import type {
   UserAccessApp,
+  UserAppAccountGrant,
   UserAppAccountStatus,
 } from '@server/constants/userAccess';
 
@@ -29,6 +30,25 @@ export interface UserAccessSettingsResponse {
   emailPasswords: boolean;
 }
 
+export interface PlexDefaultAppSettings {
+  enabled: boolean;
+  libraryIds: string[] | null;
+}
+
+export interface PlexDefaultAccessResponse {
+  enabled: boolean;
+  apps: Record<UserAccessApp, PlexDefaultAppSettings>;
+  ageLimit: AgeLimit | null;
+  includeUnrated: boolean;
+}
+
+export interface PlexDefaultChange {
+  userId: number;
+  displayName: string;
+  app: UserAccessApp;
+  change: 'granted' | 'removed';
+}
+
 export interface UserAccessAppInfo {
   app: UserAccessApp;
   name: string;
@@ -45,6 +65,8 @@ export interface PersonAppAccess {
   remoteUsername: string | null;
   lastError: string | null;
   syncedAt: Date | null;
+  // admin, plex (the default for Plex users) or null for older accounts
+  grantedBy: UserAppAccountGrant | null;
 }
 
 export interface PersonAccess {

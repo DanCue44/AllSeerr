@@ -11,7 +11,7 @@ import {
   resetOidcProvider,
 } from '@server/lib/oidc/provider';
 import { Permission } from '@server/lib/permissions';
-import { getSettings } from '@server/lib/settings';
+import { defaultPlexDefaultAccess, getSettings } from '@server/lib/settings';
 import { updatePerson } from '@server/lib/userAccess';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
 import authRoutes from '@server/routes/auth';
@@ -92,6 +92,7 @@ beforeEach(async () => {
     komga: {},
     emailPasswords: false,
     oidc: { enabled: false, clients: [] },
+    plexDefault: defaultPlexDefaultAccess(),
   };
 
   const admin = await loginAs('admin@seerr.dev');

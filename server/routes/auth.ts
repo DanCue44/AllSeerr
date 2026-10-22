@@ -14,6 +14,7 @@ import {
   hasRedeemedInvite,
   redeemInvite,
 } from '@server/lib/userAccess/invites';
+import { grantPlexDefaults } from '@server/lib/userAccess/plexDefaults';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { checkAvatarChanged } from '@server/routes/avatarproxy';
@@ -217,6 +218,7 @@ authRoutes.post('/plex', async (req, res, next) => {
           });
 
           await userRepository.save(user);
+          await grantPlexDefaults(user.id);
         }
       } else {
         logger.warn(

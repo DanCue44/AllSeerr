@@ -1,4 +1,7 @@
-import type { UserAccessApp } from '@server/constants/userAccess';
+import type {
+  UserAccessApp,
+  UserAppAccountGrant,
+} from '@server/constants/userAccess';
 import { UserAppAccountStatus } from '@server/constants/userAccess';
 import { DbAwareColumn } from '@server/utils/DbColumnHelper';
 import {
@@ -42,6 +45,12 @@ export class UserAppAccount {
 
   @Column({ type: 'varchar', nullable: true })
   public remoteUsername?: string | null;
+
+  // admin for a choice made for this person, plex for the default access
+  // given to everyone with access to the Plex server. Older rows have none
+  // and count as an admin's choice.
+  @Column({ type: 'varchar', nullable: true })
+  public grantedBy?: UserAppAccountGrant | null;
 
   @Column({ type: 'varchar', default: UserAppAccountStatus.NONE })
   public status: UserAppAccountStatus;

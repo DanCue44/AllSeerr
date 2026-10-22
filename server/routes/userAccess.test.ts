@@ -5,7 +5,7 @@ import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import { UserAppAccount } from '@server/entity/UserAppAccount';
 import { Permission } from '@server/lib/permissions';
-import { getSettings } from '@server/lib/settings';
+import { defaultPlexDefaultAccess, getSettings } from '@server/lib/settings';
 import { appUsernameFor, generateAppPassword } from '@server/lib/userAccess';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
 import authRoutes from '@server/routes/auth';
@@ -91,6 +91,7 @@ beforeEach(() => {
     komga: { url: komga.url, apiKey: 'komga-key' },
     emailPasswords: true,
     oidc: { enabled: false, clients: [] },
+    plexDefault: defaultPlexDefaultAccess(),
   };
 });
 

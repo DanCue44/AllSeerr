@@ -19,6 +19,7 @@ import type {
 } from '@server/interfaces/api/userInterfaces';
 import { Permission, hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { grantPlexDefaults } from '@server/lib/userAccess/plexDefaults';
 import {
   getPlexUserWatchlist,
   hasLocalMovieOrSeriesWatchlist,
@@ -717,6 +718,10 @@ router.post(
             }
           }
         }
+      }
+
+      if (createdUsers.length) {
+        await grantPlexDefaults(createdUsers.map((user) => user.id));
       }
 
       return res.status(201).json({

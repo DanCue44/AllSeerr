@@ -8,7 +8,7 @@ import { AccessInvite } from '@server/entity/AccessInvite';
 import { User } from '@server/entity/User';
 import { UserAccessProfile } from '@server/entity/UserAccessProfile';
 import { Permission } from '@server/lib/permissions';
-import { getSettings } from '@server/lib/settings';
+import { defaultPlexDefaultAccess, getSettings } from '@server/lib/settings';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
 import authRoutes from '@server/routes/auth';
 import userAccessRoutes from '@server/routes/userAccess';
@@ -91,6 +91,7 @@ beforeEach(() => {
     komga: {},
     emailPasswords: true,
     oidc: { enabled: false, clients: [] },
+    plexDefault: defaultPlexDefaultAccess(),
   };
 });
 

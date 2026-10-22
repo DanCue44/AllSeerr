@@ -24,6 +24,15 @@ export enum UserAppAccountStatus {
   ERROR = 'error',
 }
 
+/**
+ * Who gave a person an app: an admin, on purpose, or the default access for
+ * everyone with access to the Plex server. Explicit choices always win.
+ */
+export enum UserAppAccountGrant {
+  ADMIN = 'admin',
+  PLEX = 'plex',
+}
+
 // How long an invite link can be used, unless the admin picks another time
 export const DEFAULT_INVITE_DAYS = 7;
 export const MAX_INVITE_DAYS = 90;

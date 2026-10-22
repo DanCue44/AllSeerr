@@ -5,9 +5,13 @@ import {
   USER_ACCESS_APP_NAMES,
   isUserAccessApp,
 } from '@server/constants/userAccess';
+import { getRepository } from '@server/datasource';
+import { User } from '@server/entity/User';
 import type {
   OidcClientResponse,
   OidcSettingsResponse,
+  PlexDefaultAccessResponse,
+  PlexDefaultChange,
   UserAccessAppConnectionResponse,
   UserAccessSettingsResponse,
 } from '@server/interfaces/api/userAccessInterfaces';
@@ -16,11 +20,18 @@ import { OIDC_APPS, isOidcApp } from '@server/lib/oidc/claims';
 import { getOidcIssuer, resetOidcProvider } from '@server/lib/oidc/provider';
 import type {
   OidcClientSettings,
+  PlexDefaultAccessSettings,
   UserAccessAppConnection,
   UserAccessSettings,
 } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
-import { getAppClient, getAppPublicUrl } from '@server/lib/userAccess';
+import {
+  getAppClient,
+  getAppPublicUrl,
+  syncPerson,
+} from '@server/lib/userAccess';
+import { isAgeLimit, isRestricted } from '@server/lib/userAccess/ageLimits';
+import { applyPlexDefaults } from '@server/lib/userAccess/plexDefaults';
 import logger from '@server/logger';
 import { randomBytes } from 'crypto';
 import { Router } from 'express';
@@ -134,6 +145,143 @@ userAccessSettingsRoutes.post<
 
   return res.status(200).json(maskUserAccessSettings(settings.userAccess));
 });
+
+const toPlexDefaultResponse = (
+  defaults: PlexDefaultAccessSettings
+): PlexDefaultAccessResponse => ({
+  enabled: defaults.enabled,
+  apps: Object.fromEntries(
+    USER_ACCESS_APPS.map((app) => [
+      app,
+      {
+        enabled: !!defaults.apps[app]?.enabled,
+        libraryIds: defaults.apps[app]?.libraryIds ?? null,
+      },
+    ])
+  ) as PlexDefaultAccessResponse['apps'],
+  ageLimit: isAgeLimit(defaults.ageLimit) ? defaults.ageLimit : null,
+  includeUnrated: defaults.includeUnrated,
+});
+
+/**
+ * The apps everyone with access to the Plex server gets
+ */
+userAccessSettingsRoutes.get<never, PlexDefaultAccessResponse>(
+  '/plex-default',
+  (_req, res) => {
+    res
+      .status(200)
+      .json(toPlexDefaultResponse(getSettings().userAccess.plexDefault));
+  }
+);
+
+userAccessSettingsRoutes.post<
+  never,
+  PlexDefaultAccessResponse,
+  Partial<PlexDefaultAccessResponse>
+>('/plex-default', async (req, res, next) => {
+  const settings = getSettings();
+  const current = settings.userAccess.plexDefault;
+  const body = req.body ?? {};
+
+  if (body.ageLimit != null && !isAgeLimit(body.ageLimit)) {
+    return next({ status: 400, message: 'Invalid age limit.' });
+  }
+
+  const apps = { ...current.apps };
+
+  for (const app of USER_ACCESS_APPS) {
+    const incoming = body.apps?.[app];
+
+    if (!incoming) {
+      continue;
+    }
+
+    if (
+      incoming.libraryIds != null &&
+      (!Array.isArray(incoming.libraryIds) ||
+        incoming.libraryIds.some((id) => typeof id !== 'string'))
+    ) {
+      return next({ status: 400, message: 'Invalid library list.' });
+    }
+
+    apps[app] = {
+      enabled:
+        typeof incoming.enabled === 'boolean'
+          ? incoming.enabled
+          : apps[app].enabled,
+      libraryIds:
+        incoming.libraryIds !== undefined
+          ? incoming.libraryIds?.length
+            ? incoming.libraryIds
+            : null
+          : apps[app].libraryIds,
+    };
+  }
+
+  settings.userAccess = {
+    ...settings.userAccess,
+    plexDefault: {
+      enabled:
+        typeof body.enabled === 'boolean' ? body.enabled : current.enabled,
+      apps,
+      ageLimit:
+        body.ageLimit !== undefined
+          ? isRestricted(body.ageLimit)
+            ? body.ageLimit
+            : null
+          : current.ageLimit,
+      includeUnrated:
+        typeof body.includeUnrated === 'boolean'
+          ? body.includeUnrated
+          : current.includeUnrated,
+    },
+  };
+
+  await settings.save();
+
+  return res
+    .status(200)
+    .json(toPlexDefaultResponse(settings.userAccess.plexDefault));
+});
+
+/**
+ * Runs the default access for Plex users once and says what changed
+ */
+userAccessSettingsRoutes.post<never, { changes: PlexDefaultChange[] }>(
+  '/plex-default/apply',
+  async (_req, res, next) => {
+    if (!getSettings().userAccess.plexDefault.enabled) {
+      return next({
+        status: 400,
+        message: 'Turn on default access for Plex users first.',
+      });
+    }
+
+    try {
+      const changes = await applyPlexDefaults();
+      const changedUserIds = [...new Set(changes.map((c) => c.userId))];
+
+      for (const userId of changedUserIds) {
+        const user = await getRepository(User).findOne({
+          where: { id: userId },
+        });
+
+        if (user) {
+          await syncPerson(user, { create: false });
+        }
+      }
+
+      return res.status(200).json({ changes });
+    } catch (e) {
+      logger.error('Could not apply default access for Plex users', {
+        label: 'User Access',
+        errorMessage: (e as Error).message,
+      });
+      return next({ status: 500, message: (e as Error).message });
+    }
+  }
+);
 
 /**
  * Checks an app's address and admin credentials, with the saved ones where

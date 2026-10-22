@@ -956,6 +956,51 @@ components:
         emailPasswords:
           type: boolean
           description: Emails new app passwords to people when email notifications are set up
+    PlexDefaultApp:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        libraryIds:
+          type: array
+          nullable: true
+          description: Libraries given by default, null for all of them
+          items:
+            type: string
+    PlexDefaultAccess:
+      type: object
+      description: The apps everyone with access to the Plex server gets. A choice made for one person always wins over it.
+      properties:
+        enabled:
+          type: boolean
+        apps:
+          type: object
+          properties:
+            audiobookshelf:
+              $ref: '#/components/schemas/PlexDefaultApp'
+            kavita:
+              $ref: '#/components/schemas/PlexDefaultApp'
+            komga:
+              $ref: '#/components/schemas/PlexDefaultApp'
+        ageLimit:
+          type: string
+          nullable: true
+          enum: [none, teen, tween, kids, null]
+        includeUnrated:
+          type: boolean
+    PlexDefaultChange:
+      type: object
+      properties:
+        userId:
+          type: number
+        displayName:
+          type: string
+        app:
+          type: string
+          enum: [audiobookshelf, kavita, komga]
+        change:
+          type: string
+          enum: [granted, removed]
     UserAccessAppLibrary:
       type: object
       properties:
@@ -1006,6 +1051,11 @@ components:
         syncedAt:
           type: string
           nullable: true
+        grantedBy:
+          type: string
+          nullable: true
+          enum: [admin, plex, null]
+          description: admin for a choice made for this person, plex for the default access given to everyone with access to the Plex server
     UserAccessPerson:
       type: object
       properties:
@@ -5560,6 +5610,58 @@ paths:
                 $ref: '#/components/schemas/UserAccessSettings'
         '400':
           description: An address is not an http or https address
+  /settings/user-access/plex-default:
+    get:
+      summary: Get the default access for Plex users
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlexDefaultAccess'
+    post:
+      summary: Update the default access for Plex users
+      description: Fields left out keep their saved value.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlexDefaultAccess'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlexDefaultAccess'
+        '400':
+          description: An invalid age limit or library list
+  /settings/user-access/plex-default/apply:
+    post:
+      summary: Apply the default access for Plex users now
+      description: Gives the default apps to everyone with access to the Plex server and takes them back from people who lost it, then says what changed. A choice made for one person is left alone.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: What changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PlexDefaultChange'
+        '400':
+          description: Default access for Plex users is turned off
   /settings/user-access/oidc:
     get:
       summary: Get the sign in with Allseerr settings

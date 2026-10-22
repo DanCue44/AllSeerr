@@ -123,6 +123,33 @@ export interface OidcClientSettings {
   enabled: boolean;
 }
 
+/**
+ * The apps everyone with access to the Plex server gets without being picked
+ * one by one. A choice made for one person always wins over it.
+ */
+export interface PlexDefaultAccessSettings {
+  enabled: boolean;
+  apps: {
+    audiobookshelf: { enabled: boolean; libraryIds: string[] | null };
+    kavita: { enabled: boolean; libraryIds: string[] | null };
+    komga: { enabled: boolean; libraryIds: string[] | null };
+  };
+  // none (null) means no age limit
+  ageLimit: string | null;
+  includeUnrated: boolean;
+}
+
+export const defaultPlexDefaultAccess = (): PlexDefaultAccessSettings => ({
+  enabled: false,
+  apps: {
+    audiobookshelf: { enabled: true, libraryIds: null },
+    kavita: { enabled: true, libraryIds: null },
+    komga: { enabled: true, libraryIds: null },
+  },
+  ageLimit: null,
+  includeUnrated: false,
+});
+
 export interface UserAccessSettings {
   audiobookshelf: UserAccessAppConnection;
   kavita: UserAccessAppConnection;
@@ -133,6 +160,7 @@ export interface UserAccessSettings {
     enabled: boolean;
     clients: OidcClientSettings[];
   };
+  plexDefault: PlexDefaultAccessSettings;
 }
 
 export interface AudiobookshelfSettings {
@@ -723,6 +751,7 @@ class Settings {
           enabled: false,
           clients: [],
         },
+        plexDefault: defaultPlexDefaultAccess(),
       },
       metadataSettings: {
         tv: MetadataProviderType.TMDB,
@@ -1008,6 +1037,7 @@ class Settings {
         komga: {},
         emailPasswords: true,
         oidc: { enabled: false, clients: [] },
+        plexDefault: defaultPlexDefaultAccess(),
       },
       this.data.userAccess ?? {}
     );
