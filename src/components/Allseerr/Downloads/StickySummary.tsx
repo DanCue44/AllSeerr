@@ -137,7 +137,7 @@ const StickySummary = ({
             ))}
           </div>
           {actions && (
-            <div className="ml-auto flex flex-none items-center gap-1.5">
+            <div className="flex w-full flex-none items-center justify-center gap-1.5 sm:ml-auto sm:w-auto">
               {actions}
             </div>
           )}
