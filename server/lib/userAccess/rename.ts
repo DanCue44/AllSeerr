@@ -240,6 +240,18 @@ export const renameToPlexUsername = async ({
     remoteUsername: targetName,
   });
 
+  // The connection signs in with the account's name, so it follows it
+  const settings = getSettings();
+  const connection = settings.userAccess[account.app];
+
+  if (connection.username?.trim().toLowerCase() === from.toLowerCase()) {
+    settings.userAccess = {
+      ...settings.userAccess,
+      [account.app]: { ...connection, username: targetName },
+    };
+    await settings.save();
+  }
+
   // Keys belong to the account, so they keep working; one that stopped is
   // forgotten, and NoBookEnds gets a new one when it next connects
   if (keyStillWorks) {

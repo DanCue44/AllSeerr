@@ -916,6 +916,36 @@ describe('app usernames that match Plex', () => {
     assert.equal(abs.users.find((u) => u.id === 'root')?.username, 'admin');
   });
 
+  it('keeps the connection signing in after its own account is renamed', async (t) => {
+    const owner = kavita.members[0];
+    const original = { ...owner };
+    t.after(() => Object.assign(owner, original));
+    owner.username = 'oldname';
+    owner.password = 'owner-pass';
+    owner.roles = ['Admin', 'Login'];
+    const settings = getSettings();
+    settings.userAccess = {
+      ...settings.userAccess,
+      kavita: { url: kavita.url, username: 'oldname', password: 'owner-pass' },
+    };
+    const agent = await loginAs('admin@seerr.dev');
+
+    await agent
+      .post(`/user-access/apps/kavita/accounts/${owner.id}/service`)
+      .send({ service: false })
+      .expect(200);
+    await agent
+      .post(
+        `/user-access/people/${await userIdOf('admin@seerr.dev')}/apps/kavita/link`
+      )
+      .send({ remoteUserId: String(owner.id) })
+      .expect(200);
+
+    assert.equal(owner.username, 'admin');
+    assert.equal(getSettings().userAccess.kavita.username, 'admin');
+    await agent.get('/user-access/apps/kavita/accounts').expect(200);
+  });
+
   it('leaves Komga, which signs people in by email, alone', async () => {
     komga.users.push({
       id: 'komga-old',
