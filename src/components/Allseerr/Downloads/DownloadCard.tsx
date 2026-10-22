@@ -645,7 +645,7 @@ const DownloadCard = ({
             className={`relative flex-none overflow-hidden rounded-[10px] bg-as-tile shadow-lg shadow-black/40 ${
               square
                 ? 'h-[120px] w-[120px] self-center'
-                : 'min-h-[150px] w-[104px] self-stretch sm:w-[128px]'
+                : 'aspect-[2/3] w-[104px] self-center sm:w-[128px]'
             }`}
           >
             <PosterImage src={posterSrc} />
