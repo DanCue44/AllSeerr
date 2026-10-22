@@ -4,6 +4,7 @@ import AppConnections from '@app/components/Settings/SettingsUserAccess/AppConne
 import Invites from '@app/components/Settings/SettingsUserAccess/Invites';
 import People from '@app/components/Settings/SettingsUserAccess/People';
 import PlexDefaultAccess from '@app/components/Settings/SettingsUserAccess/PlexDefaultAccess';
+import ReadingAppChoices from '@app/components/Settings/SettingsUserAccess/ReadingAppChoices';
 import SignInWithAllseerr from '@app/components/Settings/SettingsUserAccess/SignInWithAllseerr';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -59,6 +60,7 @@ const SettingsUserAccess = () => {
       />
       <PlexDefaultAccess apps={apps} />
       <People apps={apps} />
+      <ReadingAppChoices />
       <Invites apps={apps} />
       <SignInWithAllseerr />
     </>

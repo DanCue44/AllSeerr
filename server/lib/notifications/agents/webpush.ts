@@ -206,6 +206,7 @@ class WebPushAgent
       case Notification.SEASON_ROLLOVER_PENDING:
       case Notification.SCAN_FAILURE:
       case Notification.DOWNLOAD_NEEDS_ATTENTION:
+      case Notification.ACCESS_REQUESTED:
         message = payload.message;
         break;
       default:
@@ -217,7 +218,9 @@ class WebPushAgent
 
     const appActionUrl = payload.issue
       ? `/issues/${payload.issue.id}`
-      : payload.media || type === Notification.SCAN_FAILURE
+      : payload.media ||
+          type === Notification.SCAN_FAILURE ||
+          type === Notification.ACCESS_REQUESTED
         ? getPayloadPath(payload) || undefined
         : undefined;
     const actionUrl = appActionUrl ?? payload.externalLink?.url;
@@ -226,7 +229,8 @@ class WebPushAgent
       ? intl.formatMessage(
           payload.issue
             ? messages.viewIssue
-            : type === Notification.SCAN_FAILURE
+            : type === Notification.SCAN_FAILURE ||
+                type === Notification.ACCESS_REQUESTED
               ? messages.viewSettings
               : messages.viewMedia
         )

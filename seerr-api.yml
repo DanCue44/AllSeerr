@@ -50,6 +50,8 @@ tags:
       - `POST /issue` with `bookFormat` to report a problem with a format
       - `GET /discover/books` and `GET /discover/books/upcoming` for discovery
 
+      For reading apps, any user (also one who cannot request) can use `GET /nobookends/reading-apps`, `POST /nobookends/reading-apps/{app}/connect` and `POST /nobookends/reading-apps/{app}/request-access`.
+
       For users who may manage requests (`downloads.canManage` in the status), it also uses:
 
       - `GET /nobookends/attention` for book downloads Chaptarr is stuck on, and `POST /nobookends/attention/{key}/dismiss` to remove one and search again
@@ -1056,6 +1058,10 @@ components:
           nullable: true
           enum: [admin, plex, null]
           description: admin for a choice made for this person, plex for the default access given to everyone with access to the Plex server
+        accessRequestedAt:
+          type: string
+          nullable: true
+          description: When the person asked for access from their Reading apps settings, until an admin turns the app on or off
     UserAccessPerson:
       type: object
       properties:
@@ -1097,6 +1103,86 @@ components:
           type: string
         emailed:
           type: boolean
+    ReadingAppChoices:
+      type: object
+      description: The app each kind of book is read or heard in
+      properties:
+        audiobook:
+          type: string
+          enum: [audiobookshelf]
+        ebook:
+          type: string
+          enum: [audiobookshelf, kavita]
+        comic:
+          type: string
+          enum: [kavita, komga]
+    ReadingAppState:
+      type: string
+      enum: [ready, available, notGranted, requested, error]
+      description: |
+        Where the person stands in the app:
+
+        - `ready`: they have an account, shown with its `username`
+        - `available`: an admin or the default for Plex users gave them the app, but there is no account yet
+        - `notGranted`: they do not have access
+        - `requested`: they asked an admin for access
+        - `error`: the account could not be made, setting it up again tries once more
+    ReadingAppStatus:
+      type: object
+      properties:
+        app:
+          type: string
+          enum: [audiobookshelf, kavita, komga]
+        name:
+          type: string
+          example: Kavita
+        purpose:
+          type: string
+          example: Comics and manga
+        kinds:
+          type: array
+          description: The kinds of books the admin picked this app for
+          items:
+            type: string
+            enum: [audiobook, ebook, comic]
+        state:
+          $ref: '#/components/schemas/ReadingAppState'
+        username:
+          type: string
+          description: The person's username in the app, once it is ready
+        publicUrl:
+          type: string
+          example: https://kavita.example.com
+        message:
+          type: string
+          description: The state in plain words
+        signInWithAllseerr:
+          type: boolean
+          description: Whether the app offers "Sign in with Allseerr"
+    NoBookEndsReadingApp:
+      type: object
+      required: [app, name, purpose, state]
+      properties:
+        app:
+          type: string
+          enum: [audiobookshelf, kavita, komga]
+        name:
+          type: string
+          example: Audiobookshelf
+        purpose:
+          type: string
+          example: Audiobooks and ebooks
+        state:
+          $ref: '#/components/schemas/ReadingAppState'
+        username:
+          type: string
+          description: Only while `ready`
+        publicUrl:
+          type: string
+          example: https://abs.example.com
+        message:
+          type: string
+          example: You have access to Audiobookshelf. Set up your account to start.
     UserAccessInvite:
       type: object
       properties:
@@ -5642,6 +5728,40 @@ paths:
                 $ref: '#/components/schemas/PlexDefaultAccess'
         '400':
           description: An invalid age limit or library list
+  /settings/user-access/reading-apps:
+    get:
+      summary: Get the app each kind of book is read or heard in
+      tags:
+        - settings
+        - user-access
+      responses:
+        '200':
+          description: The choices
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingAppChoices'
+    post:
+      summary: Pick the app each kind of book is read or heard in
+      description: Audiobooks are always Audiobookshelf, ebooks Audiobookshelf or Kavita, comics and manga Kavita or Komga.
+      tags:
+        - settings
+        - user-access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadingAppChoices'
+      responses:
+        '200':
+          description: The saved choices
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingAppChoices'
+        '400':
+          description: An app that cannot serve the kind
   /settings/user-access/plex-default/apply:
     post:
       summary: Apply the default access for Plex users now
@@ -9437,6 +9557,135 @@ paths:
       responses:
         '204':
           description: Personal API key revoked
+  /user/{userId}/settings/apps:
+    get:
+      summary: Get the user's reading apps
+      description: |
+        The reading apps Allseerr manages accounts in (Audiobookshelf, Kavita and Komga, when connected) and where the user stands in each. Every signed in user can use it, also without permission to request. Requires `MANAGE_USERS` permission if viewing other users. Passwords and keys are never returned.
+      tags:
+        - users
+        - user-access
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: The reading apps
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReadingAppStatus'
+                  readingApps:
+                    $ref: '#/components/schemas/ReadingAppChoices'
+        '403':
+          description: Another user's apps, without `MANAGE_USERS`
+  /user/{userId}/settings/apps/{app}/setup:
+    post:
+      summary: Set up the user's account in a reading app
+      description: |
+        Makes or links the user's account in an app an admin or the default for Plex users gave them. It never gives access. The password of a new account is returned once, and emailed when Allseerr emails app passwords. At most 10 tries per app in 15 minutes.
+      tags:
+        - users
+        - user-access
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      responses:
+        '200':
+          description: The app's new state. When the app could not make the account, the state is `error`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  app:
+                    $ref: '#/components/schemas/ReadingAppStatus'
+                  password:
+                    $ref: '#/components/schemas/UserAccessNewPassword'
+        '403':
+          description: The user does not have access to the app
+        '404':
+          description: The app is not connected
+        '429':
+          description: Too many tries
+  /user/{userId}/settings/apps/{app}/password:
+    post:
+      summary: Give the user a new password in a reading app
+      description: Replaces the password of the user's ready account and returns it once. An app admin's account is left alone. At most 10 tries per app in 15 minutes.
+      tags:
+        - users
+        - user-access
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      responses:
+        '200':
+          description: The new password, shown once
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccessNewPassword'
+        '403':
+          description: The user does not have access to the app
+        '409':
+          description: The account is not set up yet, is an app admin, or the app could not change the password
+        '429':
+          description: Too many tries
+  /user/{userId}/settings/apps/{app}/request-access:
+    post:
+      summary: Ask the admins for access to a reading app
+      description: Notifies the admins who manage users (Reading App Access Requests notifications) and shows the ask in the User Access people list. Asking again does not notify again. It gives nothing by itself.
+      tags:
+        - users
+        - user-access
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      responses:
+        '200':
+          description: The app's state, `requested` unless the user already has access
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  app:
+                    $ref: '#/components/schemas/ReadingAppStatus'
   /user/{userId}/settings/nobookends:
     get:
       summary: Get NoBookEnds connection status
@@ -12127,6 +12376,120 @@ paths:
           description: The download is no longer stuck, or its Chaptarr server is not set up
         '502':
           description: Chaptarr returned an error
+  /nobookends/reading-apps:
+    get:
+      summary: Get the user's reading apps for NoBookEnds
+      description: The same states as the user's Reading apps settings. Works with the personal key from the connect link and needs no request permission, so people who can only read and listen can use it.
+      tags:
+        - nobookends
+      responses:
+        '200':
+          description: The reading apps
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apps]
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NoBookEndsReadingApp'
+        '403':
+          description: Not signed in
+  /nobookends/reading-apps/{app}/connect:
+    post:
+      summary: Sign NoBookEnds in to a reading app
+      description: |
+        For the key's user: sets up their account when an admin or the default for Plex users gave them the app (it never gives access), then answers with what NoBookEnds signs in with, without a password where the app allows it:
+
+        - Audiobookshelf 2.26 and later: `token`, an Audiobookshelf API key named "NoBookEnds (via Allseerr)" made for the user. Send it as `Authorization: Bearer {token}`.
+        - Kavita: `apiKey`, a Kavita auth key named "NoBookEnds (via Allseerr)" on the user's account, for `POST /api/Plugin/authenticate?apiKey=...` or OPDS. Kavita only lets people make their own keys, so for an account Allseerr did not just make, Allseerr gives it a new password first and returns it.
+        - Komga and older Audiobookshelf: `password`, a new password.
+
+        Each device gets the same key while it works; one that stopped working is replaced. `password` is only present when Allseerr just made or changed the password; show it to the user once. An app admin's password is never changed. At most 10 tries per app in 15 minutes.
+      tags:
+        - nobookends
+      parameters:
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      responses:
+        '200':
+          description: How to sign in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [app, serverUrl, username]
+                properties:
+                  app:
+                    type: string
+                    enum: [audiobookshelf, kavita, komga]
+                  serverUrl:
+                    type: string
+                    description: The app's public address
+                    example: https://abs.example.com
+                  username:
+                    type: string
+                    example: reader
+                  token:
+                    type: string
+                    description: Audiobookshelf API key
+                  apiKey:
+                    type: string
+                    description: Kavita auth key
+                  password:
+                    type: string
+                    description: A password Allseerr just made or changed, shown once
+        '403':
+          description: The user does not have access to the app
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: The app is not connected
+        '409':
+          description: The account cannot be set up or signed in to right now, or it is an app admin account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '429':
+          description: Too many tries
+  /nobookends/reading-apps/{app}/request-access:
+    post:
+      summary: Ask the admins for access to a reading app
+      description: Like asking from the Reading apps settings. Asking again does not notify the admins again.
+      tags:
+        - nobookends
+      parameters:
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      responses:
+        '200':
+          description: The app's state, `requested` unless the user already has access
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  state:
+                    $ref: '#/components/schemas/ReadingAppState'
   /nobookends/item/{absItemId}:
     get:
       summary: Get the book of an Audiobookshelf item

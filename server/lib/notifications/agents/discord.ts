@@ -202,7 +202,7 @@ class DiscordAgent
     const url = applicationUrl
       ? payload.issue
         ? `${applicationUrl}/issues/${payload.issue.id}`
-        : payload.media
+        : payload.media || type === Notification.ACCESS_REQUESTED
           ? `${applicationUrl}${getPayloadPath(payload)}`
           : payload.externalLink?.url
       : payload.externalLink?.url;

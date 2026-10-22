@@ -21,6 +21,7 @@ const messages = defineMessages('components.UserProfile.UserSettings', {
   menuLinkedAccounts: 'Linked Accounts',
   menuApiKey: 'API Key',
   menuNoBookEnds: 'NoBookEnds',
+  menuReadingApps: 'Reading apps',
   menuNotifications: 'Notifications',
   menuPermissions: 'Permissions',
   unauthorizedDescription:
@@ -75,6 +76,13 @@ const UserSettings = ({ children }: UserSettingsProps) => {
       text: intl.formatMessage(messages.menuApiKey),
       route: '/settings/api-key',
       regex: /\/settings\/api-key/,
+    },
+    {
+      text: intl.formatMessage(messages.menuReadingApps),
+      route: '/settings/apps',
+      regex: /\/settings\/apps/,
+      // Everyone sees it, also people who cannot request
+      hidden: !settings.currentSettings.readingAppsEnabled,
     },
     {
       text: intl.formatMessage(messages.menuNoBookEnds),

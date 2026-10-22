@@ -1,3 +1,4 @@
+import { isUserAccessApp } from '@server/constants/userAccess';
 import { ArrActionError } from '@server/lib/arrActions';
 import { getNoBookEndsStatus } from '@server/lib/nobookends';
 import {
@@ -9,6 +10,13 @@ import {
   withNoBookEndsRecordings,
 } from '@server/lib/nobookendsItem';
 import { Permission } from '@server/lib/permissions';
+import {
+  ReadingAppError,
+  connectNoBookEnds,
+  getReadingApps,
+  isTooManyAttempts,
+  requestReadingAppAccess,
+} from '@server/lib/userAccess/readingApps';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -138,6 +146,103 @@ nobookendsRoutes.get<{ absItemId: string }>(
         errorMessage: e.message,
       });
       return next({ status: 500, message: 'Unable to find the book.' });
+    }
+  }
+);
+
+/**
+ * The reading apps the signed in user can use and where they stand in each,
+ * like their Reading apps settings. Needs no request permission, people who
+ * can only read and listen use it too.
+ */
+nobookendsRoutes.get('/reading-apps', async (req, res, next) => {
+  if (!req.user) {
+    return next({ status: 403, message: 'Not signed in.' });
+  }
+
+  const apps = await getReadingApps(req.user);
+
+  return res.status(200).json({
+    apps: apps.map(
+      ({ app, name, purpose, state, username, publicUrl, message }) => ({
+        app,
+        name,
+        purpose,
+        state,
+        ...(username ? { username } : {}),
+        ...(publicUrl ? { publicUrl } : {}),
+        ...(message ? { message } : {}),
+      })
+    ),
+  });
+});
+
+const readingAppError = (e: unknown, app: string) => {
+  if (e instanceof ReadingAppError) {
+    return { status: e.status, message: e.message };
+  }
+
+  logger.error('Failed to connect NoBookEnds to a reading app', {
+    label: 'NoBookEnds',
+    app,
+    errorMessage: (e as Error).message,
+  });
+  return { status: 500, message: 'Something went wrong. Try again.' };
+};
+
+/**
+ * Signs NoBookEnds in to a reading app as the user: sets their account up
+ * when an admin or the default for Plex users gave them the app (never
+ * gives access), then answers with a key to sign in with, or a password
+ * shown once where the app has no keys
+ */
+nobookendsRoutes.post<{ app: string }>(
+  '/reading-apps/:app/connect',
+  async (req, res, next) => {
+    const { app } = req.params;
+
+    if (!req.user) {
+      return next({ status: 403, message: 'Not signed in.' });
+    }
+    if (!isUserAccessApp(app)) {
+      return next({ status: 404, message: 'Unknown app.' });
+    }
+    if (isTooManyAttempts(`connect:${req.user.id}:${app}`)) {
+      return next({
+        status: 429,
+        message: 'Too many tries. Wait a few minutes and try again.',
+      });
+    }
+
+    try {
+      return res.status(200).json(await connectNoBookEnds(req.user, app));
+    } catch (e) {
+      return next(readingAppError(e, app));
+    }
+  }
+);
+
+/**
+ * Asks the admins for access to a reading app
+ */
+nobookendsRoutes.post<{ app: string }>(
+  '/reading-apps/:app/request-access',
+  async (req, res, next) => {
+    const { app } = req.params;
+
+    if (!req.user) {
+      return next({ status: 403, message: 'Not signed in.' });
+    }
+    if (!isUserAccessApp(app)) {
+      return next({ status: 404, message: 'Unknown app.' });
+    }
+
+    try {
+      const status = await requestReadingAppAccess(req.user, app);
+
+      return res.status(200).json({ state: status.state });
+    } catch (e) {
+      return next(readingAppError(e, app));
     }
   }
 );

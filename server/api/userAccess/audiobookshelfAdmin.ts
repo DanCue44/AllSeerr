@@ -1,9 +1,12 @@
 import { allowsExplicitContent } from '@server/lib/userAccess/ageLimits';
 import type { AxiosInstance } from 'axios';
+import { isAxiosError } from 'axios';
+import semver from 'semver';
 import type {
   AppAccess,
   AppConnectionInfo,
   AppLibrary,
+  AppUserKey,
   NewAppAccount,
   RemoteAccount,
   UserAccessAppClient,
@@ -41,6 +44,9 @@ export const absPermissions = (access: AppAccess) => ({
   librariesAccessible: access.libraryIds ?? [],
   itemTagsSelected: [],
 });
+
+// API keys made by an admin for another account came with 2.26
+export const ABS_API_KEYS_VERSION = '2.26.0';
 
 /**
  * Audiobookshelf accounts, through an admin's API key
@@ -165,6 +171,12 @@ export class AudiobookshelfAdminAPI implements UserAccessAppClient {
     );
   }
 
+  public async isAppAdmin(account: RemoteAccount): Promise<boolean> {
+    const user = (await this.getUsers()).find((u) => u.id === account.id);
+
+    return user?.type === 'admin' || user?.type === 'root';
+  }
+
   public async setPassword(
     account: RemoteAccount,
     password: string
@@ -180,5 +192,75 @@ export class AudiobookshelfAdminAPI implements UserAccessAppClient {
     await this.call(() =>
       this.axios.delete(`/api/users/${encodeURIComponent(account.id)}`)
     );
+  }
+
+  private async serverVersion(): Promise<string | undefined> {
+    const status = await this.call(() =>
+      this.axios.get<{ serverVersion?: string }>('/status')
+    );
+
+    return status?.serverVersion;
+  }
+
+  /**
+   * An API key that acts as the person, made with the admin's key. Older
+   * Audiobookshelf has no API keys.
+   */
+  public async createUserKey(
+    account: RemoteAccount,
+    name: string
+  ): Promise<AppUserKey | null> {
+    const version = semver.coerce(await this.serverVersion());
+
+    if (!version || semver.lt(version, ABS_API_KEYS_VERSION)) {
+      return null;
+    }
+
+    const data = await this.call(() =>
+      this.axios.post<{ apiKey?: { id?: string; apiKey?: string } }>(
+        '/api/api-keys',
+        { name, userId: account.id, isActive: true }
+      )
+    );
+
+    if (!data.apiKey?.id || !data.apiKey.apiKey) {
+      throw new UserAccessAppError(
+        'Audiobookshelf did not return the new API key.'
+      );
+    }
+
+    return { id: data.apiKey.id, key: data.apiKey.apiKey };
+  }
+
+  public async isUserKeyValid(
+    account: RemoteAccount,
+    key: string
+  ): Promise<boolean> {
+    try {
+      const response = await this.axios.get<{ id?: string }>('/api/me', {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+
+      return response.data?.id === account.id;
+    } catch (e) {
+      const status = isAxiosError(e) ? e.response?.status : undefined;
+
+      if (status === 401 || status === 403 || status === 404) {
+        return false;
+      }
+      throw new UserAccessAppError(describeAppError('Audiobookshelf', e));
+    }
+  }
+
+  public async deleteUserKey(keyId: string): Promise<void> {
+    try {
+      await this.axios.delete(`/api/api-keys/${encodeURIComponent(keyId)}`);
+    } catch (e) {
+      // A key removed in Audiobookshelf is already gone
+      if (isAxiosError(e) && e.response?.status === 404) {
+        return;
+      }
+      throw new UserAccessAppError(describeAppError('Audiobookshelf', e));
+    }
   }
 }

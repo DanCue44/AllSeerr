@@ -56,6 +56,8 @@ export interface PublicSettingsResponse {
   // Whether Bazarr is set up, so subtitles can be checked and requested
   subtitlesEnabled: boolean;
   audiobookshelfEnabled: boolean;
+  // Whether Allseerr manages accounts in any reading app
+  readingAppsEnabled: boolean;
   originalLanguage: string;
   mediaServerType: number;
   partialRequestsEnabled: boolean;

@@ -11,13 +11,17 @@ import {
   ageLimitMessage,
   commonMessages,
 } from '@app/components/Settings/SettingsUserAccess/common';
+import useToasts from '@app/hooks/useToasts';
 import defineMessages from '@app/utils/defineMessages';
-import { PencilIcon } from '@heroicons/react/24/solid';
+import { CheckIcon, PencilIcon } from '@heroicons/react/24/solid';
+import type { UserAccessApp } from '@server/constants/userAccess';
 import type {
   NewPasswords,
   PersonAccess,
+  PersonUpdateResult,
   UserAccessAppInfo,
 } from '@server/interfaces/api/userAccessInterfaces';
+import axios from 'axios';
 import { useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
@@ -32,6 +36,11 @@ const messages = defineMessages(
     ageLimit: 'Age limit',
     edit: 'Edit',
     admin: 'Admin',
+    asked: 'Asked for access',
+    grant: 'Grant',
+    askedCount:
+      '{count, plural, one {# person asked} other {# people asked}} for access to an app. Grant it below, or open Edit to choose libraries first.',
+    grantError: 'Something went wrong while granting access.',
   }
 );
 
@@ -49,10 +58,41 @@ const People = ({ apps }: PeopleProps) => {
     name: string;
     passwords: NewPasswords;
   } | null>(null);
+  const [granting, setGranting] = useState<string | null>(null);
+  const { addToast } = useToasts();
+
+  // Gives one app to a person who asked for it, in one tap
+  const grant = async (person: PersonAccess, app: UserAccessApp) => {
+    setGranting(`${person.userId}:${app}`);
+    try {
+      const response = await axios.post<PersonUpdateResult>(
+        `/api/v1/user-access/people/${person.userId}`,
+        { apps: { [app]: { enabled: true } } }
+      );
+      mutate();
+      if (Object.keys(response.data.passwords).length) {
+        setPasswords({
+          name: person.displayName,
+          passwords: response.data.passwords,
+        });
+      }
+    } catch {
+      addToast(intl.formatMessage(messages.grantError), {
+        appearance: 'error',
+        autoDismiss: true,
+      });
+    } finally {
+      setGranting(null);
+    }
+  };
 
   if (!people) {
     return <LoadingSpinner />;
   }
+
+  const askedCount = people.filter((person) =>
+    APPS.some((app) => person.apps[app].accessRequestedAt)
+  ).length;
 
   return (
     <div className="mb-10">
@@ -60,6 +100,14 @@ const People = ({ apps }: PeopleProps) => {
       <p className="description">
         {intl.formatMessage(messages.peopleDescription)}
       </p>
+      {askedCount > 0 && (
+        <p
+          className="mb-4 rounded-xl bg-as-tile px-4 py-3 text-sm ring-1 ring-as-line"
+          data-testid="user-access-asked"
+        >
+          {intl.formatMessage(messages.askedCount, { count: askedCount })}
+        </p>
+      )}
       <Table>
         <thead>
           <tr>
@@ -110,7 +158,22 @@ const People = ({ apps }: PeopleProps) => {
 
                 return (
                   <Table.TD key={app}>
-                    {access.enabled || access.status !== 'none' ? (
+                    {access.accessRequestedAt ? (
+                      <div className="flex flex-col items-start gap-2">
+                        <Badge badgeType="warning">
+                          {intl.formatMessage(messages.asked)}
+                        </Badge>
+                        <Button
+                          buttonSize="sm"
+                          buttonType="primary"
+                          onClick={() => grant(person, app)}
+                          disabled={granting === `${person.userId}:${app}`}
+                        >
+                          <CheckIcon />
+                          <span>{intl.formatMessage(messages.grant)}</span>
+                        </Button>
+                      </div>
+                    ) : access.enabled || access.status !== 'none' ? (
                       <Badge
                         badgeType={
                           access.status === 'active'

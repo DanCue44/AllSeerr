@@ -4,6 +4,7 @@ import {
   PillSelect,
 } from '@app/components/Allseerr/ListPage';
 import LibraryTitles from '@app/components/Library/LibraryTitles';
+import ReadingAppsNudge from '@app/components/ReadingApps/ReadingAppsNudge';
 import SpaceLayout, { spaceMessages } from '@app/components/Space';
 import TitleCard from '@app/components/TitleCard';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
@@ -311,7 +312,10 @@ const SpaceLibrary = ({ space }: { space: SpaceKey }) => (
     ) : space === 'series' ? (
       <LibraryTitles type="tv" embedded />
     ) : (
-      <AvailableMediaGrid mediaType={space === 'music' ? 'music' : 'book'} />
+      <>
+        {space === 'books' && <ReadingAppsNudge className="mb-6" />}
+        <AvailableMediaGrid mediaType={space === 'music' ? 'music' : 'book'} />
+      </>
     )}
   </SpaceLayout>
 );

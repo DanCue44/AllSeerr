@@ -46,8 +46,13 @@ import { Router } from 'express';
 import net from 'net';
 import { Not } from 'typeorm';
 import { canMakePermissionsChange } from '.';
+import readingAppsRoutes from './readingApps';
 
 const userSettingsRoutes = Router({ mergeParams: true });
+
+// Every signed in person can set up the reading apps they were given, even
+// without permission to request
+userSettingsRoutes.use('/apps', isOwnProfileOrAdmin(), readingAppsRoutes);
 
 userSettingsRoutes.get<{ id: string }, UserSettingsGeneralResponse>(
   '/main',

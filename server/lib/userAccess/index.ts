@@ -145,6 +145,7 @@ const emptyAppAccess = (): PersonAppAccess => ({
   lastError: null,
   syncedAt: null,
   grantedBy: null,
+  accessRequestedAt: null,
 });
 
 const toPersonAccess = (
@@ -167,6 +168,9 @@ const toPersonAccess = (
               lastError: account.lastError ?? null,
               syncedAt: account.syncedAt ?? null,
               grantedBy: account.grantedBy ?? null,
+              accessRequestedAt: account.enabled
+                ? null
+                : (account.accessRequestedAt ?? null),
             }
           : emptyAppAccess(),
       ];
@@ -268,7 +272,16 @@ const recordError = async (
   });
 };
 
-const remoteOf = (account: UserAppAccount): RemoteAccount | null =>
+/**
+ * Forgets the key made for NoBookEnds, such as when the account it signs
+ * in to is gone
+ */
+export const clearNoBookEndsToken = (account: UserAppAccount): void => {
+  account.nobookendsToken = null;
+  account.nobookendsTokenId = null;
+};
+
+export const remoteOf = (account: UserAppAccount): RemoteAccount | null =>
   account.remoteUserId
     ? {
         id: account.remoteUserId,
@@ -328,6 +341,7 @@ export const syncAppAccount = async (
         account.lastError = null;
         account.remoteUserId = null;
         account.remoteUsername = null;
+        clearNoBookEndsToken(account);
         account.syncedAt = new Date();
         await repository.save(account);
         return null;
@@ -362,6 +376,10 @@ export const syncAppAccount = async (
       await client.updateAccount(remote, access);
     }
 
+    // A key made for another account is of no use to this one
+    if (account.remoteUserId && account.remoteUserId !== remote.id) {
+      clearNoBookEndsToken(account);
+    }
     account.remoteUserId = remote.id;
     account.remoteUsername = remote.username;
     account.status = account.enabled
@@ -430,6 +448,8 @@ export const updatePerson = async (
 
     if (change.enabled !== undefined) {
       account.enabled = change.enabled;
+      // Turning access on or off answers an ask for it
+      account.accessRequestedAt = null;
     }
     // A choice made for this person wins over the default access for Plex
     // users from now on
@@ -535,6 +555,8 @@ export const removeAppAccount = async (
     account.enabled = false;
     account.remoteUserId = null;
     account.remoteUsername = null;
+    account.accessRequestedAt = null;
+    clearNoBookEndsToken(account);
     account.status = UserAppAccountStatus.NONE;
     account.lastError = null;
     account.syncedAt = new Date();

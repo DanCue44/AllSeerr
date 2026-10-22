@@ -25,6 +25,7 @@ export enum Notification {
   SEASON_ROLLOVER_PENDING = 262144,
   SCAN_FAILURE = 524288,
   DOWNLOAD_NEEDS_ATTENTION = 1048576,
+  ACCESS_REQUESTED = 2097152,
 }
 
 export const hasNotificationType = (
@@ -72,6 +73,8 @@ export const getAdminPermission = (type: Notification): Permission => {
     case Notification.ISSUE_RESOLVED:
     case Notification.ISSUE_REOPENED:
       return Permission.MANAGE_ISSUES;
+    case Notification.ACCESS_REQUESTED:
+      return Permission.MANAGE_USERS;
     default:
       return Permission.ADMIN;
   }

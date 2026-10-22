@@ -5,6 +5,7 @@ import type {
   AppAccess,
   AppConnectionInfo,
   AppLibrary,
+  AppUserKey,
   NewAppAccount,
   RemoteAccount,
   UserAccessAppClient,
@@ -41,6 +42,15 @@ export const kavitaRoles = (enabled: boolean): string[] =>
   enabled
     ? [KAVITA_LOGIN_ROLE, KAVITA_DOWNLOAD_ROLE, KAVITA_CHANGE_PASSWORD_ROLE]
     : [];
+
+interface KavitaAuthKey {
+  id: number;
+  key: string;
+  name: string;
+}
+
+// Auth keys can be 8 to 32 characters, the longest is the hardest to guess
+const KAVITA_AUTH_KEY_LENGTH = 32;
 
 /**
  * The token and email of an invite link, which looks like
@@ -308,6 +318,12 @@ export class KavitaAdminAPI implements UserAccessAppClient {
     );
   }
 
+  public async isAppAdmin(account: RemoteAccount): Promise<boolean> {
+    const member = await this.findMember({ remoteUserId: account.id });
+
+    return !!member?.roles?.includes('Admin');
+  }
+
   public async setPassword(
     account: RemoteAccount,
     password: string
@@ -328,5 +344,82 @@ export class KavitaAdminAPI implements UserAccessAppClient {
         params: { username: account.username },
       })
     );
+  }
+
+  /**
+   * An auth key the person signs in with. Kavita only lets people make
+   * their own keys, so Allseerr signs in as them with their password and
+   * makes it, or finds the one it made before.
+   */
+  public async createUserKey(
+    account: RemoteAccount,
+    name: string,
+    password?: string
+  ): Promise<AppUserKey | null> {
+    if (!password) {
+      return null;
+    }
+
+    try {
+      const login = await this.axios.post<{
+        token?: string;
+        authKeys?: KavitaAuthKey[] | null;
+      }>('/api/Account/login', { username: account.username, password });
+      const token = login.data?.token;
+
+      if (!token) {
+        throw new UserAccessAppError('Kavita did not sign the person in.');
+      }
+
+      const existing = login.data.authKeys?.find(
+        (authKey) => authKey.name.toLowerCase() === name.toLowerCase()
+      );
+
+      if (existing) {
+        return { id: String(existing.id), key: existing.key };
+      }
+
+      const created = await this.axios.post<KavitaAuthKey>(
+        '/api/Account/create-auth-key',
+        { keyLength: KAVITA_AUTH_KEY_LENGTH, name },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (!created.data?.key) {
+        throw new UserAccessAppError('Kavita did not return the new key.');
+      }
+
+      return { id: String(created.data.id), key: created.data.key };
+    } catch (e) {
+      if (e instanceof UserAccessAppError) {
+        throw e;
+      }
+      throw new UserAccessAppError(describeAppError('Kavita', e));
+    }
+  }
+
+  public async isUserKeyValid(
+    account: RemoteAccount,
+    key: string
+  ): Promise<boolean> {
+    try {
+      const response = await this.axios.post<{ username?: string }>(
+        '/api/Plugin/authenticate',
+        undefined,
+        { params: { apiKey: key, pluginName: 'NoBookEnds' } }
+      );
+
+      return (
+        response.data?.username?.toLowerCase() ===
+        account.username.toLowerCase()
+      );
+    } catch (e) {
+      const status = isAxiosError(e) ? e.response?.status : undefined;
+
+      if (status === 400 || status === 401 || status === 403) {
+        return false;
+      }
+      throw new UserAccessAppError(describeAppError('Kavita', e));
+    }
   }
 }

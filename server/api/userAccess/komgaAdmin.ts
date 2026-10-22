@@ -169,6 +169,12 @@ export class KomgaAdminAPI implements UserAccessAppClient {
     );
   }
 
+  public async isAppAdmin(account: RemoteAccount): Promise<boolean> {
+    const user = (await this.getUsers()).find((u) => u.id === account.id);
+
+    return !!user?.roles?.includes('ADMIN');
+  }
+
   public async setPassword(
     account: RemoteAccount,
     password: string

@@ -10,6 +10,7 @@ import {
   isOverQuota,
 } from '@app/components/RequestModal/BulkRequest';
 import useBookLanguages from '@app/hooks/useBookLanguages';
+import useReadingAppPrompt from '@app/hooks/useReadingAppPrompt';
 import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
@@ -104,6 +105,7 @@ const AuthorCatalogRequestModal = ({
   const settings = useSettings();
   const { addToast } = useToasts();
   const { user, hasPermission } = useUser();
+  const promptReadingApp = useReadingAppPrompt();
   const [isUpdating, setIsUpdating] = useState(false);
   const [format, setFormat] = useState<BookFormatChoice>(
     settings.currentSettings.defaultBookFormat
@@ -265,6 +267,11 @@ const AuthorCatalogRequestModal = ({
       });
 
       onComplete?.();
+      promptReadingApp(
+        getFormats(format).map((isAudiobook) =>
+          isAudiobook ? 'audiobook' : 'ebook'
+        )
+      );
     } catch (e) {
       addToast(
         (axios.isAxiosError(e) && e.response?.data?.message) ||

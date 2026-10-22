@@ -29,6 +29,7 @@ const defaultSettings: PublicSettingsResponse = {
   musicEnabled: false,
   subtitlesEnabled: false,
   audiobookshelfEnabled: false,
+  readingAppsEnabled: false,
   originalLanguage: '',
   mediaServerType: MediaServerType.NOT_CONFIGURED,
   partialRequestsEnabled: true,

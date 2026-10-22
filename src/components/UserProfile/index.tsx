@@ -2,6 +2,7 @@ import ImageFader from '@app/components/Common/ImageFader';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import ProgressCircle from '@app/components/Common/ProgressCircle';
+import ReadingAppsNudge from '@app/components/ReadingApps/ReadingAppsNudge';
 import RequestCard from '@app/components/RequestCard';
 import Slider from '@app/components/Slider';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
@@ -285,6 +286,7 @@ const UserProfile = () => {
         </div>
       )}
       <ProfileHeader user={user} />
+      {user.id === currentUser?.id && <ReadingAppsNudge className="mt-5" />}
       {quota &&
         (user.id === currentUser?.id ||
           currentHasPermission(

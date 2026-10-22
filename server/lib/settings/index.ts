@@ -6,6 +6,11 @@ import type { BookService } from '@server/constants/bookService';
 import { usesChaptarr } from '@server/constants/bookService';
 import type { BookFormatChoice } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
+import type { ReadingAppChoices } from '@server/constants/userAccess';
+import {
+  USER_ACCESS_APPS,
+  defaultReadingAppChoices,
+} from '@server/constants/userAccess';
 import { Permission } from '@server/lib/permissions';
 import { runMigrations } from '@server/lib/settings/migrator';
 import type { AvailableLocale } from '@server/types/languages';
@@ -161,6 +166,9 @@ export interface UserAccessSettings {
     clients: OidcClientSettings[];
   };
   plexDefault: PlexDefaultAccessSettings;
+  // The app each kind of book is read or heard in, for the Reading apps
+  // settings and the prompt after a request, the defaults when missing
+  readingApps?: ReadingAppChoices;
 }
 
 export interface AudiobookshelfSettings {
@@ -438,6 +446,8 @@ interface FullPublicSettings extends PublicSettings {
   musicEnabled: boolean;
   subtitlesEnabled: boolean;
   audiobookshelfEnabled: boolean;
+  // Whether Allseerr manages accounts in any reading app
+  readingAppsEnabled: boolean;
   originalLanguage: string;
   mediaServerType: number;
   jellyfinExternalHost?: string;
@@ -752,6 +762,7 @@ class Settings {
           clients: [],
         },
         plexDefault: defaultPlexDefaultAccess(),
+        readingApps: defaultReadingAppChoices(),
       },
       metadataSettings: {
         tv: MetadataProviderType.TMDB,
@@ -1038,6 +1049,7 @@ class Settings {
         emailPasswords: true,
         oidc: { enabled: false, clients: [] },
         plexDefault: defaultPlexDefaultAccess(),
+        readingApps: defaultReadingAppChoices(),
       },
       this.data.userAccess ?? {}
     );
@@ -1155,6 +1167,19 @@ class Settings {
         this.data.bazarr?.apiKey
       ),
       audiobookshelfEnabled: !!this.audiobookshelf.url,
+      readingAppsEnabled: USER_ACCESS_APPS.some((app) => {
+        const connection = this.userAccess[app];
+        // Audiobookshelf is often only linked for book links
+        const url =
+          connection.url ||
+          (app === 'audiobookshelf' ? this.audiobookshelf.url : undefined);
+
+        return (
+          !!url &&
+          (!!connection.apiKey ||
+            (!!connection.username && !!connection.password))
+        );
+      }),
       originalLanguage: this.data.main.originalLanguage,
       mediaServerType: this.main.mediaServerType,
       partialRequestsEnabled: this.data.main.partialRequestsEnabled,

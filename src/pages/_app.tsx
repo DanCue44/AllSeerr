@@ -1,6 +1,7 @@
 import BrandingHead from '@app/components/Allseerr/BrandingHead';
 import InterfaceLayout from '@app/components/Allseerr/Layout/InterfaceLayout';
 import LoadingBar from '@app/components/LoadingBar';
+import { ReadingAppPromptProvider } from '@app/components/ReadingApps/ReadingAppPrompt';
 import ServiceWorkerSetup from '@app/components/ServiceWorkerSetup';
 import StatusChecker from '@app/components/StatusChecker';
 import { InteractionProvider } from '@app/context/InteractionContext';
@@ -236,7 +237,11 @@ const CoreApp: Omit<NextAppComponentType, 'origGetInitialProps'> = ({
               <StatusChecker />
               <ServiceWorkerSetup />
               <InterfaceStyleProvider initialStyle={interfaceStyle}>
-                <UserContext initialUser={user}>{component}</UserContext>
+                <UserContext initialUser={user}>
+                  <ReadingAppPromptProvider>
+                    {component}
+                  </ReadingAppPromptProvider>
+                </UserContext>
               </InterfaceStyleProvider>
               <Toaster
                 position="top-right"
@@ -279,6 +284,7 @@ CoreApp.getInitialProps = async (initialProps) => {
     musicEnabled: false,
     subtitlesEnabled: false,
     audiobookshelfEnabled: false,
+    readingAppsEnabled: false,
     originalLanguage: '',
     mediaServerType: MediaServerType.NOT_CONFIGURED,
     partialRequestsEnabled: true,

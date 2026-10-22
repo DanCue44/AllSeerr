@@ -91,11 +91,26 @@ export const startFakeAudiobookshelf = async (apiKey: string) => {
       permissions: {},
     },
   ];
+  // API keys made for accounts, which sign in as them
+  const apiKeys: { id: string; key: string; userId: string; name: string }[] =
+    [];
+  const server = { version: '2.37.1' };
   let next = 1;
   const app = await startFake((req, url, body) => {
     if (url.pathname === '/status') {
-      return { status: 200, body: { serverVersion: '2.37.1' } };
+      return { status: 200, body: { serverVersion: server.version } };
     }
+
+    const userKey = apiKeys.find(
+      (k) => req.headers.authorization === `Bearer ${k.key}`
+    );
+    if (userKey && url.pathname === '/api/me') {
+      const user = users.find((u) => u.id === userKey.userId);
+      return user?.isActive
+        ? { status: 200, body: { id: user.id, type: user.type } }
+        : { status: 401 };
+    }
+
     if (req.headers.authorization !== `Bearer ${apiKey}`) {
       return { status: 401 };
     }
@@ -119,6 +134,40 @@ export const startFakeAudiobookshelf = async (apiKey: string) => {
     }
     if (url.pathname === '/api/users' && req.method === 'GET') {
       return { status: 200, body: { users } };
+    }
+    if (url.pathname === '/api/api-keys' && req.method === 'POST') {
+      const user = users.find((u) => u.id === b.userId);
+      if (!user || typeof b.name !== 'string') {
+        return { status: 400 };
+      }
+      const created = {
+        id: `key-${next}`,
+        key: `abs-user-key-${next++}`,
+        userId: user.id,
+        name: b.name,
+      };
+      apiKeys.push(created);
+      return {
+        status: 200,
+        body: {
+          apiKey: {
+            apiKey: created.key,
+            id: created.id,
+            name: created.name,
+            userId: created.userId,
+            isActive: !!b.isActive,
+          },
+        },
+      };
+    }
+    const keyMatch = url.pathname.match(/^\/api\/api-keys\/([^/]+)$/);
+    if (keyMatch && req.method === 'DELETE') {
+      const index = apiKeys.findIndex((k) => k.id === keyMatch[1]);
+      if (index < 0) {
+        return { status: 404 };
+      }
+      apiKeys.splice(index, 1);
+      return { status: 200 };
     }
     if (url.pathname === '/api/users' && req.method === 'POST') {
       if (users.some((u) => u.username === b.username)) {
@@ -170,7 +219,7 @@ export const startFakeAudiobookshelf = async (apiKey: string) => {
     return { status: 404 };
   });
 
-  return { ...app, users };
+  return { ...app, users, apiKeys, server };
 };
 
 export interface FakeKavitaMember {
@@ -184,6 +233,7 @@ export interface FakeKavitaMember {
   identityProvider: number;
   password?: string;
   inviteToken?: string;
+  authKeys?: { id: number; key: string; name: string }[];
 }
 
 export const startFakeKavita = async (apiKey: string) => {
@@ -205,18 +255,72 @@ export const startFakeKavita = async (apiKey: string) => {
   ];
   let next = 2;
   let tokens = 0;
+  let keys = 0;
   const validTokens = new Set<string>();
+  // Tokens of people signed in as themselves, which only reach their own
+  // calls
+  const memberTokens = new Map<string, FakeKavitaMember>();
 
   const app = await startFake((req, url, body) => {
     const b = body as Record<string, unknown>;
 
     if (url.pathname === '/api/Plugin/authenticate' && req.method === 'POST') {
-      if (url.searchParams.get('apiKey') !== apiKey) {
+      const key = url.searchParams.get('apiKey');
+      const owner = members.find((m) =>
+        m.authKeys?.some((authKey) => authKey.key === key)
+      );
+      if (owner) {
+        return { status: 200, body: { username: owner.username } };
+      }
+      if (key !== apiKey) {
         return { status: 401 };
       }
       const token = `token-${++tokens}`;
       validTokens.add(token);
       return { status: 200, body: { username: 'admin', token } };
+    }
+    if (url.pathname === '/api/Account/login' && req.method === 'POST') {
+      const member = members.find(
+        (m) =>
+          m.username.toLowerCase() === String(b.username).toLowerCase() &&
+          m.password === b.password
+      );
+      if (!member || !member.roles.includes('Login')) {
+        return { status: 401 };
+      }
+      const token = `member-token-${++tokens}`;
+      memberTokens.set(token, member);
+      return {
+        status: 200,
+        body: {
+          username: member.username,
+          token,
+          authKeys: member.authKeys ?? [],
+        },
+      };
+    }
+    if (url.pathname === '/api/Account/create-auth-key') {
+      const member = memberTokens.get(
+        req.headers.authorization?.replace('Bearer ', '') ?? ''
+      );
+      if (!member) {
+        return { status: 401 };
+      }
+      member.authKeys ??= [];
+      if (
+        member.authKeys.some(
+          (k) => k.name.toLowerCase() === String(b.name).toLowerCase()
+        )
+      ) {
+        return { status: 400, body: 'auth-key-unique' };
+      }
+      const created = {
+        id: ++keys,
+        key: `kavita-user-key-${keys}`.slice(0, Number(b.keyLength)),
+        name: String(b.name),
+      };
+      member.authKeys.push(created);
+      return { status: 200, body: created };
     }
     if (url.pathname === '/api/Account/confirm-email') {
       const member = members.find((m) => m.email === b.email);

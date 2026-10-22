@@ -5,6 +5,7 @@ import BookLanguageSelect from '@app/components/RequestModal/BookLanguageSelect'
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
 import useBookLanguages from '@app/hooks/useBookLanguages';
 import useEditionAvailability from '@app/hooks/useEditionAvailability';
+import useReadingAppPrompt from '@app/hooks/useReadingAppPrompt';
 import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
@@ -87,6 +88,7 @@ const BookRequestModal = ({
   const intl = useIntl();
   const { user, hasPermission } = useUser();
   const settings = useSettings();
+  const promptReadingApp = useReadingAppPrompt();
   const { data: quota } = useSWR<QuotaResponse>(
     user && !editRequest ? `/api/v1/user/${user.id}/quota` : null
   );
@@ -194,6 +196,10 @@ const BookRequestModal = ({
         responses.push(response.data);
       }
       refreshRequests();
+      // Offers to set up the app the book is read or heard in
+      promptReadingApp(
+        formats.map((isAudiobook) => (isAudiobook ? 'audiobook' : 'ebook'))
+      );
 
       if (onComplete) {
         onComplete(

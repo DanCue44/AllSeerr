@@ -1,6 +1,11 @@
 import type { AppLibrary } from '@server/api/userAccess/types';
-import type { UserAccessApp } from '@server/constants/userAccess';
+import type {
+  ReadingAppChoices,
+  UserAccessApp,
+} from '@server/constants/userAccess';
 import {
+  READING_KINDS,
+  READING_KIND_APPS,
   USER_ACCESS_APPS,
   USER_ACCESS_APP_NAMES,
   isUserAccessApp,
@@ -32,6 +37,7 @@ import {
 } from '@server/lib/userAccess';
 import { isAgeLimit, isRestricted } from '@server/lib/userAccess/ageLimits';
 import { applyPlexDefaults } from '@server/lib/userAccess/plexDefaults';
+import { getReadingAppChoices } from '@server/lib/userAccess/readingApps';
 import logger from '@server/logger';
 import { randomBytes } from 'crypto';
 import { Router } from 'express';
@@ -282,6 +288,43 @@ userAccessSettingsRoutes.post<never, { changes: PlexDefaultChange[] }>(
     }
   }
 );
+
+/**
+ * The app each kind of book is read or heard in, which the Reading apps
+ * settings and the prompt after a request point people to
+ */
+userAccessSettingsRoutes.get<never, ReadingAppChoices>(
+  '/reading-apps',
+  (_req, res) => {
+    res.status(200).json(getReadingAppChoices());
+  }
+);
+
+userAccessSettingsRoutes.post<
+  never,
+  ReadingAppChoices,
+  Partial<ReadingAppChoices>
+>('/reading-apps', async (req, res, next) => {
+  const choices = getReadingAppChoices();
+
+  for (const kind of READING_KINDS) {
+    const app = req.body?.[kind];
+
+    if (app === undefined) {
+      continue;
+    }
+    if (!isUserAccessApp(app) || !READING_KIND_APPS[kind].includes(app)) {
+      return next({ status: 400, message: 'Invalid app for this kind.' });
+    }
+    choices[kind] = app;
+  }
+
+  const settings = getSettings();
+  settings.userAccess = { ...settings.userAccess, readingApps: choices };
+  await settings.save();
+
+  return res.status(200).json(getReadingAppChoices());
+});
 
 /**
  * Checks an app's address and admin credentials, with the saved ones where

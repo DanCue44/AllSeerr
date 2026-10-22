@@ -1,4 +1,7 @@
 import type {
+  ReadingAppChoices,
+  ReadingAppState,
+  ReadingKind,
   UserAccessApp,
   UserAppAccountGrant,
   UserAppAccountStatus,
@@ -67,6 +70,8 @@ export interface PersonAppAccess {
   syncedAt: Date | null;
   // admin, plex (the default for Plex users) or null for older accounts
   grantedBy: UserAppAccountGrant | null;
+  // When the person asked for access and no admin has answered yet
+  accessRequestedAt: Date | null;
 }
 
 export interface PersonAccess {
@@ -130,4 +135,36 @@ export interface OidcSettingsResponse {
   clients: OidcClientResponse[];
   // Redirect addresses each app uses, from its public address
   defaultRedirectUris: Record<OidcApp, string[]>;
+}
+
+/**
+ * Where a person stands in a reading app, for their Reading apps settings
+ * and NoBookEnds
+ */
+export interface ReadingAppStatus {
+  app: UserAccessApp;
+  name: string;
+  // What the app is for, such as "Audiobooks and ebooks"
+  purpose: string;
+  // The kinds of books the admin picked this app for
+  kinds: ReadingKind[];
+  state: ReadingAppState;
+  // The person's username in the app, once their account is ready
+  username?: string;
+  publicUrl?: string;
+  message?: string;
+  // Whether the app offers "Sign in with Allseerr"
+  signInWithAllseerr: boolean;
+}
+
+export interface ReadingAppsResponse {
+  apps: ReadingAppStatus[];
+  // The app each kind of book is read or heard in
+  readingApps: ReadingAppChoices;
+}
+
+export interface ReadingAppSetupResult {
+  app: ReadingAppStatus;
+  // The new password, shown once, when an account was made
+  password?: NewAppPassword;
 }

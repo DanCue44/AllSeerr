@@ -1,6 +1,7 @@
 import Alert from '@app/components/Common/Alert';
 import Modal from '@app/components/Common/Modal';
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
+import useReadingAppPrompt from '@app/hooks/useReadingAppPrompt';
 import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -85,6 +86,7 @@ const RecordingRequestModal = ({
 }: RecordingRequestModalProps) => {
   const intl = useIntl();
   const { addToast } = useToasts();
+  const promptReadingApp = useReadingAppPrompt('audiobook');
   const { user, hasPermission } = useUser();
   const { data: quota } = useSWR<QuotaResponse>(
     show && user ? `/api/v1/user/${user.id}/quota` : null
@@ -198,6 +200,7 @@ const RecordingRequestModal = ({
         { appearance: 'success', autoDismiss: true }
       );
       onComplete();
+      promptReadingApp();
     } catch {
       addToast(intl.formatMessage(messages.requesterror), {
         appearance: 'error',

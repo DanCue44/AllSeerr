@@ -37,6 +37,15 @@ export interface AppConnectionInfo {
 }
 
 /**
+ * A key a person signs in to an app with instead of a password, such as an
+ * Audiobookshelf API key or a Kavita auth key
+ */
+export interface AppUserKey {
+  id: string;
+  key: string;
+}
+
+/**
  * Manages accounts in an app through its admin API
  */
 export interface UserAccessAppClient {
@@ -52,6 +61,20 @@ export interface UserAccessAppClient {
   updateAccount(account: RemoteAccount, access: AppAccess): Promise<void>;
   setPassword(account: RemoteAccount, password: string): Promise<void>;
   deleteAccount(account: RemoteAccount): Promise<void>;
+  // Whether the account is an admin of the app, whose password Allseerr
+  // leaves to its owner
+  isAppAdmin?(account: RemoteAccount): Promise<boolean>;
+  // Makes a key the person signs in with, or finds the one named so. Apps
+  // that only let people make their own keys need the person's password.
+  // Null when the app cannot make one.
+  createUserKey?(
+    account: RemoteAccount,
+    name: string,
+    password?: string
+  ): Promise<AppUserKey | null>;
+  // Whether a key still signs in as the person
+  isUserKeyValid?(account: RemoteAccount, key: string): Promise<boolean>;
+  deleteUserKey?(keyId: string): Promise<void>;
 }
 
 export interface UserAccessClientOptions {

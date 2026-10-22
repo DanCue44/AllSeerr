@@ -61,6 +61,20 @@ export class UserAppAccount {
   @DbAwareColumn({ type: 'datetime', nullable: true })
   public syncedAt?: Date | null;
 
+  // When the person asked an admin for access from their Reading apps
+  // settings, until an admin answers by turning access on or off
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public accessRequestedAt?: Date | null;
+
+  // The key Allseerr made in the app for NoBookEnds to sign in with, kept so
+  // every device of the person gets the same one. Never sent to the pages.
+  @Column({ type: 'text', nullable: true, select: false })
+  public nobookendsToken?: string | null;
+
+  // The app's id for that key, to remove it when it stops working
+  @Column({ type: 'varchar', nullable: true })
+  public nobookendsTokenId?: string | null;
+
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public createdAt: Date;
 

@@ -148,6 +148,8 @@ export const applyPlexDefaults = async (
         changes.push(changeFor(user, app, 'granted'));
       } else if (shouldHave && account && !account.enabled) {
         account.enabled = true;
+        // The default answers an ask for access too
+        account.accessRequestedAt = null;
         await accountRepository.save(account);
         changes.push(changeFor(user, app, 'granted'));
       } else if (!shouldHave && account?.enabled) {
