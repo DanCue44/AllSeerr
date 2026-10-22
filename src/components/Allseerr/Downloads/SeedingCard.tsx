@@ -55,6 +55,7 @@ export const messages = defineMessages(
     atRisk: 'At Risk',
     atRiskFallback: 'May not reach the seeding time the tracker asks for',
     seededOf: '{seeded} of {target} seeded',
+    seededShort: '{seeded} of {target}',
     seeded: '{seeded} seeded',
     timeLeft: '{time} to go',
     requirementMet: 'Minimum met',
@@ -375,18 +376,30 @@ const SeedingCard = ({
             {[seededText, goalText, ratioText].filter(Boolean).join(' · ')}
           </div>
         </div>
-        <div className="hidden min-w-0 flex-col text-xs text-as-ink-muted md:flex">
-          <span className="truncate">{seededText}</span>
-          {goalButton('truncate text-left')}
-        </div>
-        <div className="hidden min-w-0 flex-col text-xs text-as-ink-muted md:flex">
-          <span className="truncate tabular-nums">{ratioText}</span>
-          <span className="truncate">
-            {[torrent.downloadClient, torrent.indexer]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-        </div>
+        {/* One fact per column, one line each */}
+        <span className="hidden truncate text-[13px] tabular-nums text-as-ink-soft md:block">
+          {progress.targetSeconds !== null
+            ? intl.formatMessage(messages.seededShort, {
+                seeded: formatDuration(torrent.seedingSeconds),
+                target: formatDuration(progress.targetSeconds),
+              })
+            : formatDuration(torrent.seedingSeconds)}
+        </span>
+        <span className="hidden min-w-0 text-[13px] text-as-ink-soft md:block">
+          {goalButton('truncate text-left') ?? '-'}
+        </span>
+        <span className="hidden truncate text-[13px] tabular-nums text-as-ink-soft md:block">
+          {formatRatio(torrent.ratio)}
+        </span>
+        <span className="hidden truncate text-[13px] text-as-ink-soft xl:block">
+          {torrent.downloadClient ?? '-'}
+        </span>
+        <span className="hidden min-w-0 truncate text-[13px] text-as-ink-soft xl:flex xl:items-center xl:gap-1">
+          {torrent.isPrivateTracker && (
+            <LockClosedIcon className="h-3.5 w-3.5 flex-none text-[#c9c0f5]" />
+          )}
+          <span className="truncate">{torrent.indexer ?? '-'}</span>
+        </span>
       </article>
     );
   }

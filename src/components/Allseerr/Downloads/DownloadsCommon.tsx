@@ -123,20 +123,30 @@ export const ListFrame = ({
   gridClassName,
   children,
 }: {
-  columns: string[];
+  // A plain label, or a label with classes (e.g. shown only on wide screens)
+  columns: (string | { label: string; className?: string })[];
   gridClassName: string;
   children: ReactNode;
 }) => (
   <div className="overflow-hidden rounded-[20px] bg-as-surface">
     <div
-      className={`hidden items-center gap-x-3 border-b border-as-line px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-as-ink-faint md:grid ${gridClassName}`}
+      className={`hidden items-center gap-x-3 border-b border-as-line px-4 py-3.5 text-xs font-bold uppercase tracking-wide text-as-ink-faint md:grid ${gridClassName}`}
       aria-hidden="true"
     >
-      {columns.map((column, index) => (
-        <span key={index} className={index === 0 ? 'col-span-2' : 'truncate'}>
-          {column}
-        </span>
-      ))}
+      {columns.map((column, index) => {
+        const label = typeof column === 'string' ? column : column.label;
+        const extra =
+          typeof column === 'string' ? '' : (column.className ?? '');
+
+        return (
+          <span
+            key={index}
+            className={`${index === 0 ? 'col-span-2' : 'truncate'} ${extra}`}
+          >
+            {label}
+          </span>
+        );
+      })}
     </div>
     <div className="divide-y divide-as-line">{children}</div>
   </div>

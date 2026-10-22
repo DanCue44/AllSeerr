@@ -55,7 +55,10 @@ const messages = defineMessages('components.Allseerr.Downloads.Seeding', {
   columnState: 'State',
   columnSeedTime: 'Progress',
   columnSeeded: 'Seeded',
-  columnRatio: 'Ratio and Client',
+  columnTimeLeft: 'Time left',
+  columnRatio: 'Ratio',
+  columnClient: 'Client',
+  columnIndexer: 'Indexer',
 });
 
 const REFRESH_MS = 30_000;
@@ -285,7 +288,16 @@ const SeedingView = ({
             intl.formatMessage(messages.columnState),
             intl.formatMessage(messages.columnSeedTime),
             intl.formatMessage(messages.columnSeeded),
+            intl.formatMessage(messages.columnTimeLeft),
             intl.formatMessage(messages.columnRatio),
+            {
+              label: intl.formatMessage(messages.columnClient),
+              className: 'hidden xl:block',
+            },
+            {
+              label: intl.formatMessage(messages.columnIndexer),
+              className: 'hidden xl:block',
+            },
           ]}
         >
           {torrents.map((torrent) => (

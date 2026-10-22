@@ -308,8 +308,9 @@ export const DOWNLOADS_LAYOUTS: DownloadsLayout[] = ['cards', 'list'];
 // Shared by the list rows and their column headings so the columns line up
 export const QUEUE_LIST_GRID =
   'md:grid-cols-[2.5rem_minmax(0,1fr)_8.5rem_minmax(8rem,12rem)_9rem_11rem]';
+// Client and indexer columns join on extra wide screens
 export const SEEDING_LIST_GRID =
-  'md:grid-cols-[2.5rem_minmax(0,1fr)_8.5rem_minmax(8rem,12rem)_9rem_9rem]';
+  'md:grid-cols-[2.5rem_minmax(0,1fr)_8rem_minmax(7rem,10rem)_8rem_8rem_4.5rem] xl:grid-cols-[2.5rem_minmax(0,1fr)_8rem_minmax(7rem,10rem)_8rem_8rem_4.5rem_9rem_10rem]';
 
 interface DownloadCardProps {
   item: DownloadItem;
