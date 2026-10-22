@@ -484,6 +484,78 @@ describe('reading apps settings', () => {
   });
 });
 
+describe('apps picked for no kind', () => {
+  const connectKomga = () => {
+    const settings = getSettings();
+    settings.userAccess = {
+      ...settings.userAccess,
+      komga: { url: komga.url, apiKey: 'komga-key' },
+    };
+  };
+
+  it('are hidden from people who were not given them', async () => {
+    connectKomga();
+    const user = await demo();
+    const { agent } = await loginAs('demo@seerr.dev');
+    const res = await agent.get(`/user/${user.id}/settings/apps`);
+
+    assert.deepEqual(
+      res.body.apps.map((a: { app: string }) => a.app),
+      ['audiobookshelf', 'kavita']
+    );
+
+    const key = await noBookEndsKey(user);
+    const nbe = await request(app)
+      .get('/nobookends/reading-apps')
+      .set('X-API-Key', key);
+    assert.deepEqual(
+      nbe.body.apps.map((a: { app: string }) => a.app),
+      ['audiobookshelf', 'kavita']
+    );
+  });
+
+  it('are shown to people who were given them', async () => {
+    connectKomga();
+    const user = await demo();
+    await grant(user, 'komga');
+    const { agent } = await loginAs('demo@seerr.dev');
+    const res = await agent.get(`/user/${user.id}/settings/apps`);
+
+    assert.deepEqual(
+      res.body.apps.map((a: { app: string; state: string }) => [
+        a.app,
+        a.state,
+      ]),
+      [
+        ['audiobookshelf', 'notGranted'],
+        ['kavita', 'notGranted'],
+        ['komga', 'available'],
+      ]
+    );
+  });
+
+  it('follow the admin choices', async () => {
+    connectKomga();
+    const settings = getSettings();
+    settings.userAccess = {
+      ...settings.userAccess,
+      readingApps: {
+        audiobook: 'audiobookshelf',
+        ebook: 'audiobookshelf',
+        comic: 'komga',
+      },
+    };
+    const user = await demo();
+    const { agent } = await loginAs('demo@seerr.dev');
+    const res = await agent.get(`/user/${user.id}/settings/apps`);
+
+    assert.deepEqual(
+      res.body.apps.map((a: { app: string }) => a.app),
+      ['audiobookshelf', 'komga']
+    );
+  });
+});
+
 describe('reading app choices', () => {
   it('saves the app for each kind and refuses one that cannot serve it', async () => {
     const { agent } = await loginAs('admin@seerr.dev');

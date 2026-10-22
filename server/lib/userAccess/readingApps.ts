@@ -179,8 +179,9 @@ const findAccount = async (
   });
 
 /**
- * The connected reading apps and where the person stands in each. Only the
- * person's own accounts are read.
+ * The connected reading apps that serve a kind of book, or that the person
+ * was given, and where they stand in each. Only the person's own accounts
+ * are read.
  */
 export const getReadingApps = async (
   user: User
@@ -190,13 +191,20 @@ export const getReadingApps = async (
     where: { user: { id: user.id } },
   });
 
-  return USER_ACCESS_APPS.filter((app) => isAppConnected(app)).map((app) =>
-    toStatus(
-      app,
-      accounts.find((account) => account.app === app),
-      choices
-    )
-  );
+  return USER_ACCESS_APPS.flatMap((app) => {
+    const account = accounts.find((a) => a.app === app);
+
+    // An app the admin picked for no kind, such as a Komga kept for testing,
+    // is only shown to people who were given it
+    if (
+      !isAppConnected(app) ||
+      (!kindsServedBy(app, choices).length && !account?.enabled)
+    ) {
+      return [];
+    }
+
+    return [toStatus(app, account, choices)];
+  });
 };
 
 export const getReadingApp = async (

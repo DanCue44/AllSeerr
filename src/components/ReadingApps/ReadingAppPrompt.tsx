@@ -29,8 +29,13 @@ const messages = defineMessages('components.ReadingApps.ReadingAppPrompt', {
     "You asked for an ebook. You can't read it in {app} yet. Set it up now?",
   askedcomic:
     'You asked for a comic. Your access to read comics in {app} has not been set up yet. Would you like to set it up now?',
-  notGranted:
-    'An admin needs to give you access first. You can ask for it in your settings.',
+  notGranted: 'An admin needs to give you access first.',
+  askForAccess: 'Ask for access',
+  askedTitle: 'Access requested',
+  asked: "Asked. We'll let you know when it's ready.",
+  askError:
+    'Something went wrong while asking for access. You can try again in your settings.',
+  close: 'Close',
   setUpNow: 'Set up now',
   notNow: 'Not now',
   readyTitle: '{app} is ready',
@@ -72,6 +77,7 @@ export const ReadingAppPromptProvider = ({
   const [current, setCurrent] = useState<Prompt | null>(null);
   const [result, setResult] = useState<ReadingAppSetupResult | null>(null);
   const [failed, setFailed] = useState(false);
+  const [asked, setAsked] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
   const prompt = useCallback(
@@ -99,6 +105,7 @@ export const ReadingAppPromptProvider = ({
           ) {
             setResult(null);
             setFailed(false);
+            setAsked(false);
             setCurrent({ kind, status });
             return;
           }
@@ -114,6 +121,7 @@ export const ReadingAppPromptProvider = ({
     setCurrent(null);
     setResult(null);
     setFailed(false);
+    setAsked(false);
   };
 
   const notNow = () => {
@@ -135,12 +143,6 @@ export const ReadingAppPromptProvider = ({
       return;
     }
 
-    // Only an app the person was given can be set up right here
-    if (current.status.state !== 'available') {
-      openSettings();
-      return;
-    }
-
     setIsUpdating(true);
     try {
       const { data } = await axios.post<ReadingAppSetupResult>(
@@ -159,7 +161,27 @@ export const ReadingAppPromptProvider = ({
     }
   };
 
+  // Someone without access asks for it right here, nothing is given
+  const askForAccess = async () => {
+    if (!current || !user) {
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      await axios.post(
+        `/api/v1/user/${user.id}/settings/apps/${current.status.app}/request-access`
+      );
+      setAsked(true);
+    } catch {
+      setFailed(true);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const app = current?.status.name ?? '';
+  const isNotGranted = current?.status.state === 'notGranted';
 
   return (
     <ReadingAppPromptContext.Provider value={{ prompt }}>
@@ -197,6 +219,16 @@ export const ReadingAppPromptProvider = ({
               </Button>
             )}
           </Modal>
+        ) : current && asked ? (
+          <Modal
+            title={intl.formatMessage(messages.askedTitle)}
+            onOk={close}
+            okText={intl.formatMessage(messages.close)}
+          >
+            <p data-testid="reading-app-asked">
+              {intl.formatMessage(messages.asked)}
+            </p>
+          </Modal>
         ) : current && failed ? (
           <Modal
             title={intl.formatMessage(messages.title, { app })}
@@ -205,13 +237,20 @@ export const ReadingAppPromptProvider = ({
             onCancel={close}
             cancelText={intl.formatMessage(messages.notNow)}
           >
-            <p>{intl.formatMessage(messages.setupError, { app })}</p>
+            <p>
+              {intl.formatMessage(
+                isNotGranted ? messages.askError : messages.setupError,
+                { app }
+              )}
+            </p>
           </Modal>
         ) : current ? (
           <Modal
             title={intl.formatMessage(messages.title, { app })}
-            onOk={setUpNow}
-            okText={intl.formatMessage(messages.setUpNow)}
+            onOk={isNotGranted ? askForAccess : setUpNow}
+            okText={intl.formatMessage(
+              isNotGranted ? messages.askForAccess : messages.setUpNow
+            )}
             okDisabled={isUpdating}
             loading={isUpdating}
             onCancel={notNow}
@@ -220,7 +259,7 @@ export const ReadingAppPromptProvider = ({
             <p data-testid="reading-app-prompt">
               {intl.formatMessage(messages[`asked${current.kind}`], { app })}
             </p>
-            {current.status.state === 'notGranted' && (
+            {isNotGranted && (
               <p className="mt-2 text-sm text-as-ink-muted">
                 {intl.formatMessage(messages.notGranted)}
               </p>
