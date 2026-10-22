@@ -89,6 +89,7 @@ class OpenLibrary extends ExternalAPI {
       {
         headers: { 'User-Agent': getOpenLibraryUserAgent() },
         nodeCache: cacheManager.getCache('openlibrary').data,
+        publicCatalog: true,
         rateLimit: {
           maxRequests: MAX_RPS,
           maxRPS: MAX_RPS,

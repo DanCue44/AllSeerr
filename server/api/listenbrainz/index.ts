@@ -47,6 +47,7 @@ class ListenBrainzAPI extends ExternalAPI {
       {
         headers: { 'User-Agent': getContactUserAgent() },
         nodeCache: cacheManager.getCache('listenbrainz').data,
+        publicCatalog: true,
         rateLimit: {
           maxRequests: 20,
           maxRPS: 25,

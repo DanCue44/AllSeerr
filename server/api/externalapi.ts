@@ -1,3 +1,11 @@
+import {
+  assertServiceAvailable,
+  getServiceKey,
+  getStaleAnswer,
+  recordServiceFailure,
+  recordServiceSuccess,
+  rememberStaleAnswer,
+} from '@server/api/externalApiHealth';
 import type { CacheStore } from '@server/lib/cache';
 import { proxyRequestInterceptor } from '@server/utils/customProxyAgent';
 import { userAgentRequestInterceptor } from '@server/utils/userAgent';
@@ -21,12 +29,19 @@ export interface ExternalAPIOptions {
     // Window for maxRequests when maxRPS is not set, in milliseconds
     perMilliseconds?: number;
   };
+  // For public catalogs (TMDB, OpenLibrary, MusicBrainz and the like): pause
+  // requests while the service is down so pages fail at once, and serve the
+  // last good answer for up to a week meanwhile. Never for per-user or local
+  // services, where a paused connection test would be confusing.
+  publicCatalog?: boolean;
 }
 
 class ExternalAPI {
   protected axios: AxiosInstance;
   private baseUrl: string;
   private cache?: CacheStore;
+  private service: string;
+  private publicCatalog: boolean;
 
   constructor(
     baseUrl: string,
@@ -45,6 +60,28 @@ class ExternalAPI {
     });
     this.axios.interceptors.request.use(proxyRequestInterceptor);
     this.axios.interceptors.request.use(userAgentRequestInterceptor);
+    this.service = getServiceKey(baseUrl);
+    this.publicCatalog = options.publicCatalog ?? false;
+
+    if (this.publicCatalog) {
+      // Registered before the rate limiter, so it runs after a queued
+      // request's wait: requests queued before the service went down fail at
+      // once
+      this.axios.interceptors.request.use((config) => {
+        assertServiceAvailable(this.service);
+        return config;
+      });
+      this.axios.interceptors.response.use(
+        (response) => {
+          recordServiceSuccess(this.service);
+          return response;
+        },
+        (error) => {
+          recordServiceFailure(this.service, error);
+          return Promise.reject(error);
+        }
+      );
+    }
 
     if (options.rateLimit) {
       this.axios = rateLimit(this.axios, {
@@ -56,6 +93,35 @@ class ExternalAPI {
 
     this.baseUrl = baseUrl;
     this.cache = options.nodeCache;
+  }
+
+  /**
+   * Fetches through the service health check, falling back to the last good
+   * answer when the client allows it
+   */
+  private async fetchWithFallback<T>(
+    cacheKey: string,
+    request: () => Promise<T>
+  ): Promise<T> {
+    if (!this.publicCatalog) {
+      return request();
+    }
+
+    try {
+      assertServiceAvailable(this.service);
+      const data = await request();
+      rememberStaleAnswer(cacheKey, data);
+
+      return data;
+    } catch (e) {
+      const stale = getStaleAnswer<T>(cacheKey);
+
+      if (stale !== undefined) {
+        return stale;
+      }
+
+      throw e;
+    }
   }
 
   // transform runs before the cache write.
@@ -75,10 +141,12 @@ class ExternalAPI {
       return cachedItem;
     }
 
-    const response = await this.axios.get<T>(endpoint, config);
-    const data = options?.transform
-      ? options.transform(response.data)
-      : response.data;
+    const data = await this.fetchWithFallback(cacheKey, async () => {
+      const response = await this.axios.get<T>(endpoint, config);
+      return options?.transform
+        ? options.transform(response.data)
+        : response.data;
+    });
 
     if (cache && ttl !== 0) {
       cache.set(cacheKey, data, ttl ?? DEFAULT_TTL);
@@ -103,13 +171,16 @@ class ExternalAPI {
       return cachedItem;
     }
 
-    const response = await this.axios.post<T>(endpoint, data, config);
+    const responseData = await this.fetchWithFallback(
+      cacheKey,
+      async () => (await this.axios.post<T>(endpoint, data, config)).data
+    );
 
     if (this.cache && ttl !== 0) {
-      this.cache.set(cacheKey, response.data, ttl ?? DEFAULT_TTL);
+      this.cache.set(cacheKey, responseData, ttl ?? DEFAULT_TTL);
     }
 
-    return response.data;
+    return responseData;
   }
 
   protected async getRolling<T>(
@@ -131,20 +202,29 @@ class ExternalAPI {
         keyTtl - (ttl ?? DEFAULT_TTL) * 1000 <
         Date.now() - DEFAULT_ROLLING_BUFFER
       ) {
-        this.axios.get<T>(endpoint, config).then((response) => {
-          this.cache?.set(cacheKey, response.data, ttl ?? DEFAULT_TTL);
-        });
+        this.fetchWithFallback(
+          cacheKey,
+          async () => (await this.axios.get<T>(endpoint, config)).data
+        )
+          .then((data) => {
+            this.cache?.set(cacheKey, data, ttl ?? DEFAULT_TTL);
+          })
+          // The cached answer was already returned, a failed refresh keeps it
+          .catch(() => undefined);
       }
       return cachedItem;
     }
 
-    const response = await this.axios.get<T>(endpoint, config);
+    const data = await this.fetchWithFallback(
+      cacheKey,
+      async () => (await this.axios.get<T>(endpoint, config)).data
+    );
 
     if (this.cache && ttl !== 0) {
-      this.cache.set(cacheKey, response.data, ttl ?? DEFAULT_TTL);
+      this.cache.set(cacheKey, data, ttl ?? DEFAULT_TTL);
     }
 
-    return response.data;
+    return data;
   }
 
   protected removeCache(endpoint: string, options?: Record<string, unknown>) {
