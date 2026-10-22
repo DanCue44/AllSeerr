@@ -199,8 +199,19 @@ const Badge = ({
   </span>
 );
 
+export type DownloadsLayout = 'cards' | 'list';
+
+export const DOWNLOADS_LAYOUTS: DownloadsLayout[] = ['cards', 'list'];
+
+// Shared by the list rows and their column headings so the columns line up
+export const QUEUE_LIST_GRID =
+  'md:grid-cols-[2.5rem_minmax(0,1fr)_8.5rem_minmax(8rem,12rem)_9rem_11rem]';
+export const SEEDING_LIST_GRID =
+  'md:grid-cols-[2.5rem_minmax(0,1fr)_8.5rem_minmax(8rem,12rem)_9rem_9rem]';
+
 interface DownloadCardProps {
   item: DownloadItem;
+  layout?: DownloadsLayout;
   onSearch: (item: DownloadItem) => void;
   onPickRelease: (item: DownloadItem) => void;
   onRemove: (item: DownloadItem) => void;
@@ -208,6 +219,7 @@ interface DownloadCardProps {
 
 const DownloadCard = ({
   item,
+  layout = 'cards',
   onSearch,
   onPickRelease,
   onRemove,
@@ -322,6 +334,155 @@ const DownloadCard = ({
     </MenuItem>
   );
 
+  const actionsMenu = (className: string) => (
+    <Menu as="div" className={`relative flex-none ${className}`}>
+      <MenuButton
+        className="flex h-8 w-8 items-center justify-center rounded-full text-as-ink-soft transition hover:bg-as-raised hover:text-as-ink focus:outline-none"
+        aria-label={intl.formatMessage(messages.actions, {
+          title: item.title,
+        })}
+      >
+        <EllipsisVerticalIcon className="h-5 w-5" />
+      </MenuButton>
+      <MenuItems
+        anchor="bottom end"
+        className="z-50 w-56 rounded-2xl bg-as-surface p-1.5 shadow-xl shadow-black/40 ring-1 ring-as-line [--anchor-gap:4px] focus:outline-none"
+      >
+        {item.canSearch &&
+          menuItem(
+            <MagnifyingGlassIcon className="h-5 w-5" />,
+            intl.formatMessage(messages.searchAgain),
+            () => onSearch(item)
+          )}
+        {item.mediaId &&
+          item.target &&
+          menuItem(
+            <ListBulletIcon className="h-5 w-5" />,
+            intl.formatMessage(messages.pickRelease),
+            () => onPickRelease(item)
+          )}
+        {href && (
+          <MenuItem>
+            {({ focus }) => (
+              <Link
+                href={href}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold text-as-ink ${
+                  focus ? 'bg-as-raised' : ''
+                }`}
+              >
+                <ArrowTopRightOnSquareIcon className="h-5 w-5" />
+                {intl.formatMessage(messages.openTitle)}
+              </Link>
+            )}
+          </MenuItem>
+        )}
+        {menuItem(
+          <TrashIcon className="h-5 w-5" />,
+          intl.formatMessage(messages.removeFromQueue),
+          () => onRemove(item),
+          true
+        )}
+      </MenuItems>
+    </Menu>
+  );
+
+  const statusBadge = (
+    <span
+      className={`flex-none whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${style.tone}`}
+    >
+      {intl.formatMessage(messages[style.message])}
+    </span>
+  );
+
+  const progressBar = (
+    <div
+      className="h-2 w-full overflow-hidden rounded-full bg-as-tile"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percent}
+    >
+      <div
+        className={`h-full rounded-full transition-[width] duration-700 ${style.bar}`}
+        style={{ width: `${percent}%` }}
+      />
+    </div>
+  );
+
+  const timeText = showTime
+    ? intl.formatMessage(messages.timeLeft, {
+        time: formatDuration(item.timeLeftSeconds ?? 0),
+      })
+    : undefined;
+
+  if (layout === 'list') {
+    return (
+      <article
+        className={`grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 md:gap-y-0 ${QUEUE_LIST_GRID}`}
+        data-testid="download-row"
+      >
+        <div
+          className={`relative row-span-2 flex-none self-start overflow-hidden rounded-[8px] bg-as-tile md:row-span-1 md:self-center ${
+            square ? 'h-10 w-10' : 'h-[60px] w-10'
+          }`}
+        >
+          <Poster item={item} />
+        </div>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="min-w-0 [&>*]:line-clamp-1 [&>*]:text-[15px]">
+              {title}
+            </div>
+            {problems.length > 0 && (
+              <ExclamationTriangleIcon
+                className={`h-4 w-4 flex-none ${
+                  item.status === 'failed' ? 'text-[#f2b0aa]' : 'text-[#f0d9a8]'
+                }`}
+                title={problems.join(' ')}
+              />
+            )}
+          </div>
+          <div className="truncate text-xs text-as-ink-muted">
+            {[detail, item.serverName].filter(Boolean).join(' · ')}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 md:contents">
+          <div className="hidden md:flex">{statusBadge}</div>
+          <div className="md:hidden">{actionsMenu('')}</div>
+        </div>
+        <div className="col-span-2 flex flex-col gap-1 md:col-span-1">
+          <div className="flex items-center gap-2 md:hidden">
+            {statusBadge}
+            <span className="ml-auto text-xs font-bold tabular-nums text-as-ink-soft">
+              {percent}%
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {progressBar}
+            <span className="hidden w-10 flex-none text-right text-xs font-bold tabular-nums text-as-ink-soft md:inline">
+              {percent}%
+            </span>
+          </div>
+          <div className="truncate text-xs text-as-ink-muted md:hidden">
+            {[sizeText, timeText, item.downloadClient]
+              .filter(Boolean)
+              .join(' · ')}
+          </div>
+        </div>
+        <div className="hidden min-w-0 flex-col text-xs text-as-ink-muted md:flex">
+          <span className="truncate">{sizeText}</span>
+          {timeText && <span className="truncate">{timeText}</span>}
+        </div>
+        <div className="hidden min-w-0 items-center gap-2 md:flex">
+          <span className="min-w-0 truncate text-xs text-as-ink-muted">
+            {[item.downloadClient, item.indexer].filter(Boolean).join(' · ')}
+          </span>
+          {actionsMenu('ml-auto')}
+        </div>
+      </article>
+    );
+  }
+
   return (
     <article
       className="flex flex-col gap-3 rounded-[20px] bg-as-surface p-4 sm:p-[18px]"
@@ -338,60 +499,8 @@ const DownloadCard = ({
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">{title}</div>
-            <span
-              className={`flex-none whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${style.tone}`}
-            >
-              {intl.formatMessage(messages[style.message])}
-            </span>
-            <Menu as="div" className="relative -mr-1.5 -mt-1 flex-none">
-              <MenuButton
-                className="flex h-8 w-8 items-center justify-center rounded-full text-as-ink-soft transition hover:bg-as-raised hover:text-as-ink focus:outline-none"
-                aria-label={intl.formatMessage(messages.actions, {
-                  title: item.title,
-                })}
-              >
-                <EllipsisVerticalIcon className="h-5 w-5" />
-              </MenuButton>
-              <MenuItems
-                anchor="bottom end"
-                className="z-50 w-56 rounded-2xl bg-as-surface p-1.5 shadow-xl shadow-black/40 ring-1 ring-as-line [--anchor-gap:4px] focus:outline-none"
-              >
-                {item.canSearch &&
-                  menuItem(
-                    <MagnifyingGlassIcon className="h-5 w-5" />,
-                    intl.formatMessage(messages.searchAgain),
-                    () => onSearch(item)
-                  )}
-                {item.mediaId &&
-                  item.target &&
-                  menuItem(
-                    <ListBulletIcon className="h-5 w-5" />,
-                    intl.formatMessage(messages.pickRelease),
-                    () => onPickRelease(item)
-                  )}
-                {href && (
-                  <MenuItem>
-                    {({ focus }) => (
-                      <Link
-                        href={href}
-                        className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold text-as-ink ${
-                          focus ? 'bg-as-raised' : ''
-                        }`}
-                      >
-                        <ArrowTopRightOnSquareIcon className="h-5 w-5" />
-                        {intl.formatMessage(messages.openTitle)}
-                      </Link>
-                    )}
-                  </MenuItem>
-                )}
-                {menuItem(
-                  <TrashIcon className="h-5 w-5" />,
-                  intl.formatMessage(messages.removeFromQueue),
-                  () => onRemove(item),
-                  true
-                )}
-              </MenuItems>
-            </Menu>
+            {statusBadge}
+            {actionsMenu('-mr-1.5 -mt-1')}
           </div>
           {detail && (
             <div className="truncate text-sm text-as-ink-soft">{detail}</div>
@@ -415,29 +524,10 @@ const DownloadCard = ({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <div
-          className="h-2 w-full overflow-hidden rounded-full bg-as-tile"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={percent}
-        >
-          <div
-            className={`h-full rounded-full transition-[width] duration-700 ${style.bar}`}
-            style={{ width: `${percent}%` }}
-          />
-        </div>
+        {progressBar}
         <div className="flex items-center justify-between gap-3 text-xs text-as-ink-muted">
           <span className="truncate">
-            {[
-              sizeText,
-              showTime &&
-                intl.formatMessage(messages.timeLeft, {
-                  time: formatDuration(item.timeLeftSeconds ?? 0),
-                }),
-            ]
-              .filter(Boolean)
-              .join(' · ')}
+            {[sizeText, timeText].filter(Boolean).join(' · ')}
           </span>
           <span className="flex-none font-bold tabular-nums text-as-ink-soft">
             {percent}%

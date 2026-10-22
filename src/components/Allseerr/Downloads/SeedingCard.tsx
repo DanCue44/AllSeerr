@@ -1,6 +1,8 @@
+import type { DownloadsLayout } from '@app/components/Allseerr/Downloads/DownloadCard';
 import {
   messages as cardMessages,
   PosterImage,
+  SEEDING_LIST_GRID,
   useBookCover,
 } from '@app/components/Allseerr/Downloads/DownloadCard';
 import { splitDuration } from '@app/components/Allseerr/Downloads/downloadFilters';
@@ -81,7 +83,13 @@ const Dotted = ({ parts }: { parts: ReactNode[] }) => (
  * A torrent Talearr seeds, with its seeded time against the tracker's
  * minimum and why it is at risk when it is
  */
-const SeedingCard = ({ torrent }: { torrent: SeedingTorrent }) => {
+const SeedingCard = ({
+  torrent,
+  layout = 'cards',
+}: {
+  torrent: SeedingTorrent;
+  layout?: DownloadsLayout;
+}) => {
   const intl = useIntl();
   const cover = useBookCover(torrent.olId);
   const tone = getSeedingTone(torrent);
@@ -141,6 +149,108 @@ const SeedingCard = ({ torrent }: { torrent: SeedingTorrent }) => {
       {name}
     </span>
   );
+
+  const stateBadge = (
+    <span
+      className={`flex-none whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${
+        torrent.atRisk ? statusTone.bad : statusTone[tone]
+      }`}
+    >
+      {intl.formatMessage(
+        torrent.atRisk
+          ? messages.atRisk
+          : messages[STATE_MESSAGES[torrent.state]]
+      )}
+    </span>
+  );
+
+  const goalText =
+    progress.targetSeconds === null
+      ? undefined
+      : progress.met
+        ? intl.formatMessage(messages.requirementMet)
+        : intl.formatMessage(messages.timeLeft, {
+            time: formatDuration(progress.remainingSeconds),
+          });
+
+  const ratioText = intl.formatMessage(messages.ratio, {
+    ratio: formatRatio(torrent.ratio),
+  });
+
+  if (layout === 'list') {
+    return (
+      <article
+        className={`grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 md:gap-y-0 ${SEEDING_LIST_GRID}`}
+        data-testid="seeding-row"
+      >
+        <div className="relative row-span-2 h-[60px] w-10 flex-none self-start overflow-hidden rounded-[8px] bg-as-tile md:row-span-1 md:self-center">
+          <PosterImage src={cover} />
+        </div>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="min-w-0 [&>*]:line-clamp-1 [&>*]:text-[15px]">
+              {title}
+            </div>
+            {torrent.isPrivateTracker && (
+              <LockClosedIcon
+                className="h-3.5 w-3.5 flex-none text-[#c9c0f5]"
+                title={intl.formatMessage(messages.privateTracker)}
+              />
+            )}
+          </div>
+          <div
+            className="truncate text-xs text-as-ink-muted"
+            title={
+              torrent.atRisk ? (torrent.riskReason ?? undefined) : undefined
+            }
+          >
+            {torrent.atRisk
+              ? (torrent.riskReason ??
+                intl.formatMessage(messages.atRiskFallback))
+              : detail}
+          </div>
+        </div>
+        <div className="md:contents">{stateBadge}</div>
+        <div className="col-span-2 flex flex-col gap-1 md:col-span-1">
+          {progress.fraction !== null && (
+            <div className="flex items-center gap-2">
+              <div
+                className="h-2 w-full overflow-hidden rounded-full bg-as-tile"
+                role="progressbar"
+                aria-label={seededText}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={percent}
+              >
+                <div
+                  className={`h-full rounded-full transition-[width] duration-700 ${BAR_STYLE[tone]}`}
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+              <span className="hidden w-10 flex-none text-right text-xs font-bold tabular-nums text-as-ink-soft md:inline">
+                {percent}%
+              </span>
+            </div>
+          )}
+          <div className="truncate text-xs text-as-ink-muted md:hidden">
+            {[seededText, goalText, ratioText].filter(Boolean).join(' · ')}
+          </div>
+        </div>
+        <div className="hidden min-w-0 flex-col text-xs text-as-ink-muted md:flex">
+          <span className="truncate">{seededText}</span>
+          {goalText && <span className="truncate">{goalText}</span>}
+        </div>
+        <div className="hidden min-w-0 flex-col text-xs text-as-ink-muted md:flex">
+          <span className="truncate tabular-nums">{ratioText}</span>
+          <span className="truncate">
+            {[torrent.downloadClient, torrent.indexer]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        </div>
+      </article>
+    );
+  }
 
   return (
     <article

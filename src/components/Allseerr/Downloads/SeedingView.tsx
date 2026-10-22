@@ -1,5 +1,8 @@
+import type { DownloadsLayout } from '@app/components/Allseerr/Downloads/DownloadCard';
+import { SEEDING_LIST_GRID } from '@app/components/Allseerr/Downloads/DownloadCard';
 import {
   EmptyState,
+  ListFrame,
   StatTile,
 } from '@app/components/Allseerr/Downloads/DownloadsCommon';
 import SeedingCard from '@app/components/Allseerr/Downloads/SeedingCard';
@@ -37,6 +40,11 @@ const messages = defineMessages('components.Allseerr.Downloads.Seeding', {
   unsupportedText:
     'Seeding shows when Talearr is the book service and supports it. Chaptarr and LazyLibrarian do not report it.',
   loadError: 'Unable to load what Talearr seeds.',
+  columnTitle: 'Title',
+  columnState: 'State',
+  columnSeedTime: 'Progress',
+  columnSeeded: 'Seeded',
+  columnRatio: 'Ratio and Client',
 });
 
 const REFRESH_MS = 30_000;
@@ -113,7 +121,7 @@ const TrackerAccountPanel = ({ mam }: { mam: TrackerAccount }) => {
  * What Talearr seeds, at risk torrents first, and the tracker account
  * its seeding rules come from
  */
-const SeedingView = () => {
+const SeedingView = ({ layout = 'cards' }: { layout?: DownloadsLayout }) => {
   const intl = useIntl();
   const { data, error } = useSWR<SeedingResponse>('/api/v1/downloads/seeding', {
     refreshInterval: REFRESH_MS,
@@ -173,6 +181,25 @@ const SeedingView = () => {
           title={intl.formatMessage(messages.emptyTitle)}
           text={intl.formatMessage(messages.emptyText)}
         />
+      ) : layout === 'list' ? (
+        <ListFrame
+          gridClassName={SEEDING_LIST_GRID}
+          columns={[
+            intl.formatMessage(messages.columnTitle),
+            intl.formatMessage(messages.columnState),
+            intl.formatMessage(messages.columnSeedTime),
+            intl.formatMessage(messages.columnSeeded),
+            intl.formatMessage(messages.columnRatio),
+          ]}
+        >
+          {torrents.map((torrent) => (
+            <SeedingCard
+              key={torrent.downloadId}
+              torrent={torrent}
+              layout="list"
+            />
+          ))}
+        </ListFrame>
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4 2xl:grid-cols-3">
           {torrents.map((torrent) => (

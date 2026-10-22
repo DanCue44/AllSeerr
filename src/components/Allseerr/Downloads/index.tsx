@@ -1,6 +1,12 @@
-import DownloadCard from '@app/components/Allseerr/Downloads/DownloadCard';
+import type { DownloadsLayout } from '@app/components/Allseerr/Downloads/DownloadCard';
+import DownloadCard, {
+  DOWNLOADS_LAYOUTS,
+  QUEUE_LIST_GRID,
+} from '@app/components/Allseerr/Downloads/DownloadCard';
 import {
   EmptyState,
+  LayoutToggle,
+  ListFrame,
   StatTile,
 } from '@app/components/Allseerr/Downloads/DownloadsCommon';
 import RemoveDownloadModal from '@app/components/Allseerr/Downloads/RemoveDownloadModal';
@@ -70,6 +76,11 @@ const messages = defineMessages('components.Allseerr.Downloads', {
   removedSearchFailed:
     'Removed {title} from the queue, but could not search again: {message}',
   removeError: 'Could not remove the download: {message}',
+  columnTitle: 'Title',
+  columnStatus: 'Status',
+  columnProgress: 'Progress',
+  columnSize: 'Size',
+  columnClient: 'Client',
 });
 
 const TAB_MESSAGES: Record<DownloadTab, keyof typeof globalMessages> = {
@@ -109,6 +120,7 @@ const Downloads = () => {
     ? 'Talearr'
     : 'Chaptarr';
   const [view, setView] = useState<DownloadsView>('queue');
+  const [layout, setLayout] = useState<DownloadsLayout>('cards');
   const [tab, setTab] = useState<DownloadTab>('all');
   const [statusFilter, setStatusFilter] = useState<DownloadStatusFilter>('all');
   const [removing, setRemoving] = useState<DownloadItem | null>(null);
@@ -142,6 +154,9 @@ const Downloads = () => {
       if (DOWNLOADS_VIEWS.includes(saved.view)) {
         setView(saved.view);
       }
+      if (DOWNLOADS_LAYOUTS.includes(saved.layout)) {
+        setLayout(saved.layout);
+      }
     } catch {
       // Storage may be blocked, the filters start fresh
     }
@@ -151,12 +166,12 @@ const Downloads = () => {
     try {
       window.localStorage.setItem(
         'downloads-filters',
-        JSON.stringify({ tab, status: statusFilter, view })
+        JSON.stringify({ tab, status: statusFilter, view, layout })
       );
     } catch {
       // Storage may be blocked
     }
-  }, [tab, statusFilter, view]);
+  }, [tab, statusFilter, view, layout]);
 
   // The navigation badge's count, shared with the layout
   const { data: counts } = useSWR<{ seedingAtRisk?: number }>(
@@ -286,47 +301,50 @@ const Downloads = () => {
             )}
           </p>
         </div>
-        {showSeeding && (
-          <div
-            className="flex flex-none self-start rounded-full bg-as-surface p-1 sm:self-auto"
-            role="tablist"
-            aria-label={intl.formatMessage(messages.views)}
-          >
-            {DOWNLOADS_VIEWS.map((key) => {
-              const active = activeView === key;
+        <div className="flex flex-none items-center gap-2 self-start sm:self-auto">
+          {showSeeding && (
+            <div
+              className="flex flex-none rounded-full bg-as-surface p-1"
+              role="tablist"
+              aria-label={intl.formatMessage(messages.views)}
+            >
+              {DOWNLOADS_VIEWS.map((key) => {
+                const active = activeView === key;
 
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setView(key)}
-                  className={`flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-sm font-semibold transition ${
-                    active
-                      ? 'bg-as-raised text-as-ink'
-                      : 'text-as-ink-muted hover:text-as-ink'
-                  }`}
-                >
-                  {intl.formatMessage(
-                    key === 'seeding'
-                      ? messages.viewSeeding
-                      : messages.viewQueue
-                  )}
-                  {key === 'seeding' && seedingAtRisk > 0 && (
-                    <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#3b2427] px-1.5 text-[11px] font-bold leading-5 text-[#f2b0aa]">
-                      {seedingAtRisk}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setView(key)}
+                    className={`flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-sm font-semibold transition ${
+                      active
+                        ? 'bg-as-raised text-as-ink'
+                        : 'text-as-ink-muted hover:text-as-ink'
+                    }`}
+                  >
+                    {intl.formatMessage(
+                      key === 'seeding'
+                        ? messages.viewSeeding
+                        : messages.viewQueue
+                    )}
+                    {key === 'seeding' && seedingAtRisk > 0 && (
+                      <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#3b2427] px-1.5 text-[11px] font-bold leading-5 text-[#f2b0aa]">
+                        {seedingAtRisk}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <LayoutToggle value={layout} onChange={setLayout} />
+        </div>
       </div>
 
       {activeView === 'seeding' ? (
-        <SeedingView />
+        <SeedingView layout={layout} />
       ) : (
         <>
           <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-3">
@@ -452,6 +470,28 @@ const Downloads = () => {
                 </button>
               }
             />
+          ) : layout === 'list' ? (
+            <ListFrame
+              gridClassName={QUEUE_LIST_GRID}
+              columns={[
+                intl.formatMessage(messages.columnTitle),
+                intl.formatMessage(messages.columnStatus),
+                intl.formatMessage(messages.columnProgress),
+                intl.formatMessage(messages.columnSize),
+                intl.formatMessage(messages.columnClient),
+              ]}
+            >
+              {visible.map((item) => (
+                <DownloadCard
+                  key={item.id}
+                  item={item}
+                  layout="list"
+                  onSearch={searchAgain}
+                  onPickRelease={setPicking}
+                  onRemove={setRemoving}
+                />
+              ))}
+            </ListFrame>
           ) : (
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4 2xl:grid-cols-3">
               {visible.map((item) => (
