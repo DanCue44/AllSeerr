@@ -79,6 +79,7 @@ export const maskUserAccessSettings = (
   kavita: maskConnection(settings.kavita),
   komga: maskConnection(settings.komga),
   emailPasswords: settings.emailPasswords,
+  matchPlexUsernames: settings.matchPlexUsernames !== false,
 });
 
 /**
@@ -114,6 +115,7 @@ userAccessSettingsRoutes.post<
   Partial<
     Record<UserAccessApp, Partial<UserAccessAppConnection>> & {
       emailPasswords: boolean;
+      matchPlexUsernames: boolean;
     }
   >
 >('/', async (req, res, next) => {
@@ -145,6 +147,10 @@ userAccessSettingsRoutes.post<
       typeof req.body.emailPasswords === 'boolean'
         ? req.body.emailPasswords
         : current.emailPasswords,
+    matchPlexUsernames:
+      typeof req.body.matchPlexUsernames === 'boolean'
+        ? req.body.matchPlexUsernames
+        : current.matchPlexUsernames,
   };
 
   await settings.save();

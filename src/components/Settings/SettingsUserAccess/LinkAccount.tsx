@@ -1,4 +1,5 @@
 import Button from '@app/components/Common/Button';
+import CopyButton from '@app/components/Settings/CopyButton';
 import {
   APPS,
   APP_NAMES,
@@ -8,6 +9,7 @@ import defineMessages from '@app/utils/defineMessages';
 import type { UserAccessApp } from '@server/constants/userAccess';
 import type {
   AppAccountListItem,
+  AppAccountRenameItem,
   AppAccountsResponse,
   LinkAppAccountResult,
   PersonAccess,
@@ -37,6 +39,22 @@ const messages = defineMessages(
     allLinked: 'Every account is linked.',
     pickPerson: 'Pick a person',
     noAccounts: 'Could not list the accounts: {message}',
+    markService: 'Service account',
+    markServiceHelp: 'Not a person: never suggested, linked or renamed',
+    markPerson: 'This is a person',
+    serviceAccounts:
+      '{count, plural, one {# service account} other {# service accounts}}, never linked or renamed',
+    serviceName: 'used by Allseerr or its tools',
+    serviceConnection: "Allseerr's connection signs in with it",
+    serviceMarked: 'marked as a service account',
+    markError: 'Something went wrong: {message}',
+    renamedTitle: 'Renamed accounts',
+    renamedDescription:
+      'Accounts renamed to match Plex, newest first. Everyone renamed got a notification; copy the list to tell them yourself too.',
+    renamedLine: '{person}: {app}, {username}',
+    renamedFrom: 'was {from}',
+    copied: 'Copied the renamed accounts',
+    clear: 'Clear list',
   }
 );
 
@@ -82,6 +100,7 @@ const useLinkAccount = () => {
       }
       mutate(accountsKey(app));
       mutate('/api/v1/user-access/people');
+      mutate('/api/v1/user-access/renames');
       return response.data;
     } catch (e) {
       addToast(
@@ -116,7 +135,7 @@ export const LinkAccountPicker = ({
   const { data, error } = useSWR<AppAccountsResponse>(accountsKey(app));
   const { link, linking } = useLinkAccount();
   const accounts = (data?.accounts ?? [])
-    .filter((account) => account.linkedUserId === null)
+    .filter((account) => account.linkedUserId === null && !account.service)
     .sort(
       (a, b) =>
         Number(b.suggestedUserId === person.userId) -
@@ -232,6 +251,24 @@ const AppAccountsToLink = ({
   const { data, error } = useSWR<AppAccountsResponse>(accountsKey(app));
   const { link, linking } = useLinkAccount();
   const [choices, setChoices] = useState<Record<string, string>>({});
+  const { addToast } = useToasts();
+
+  const mark = async (remoteUserId: string, service: boolean) => {
+    try {
+      const response = await axios.post<AppAccountsResponse>(
+        `${accountsKey(app)}/${encodeURIComponent(remoteUserId)}/service`,
+        { service }
+      );
+      mutate(accountsKey(app), response.data, false);
+    } catch (e) {
+      addToast(
+        intl.formatMessage(messages.markError, {
+          message: e.response?.data?.message ?? e.message,
+        }),
+        { appearance: 'error', autoDismiss: true }
+      );
+    }
+  };
 
   if (error) {
     return (
@@ -249,9 +286,16 @@ const AppAccountsToLink = ({
 
   // Only people without an account in the app can take one
   const free = people.filter((person) => !person.apps[app].remoteUsername);
-  const accounts = data.accounts.filter(
+  const unlinked = data.accounts.filter(
     (account) => account.linkedUserId === null
   );
+  const accounts = unlinked.filter((account) => !account.service);
+  const services = unlinked.filter((account) => !!account.service);
+  const serviceReasons = {
+    name: messages.serviceName,
+    connection: messages.serviceConnection,
+    marked: messages.serviceMarked,
+  };
 
   return (
     <div className="mb-6">
@@ -292,10 +336,10 @@ const AppAccountsToLink = ({
                     </div>
                   )}
                 </div>
-                <div className="flex min-w-0 flex-1 gap-2">
+                <div className="flex min-w-0 flex-1 flex-wrap gap-2">
                   <select
                     aria-label={intl.formatMessage(messages.pickPerson)}
-                    className="min-w-0 flex-1"
+                    className="min-w-0 flex-1 basis-40"
                     value={chosen}
                     onChange={(e) =>
                       setChoices((current) => ({
@@ -327,12 +371,119 @@ const AppAccountsToLink = ({
                         : messages.link
                     )}
                   </Button>
+                  <Button
+                    buttonSize="sm"
+                    buttonType="ghost"
+                    title={intl.formatMessage(messages.markServiceHelp)}
+                    onClick={() => mark(account.id, true)}
+                  >
+                    {intl.formatMessage(messages.markService)}
+                  </Button>
                 </div>
               </li>
             );
           })}
         </ul>
       )}
+      {services.length > 0 && (
+        <details className="mt-2 text-sm">
+          <summary className="cursor-pointer text-as-ink-faint">
+            {intl.formatMessage(messages.serviceAccounts, {
+              count: services.length,
+            })}
+          </summary>
+          <ul className="mt-2 space-y-2">
+            {services.map((account) => (
+              <li
+                key={account.id}
+                className="flex flex-wrap items-center gap-2"
+                data-testid="service-account-row"
+              >
+                <span className="font-mono">{account.username}</span>
+                <span className="text-xs text-as-ink-faint">
+                  {account.service &&
+                    intl.formatMessage(serviceReasons[account.service])}
+                </span>
+                <Button
+                  buttonSize="sm"
+                  buttonType="ghost"
+                  onClick={() => mark(account.id, false)}
+                >
+                  {intl.formatMessage(messages.markPerson)}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+};
+
+/**
+ * The accounts renamed to match Plex, as a list the admin can copy and pass
+ * on
+ */
+export const RenamedAccounts = () => {
+  const intl = useIntl();
+  const { data: renames, mutate: revalidate } = useSWR<AppAccountRenameItem[]>(
+    '/api/v1/user-access/renames'
+  );
+
+  if (!renames || renames.length === 0) {
+    return null;
+  }
+
+  const lines = renames.map((rename) =>
+    intl.formatMessage(messages.renamedLine, {
+      person: rename.displayName,
+      app: APP_NAMES[rename.app],
+      username: rename.to,
+    })
+  );
+
+  return (
+    <div className="mb-10" data-testid="renamed-accounts">
+      <h3 className="heading">{intl.formatMessage(messages.renamedTitle)}</h3>
+      <p className="description">
+        {intl.formatMessage(messages.renamedDescription)}
+      </p>
+      <ul className="mb-3 divide-y divide-as-line rounded-xl ring-1 ring-as-line">
+        {renames.map((rename, index) => (
+          <li
+            key={`${rename.userId}-${rename.app}-${rename.date}`}
+            className="flex flex-col gap-0.5 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+          >
+            <span className="break-words">{lines[index]}</span>
+            <span className="text-xs text-as-ink-faint">
+              {intl.formatMessage(messages.renamedFrom, { from: rename.from })}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center gap-2">
+        <div className="form-input-field max-w-md">
+          <input
+            type="text"
+            readOnly
+            value={lines.join('; ')}
+            aria-label={intl.formatMessage(messages.renamedTitle)}
+          />
+          <CopyButton
+            textToCopy={lines.join('\n')}
+            toastMessage={intl.formatMessage(messages.copied)}
+          />
+        </div>
+        <Button
+          buttonSize="sm"
+          onClick={async () => {
+            await axios.delete('/api/v1/user-access/renames');
+            revalidate([], false);
+          }}
+        >
+          {intl.formatMessage(messages.clear)}
+        </Button>
+      </div>
     </div>
   );
 };

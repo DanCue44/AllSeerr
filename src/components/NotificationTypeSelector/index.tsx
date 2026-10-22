@@ -109,6 +109,11 @@ const messages = defineMessages('components.NotificationTypeSelector', {
     'Send notifications to people when an admin gives them access to Audiobookshelf, Kavita or Komga.',
   useraccessgrantedDescription:
     'Get notified when an admin gives you access to Audiobookshelf, Kavita or Komga.',
+  appusernamechanged: 'Reading App Username Changed',
+  appusernamechangedDescription:
+    'Send notifications to people when Allseerr renames their Audiobookshelf or Kavita account to match their Plex username.',
+  userappusernamechangedDescription:
+    'Get notified when your Audiobookshelf or Kavita username changes to match your Plex username.',
   newsletter: 'Recently Added Newsletter',
   usernewsletterDescription:
     'Receive a periodic email listing the media which recently became available.',
@@ -164,6 +169,7 @@ export enum Notification {
   DOWNLOAD_NEEDS_ATTENTION = 1048576,
   ACCESS_REQUESTED = 2097152,
   ACCESS_GRANTED = 4194304,
+  APP_USERNAME_CHANGED = 8388608,
 }
 
 export const ALL_NOTIFICATIONS = Object.values(Notification)
@@ -517,6 +523,17 @@ const NotificationTypeSelector = ({
             : messages.accessgrantedDescription
         ),
         value: Notification.ACCESS_GRANTED,
+        hasNotifyUser: true,
+      },
+      {
+        id: 'app-username-changed',
+        name: intl.formatMessage(messages.appusernamechanged),
+        description: intl.formatMessage(
+          user
+            ? messages.userappusernamechangedDescription
+            : messages.appusernamechangedDescription
+        ),
+        value: Notification.APP_USERNAME_CHANGED,
         hasNotifyUser: true,
       },
       {

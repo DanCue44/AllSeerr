@@ -208,6 +208,7 @@ class WebPushAgent
       case Notification.DOWNLOAD_NEEDS_ATTENTION:
       case Notification.ACCESS_REQUESTED:
       case Notification.ACCESS_GRANTED:
+      case Notification.APP_USERNAME_CHANGED:
         message = payload.message;
         break;
       default:
@@ -222,7 +223,8 @@ class WebPushAgent
       : payload.media ||
           type === Notification.SCAN_FAILURE ||
           type === Notification.ACCESS_REQUESTED ||
-          type === Notification.ACCESS_GRANTED
+          type === Notification.ACCESS_GRANTED ||
+          type === Notification.APP_USERNAME_CHANGED
         ? getPayloadPath(payload) || undefined
         : undefined;
     const actionUrl = appActionUrl ?? payload.externalLink?.url;
@@ -233,7 +235,8 @@ class WebPushAgent
             ? messages.viewIssue
             : type === Notification.SCAN_FAILURE ||
                 type === Notification.ACCESS_REQUESTED ||
-                type === Notification.ACCESS_GRANTED
+                type === Notification.ACCESS_GRANTED ||
+                type === Notification.APP_USERNAME_CHANGED
               ? messages.viewSettings
               : messages.viewMedia
         )

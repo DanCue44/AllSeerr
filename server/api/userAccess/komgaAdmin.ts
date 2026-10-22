@@ -134,6 +134,14 @@ export class KomgaAdminAPI implements UserAccessAppClient {
     }));
   }
 
+  public async ownAccountId(): Promise<string | null> {
+    const me = await this.call(() =>
+      this.axios.get<KomgaUser>('/api/v2/users/me')
+    );
+
+    return me?.id ?? null;
+  }
+
   public async getAccountAccess(
     account: RemoteAccount
   ): Promise<CurrentAppAccess> {

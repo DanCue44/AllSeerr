@@ -58,6 +58,9 @@ const messages = defineMessages(
     emailPasswords: 'Email new passwords',
     emailPasswordsHelp:
       'When email notifications are set up, people get their new app passwords by email too',
+    matchPlexUsernames: 'Keep app usernames the same as Plex',
+    matchPlexUsernamesHelp:
+      "Linked Audiobookshelf and Kavita accounts are renamed to the person's Plex username, now and whenever it changes, and the person is told. Passwords, progress and bookmarks stay the same. Komga signs people in by email and keeps its names.",
   }
 );
 
@@ -99,9 +102,11 @@ const AppConnections = ({ settings, onChange }: AppConnectionsProps) => {
     ),
   });
 
-  const saveEmailPasswords = async (emailPasswords: boolean) => {
+  const saveToggle = async (
+    change: { emailPasswords: boolean } | { matchPlexUsernames: boolean }
+  ) => {
     try {
-      await axios.post('/api/v1/settings/user-access', { emailPasswords });
+      await axios.post('/api/v1/settings/user-access', change);
       onChange();
     } catch {
       addToast(intl.formatMessage(messages.saveFailure), {
@@ -157,7 +162,25 @@ const AppConnections = ({ settings, onChange }: AppConnectionsProps) => {
             type="checkbox"
             id="emailPasswords"
             checked={settings.emailPasswords}
-            onChange={(e) => saveEmailPasswords(e.target.checked)}
+            onChange={(e) => saveToggle({ emailPasswords: e.target.checked })}
+          />
+        </div>
+      </div>
+      <div className="form-row">
+        <label htmlFor="matchPlexUsernames" className="checkbox-label">
+          {intl.formatMessage(messages.matchPlexUsernames)}
+          <span className="label-tip">
+            {intl.formatMessage(messages.matchPlexUsernamesHelp)}
+          </span>
+        </label>
+        <div className="form-input-area">
+          <input
+            type="checkbox"
+            id="matchPlexUsernames"
+            checked={settings.matchPlexUsernames}
+            onChange={(e) =>
+              saveToggle({ matchPlexUsernames: e.target.checked })
+            }
           />
         </div>
       </div>

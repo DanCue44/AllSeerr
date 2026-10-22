@@ -18,6 +18,7 @@ import { Permission } from '@server/lib/permissions';
 import { defaultPlexDefaultAccess, getSettings } from '@server/lib/settings';
 import enableAccessRequestAlerts from '@server/lib/settings/migrations/0014_enable_access_request_alerts';
 import enableAccessGrantedAlerts from '@server/lib/settings/migrations/0015_enable_access_granted_alerts';
+import enableAppUsernameAlerts from '@server/lib/settings/migrations/0016_enable_app_username_alerts';
 import { updatePerson } from '@server/lib/userAccess';
 import {
   applyPlexDefaults,
@@ -1041,5 +1042,35 @@ describe('access granted notifications', () => {
     assert.deepEqual(migrated.migrations, [
       '0015_enable_access_granted_alerts',
     ]);
+  });
+});
+
+describe('app username changed notifications', () => {
+  it('are turned on once for agents that tell people about access', () => {
+    const migrated = enableAppUsernameAlerts({
+      notifications: {
+        agents: {
+          email: { enabled: true, types: Notification.ACCESS_GRANTED },
+          slack: { enabled: true, types: Notification.MEDIA_PENDING },
+        },
+      },
+      migrations: ['0015_enable_access_granted_alerts'],
+    });
+    const agents = migrated.notifications.agents as unknown as Record<
+      string,
+      { types?: number }
+    >;
+
+    assert.equal(
+      agents.email.types,
+      Notification.ACCESS_GRANTED | Notification.APP_USERNAME_CHANGED
+    );
+    assert.equal(agents.slack.types, Notification.MEDIA_PENDING);
+    assert.equal(
+      enableAppUsernameAlerts(migrated).migrations?.filter(
+        (name) => name === '0016_enable_app_username_alerts'
+      ).length,
+      1
+    );
   });
 });

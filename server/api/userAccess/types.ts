@@ -83,6 +83,12 @@ export interface UserAccessAppClient {
   deleteAccount(account: RemoteAccount): Promise<void>;
   // What the account may see now, so linking it changes nothing
   getAccountAccess(account: RemoteAccount): Promise<CurrentAppAccess>;
+  // The account the admin key or sign in belongs to, which Allseerr itself
+  // uses and so is no person's
+  ownAccountId?(): Promise<string | null>;
+  // Renames an account, keeping its password and everything in it. Apps
+  // that sign people in by email have none.
+  renameAccount?(account: RemoteAccount, username: string): Promise<void>;
   // Sets the email of an account, so the app can match the person by it
   // when they sign in with Allseerr. False when the app kept the old one.
   setEmail?(account: RemoteAccount, email: string): Promise<boolean>;

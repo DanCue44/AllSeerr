@@ -960,6 +960,9 @@ components:
         emailPasswords:
           type: boolean
           description: Emails new app passwords to people when email notifications are set up
+        matchPlexUsernames:
+          type: boolean
+          description: Keeps linked Audiobookshelf and Kavita usernames the same as each person's Plex username, renaming them when linked and in the scheduled sync and telling the person. On unless turned off. Komga signs people in by email and keeps its names.
     PlexDefaultApp:
       type: object
       properties:
@@ -5693,10 +5696,76 @@ paths:
                           nullable: true
         '400':
           description: The app is not connected
+  /user-access/apps/{app}/accounts/{remoteUserId}/service:
+    post:
+      summary: Mark an app account as a service account or a person's
+      description: Service accounts are never suggested, linked or renamed. Accounts named like Allseerr's own tools (allseerr, allseerr-match, talearr, nobookends-sync, appdev, appreview) and the account the app connection signs in with count as service accounts unless marked as a person's. `service` true marks it a service account, false a person's, null leaves it to those rules.
+      tags:
+        - user-access
+      parameters:
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+        - in: path
+          name: remoteUserId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                service:
+                  type: boolean
+                  nullable: true
+      responses:
+        '200':
+          description: The app's accounts, as GET /user-access/apps/{app}/accounts answers
+  /user-access/renames:
+    get:
+      summary: List the accounts renamed to match Plex
+      description: The latest renames, newest first, made while Keep app usernames the same as Plex is on (`matchPlexUsernames` in the user access settings). Each renamed person also gets a Reading App Username Changed notification.
+      tags:
+        - user-access
+      responses:
+        '200':
+          description: The renames
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    userId:
+                      type: number
+                    displayName:
+                      type: string
+                    app:
+                      type: string
+                    from:
+                      type: string
+                    to:
+                      type: string
+                    date:
+                      type: string
+    delete:
+      summary: Clear the list of renamed accounts
+      tags:
+        - user-access
+      responses:
+        '204':
+          description: Cleared
   /user-access/people/{userId}/apps/{app}/link:
     post:
       summary: Link a person to an account they already have in an app
-      description: Links the account and turns the app on for the person. The account keeps its password and is kept in line with the person's access from then on. With Kavita the account gets the person's email when they have a real one, as Kavita links people signing in with Allseerr by email; Kavita keeps the email of the account its admin key belongs to, which `warning` then says. Audiobookshelf links people by username, which signing in sends as the linked account's.
+      description: Links the account and turns the app on for the person, with the libraries (and on Audiobookshelf the download permission) the account has now, so nothing it can see changes. While Keep app usernames the same as Plex is on, an Audiobookshelf or Kavita account is renamed to the person's Plex username unless another account has that name, which `warning` then says. The account keeps its password and is kept in line with the person's access from then on. With Kavita the account gets the person's email when they have a real one, as Kavita links people signing in with Allseerr by email; Kavita keeps the email of the account its admin key belongs to, which `warning` then says. Audiobookshelf links people by username, which signing in sends as the linked account's.
       tags:
         - user-access
       parameters:

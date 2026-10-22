@@ -7,6 +7,7 @@ import {
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import type {
+  AppAccountRenameItem,
   AppAccountsResponse,
   LinkAppAccountResult,
   UserAccessAppInfo,
@@ -20,6 +21,7 @@ import type {
 import {
   AccountLinkConflictError,
   AccountNotFoundError,
+  ServiceAccountError,
   createAppAccountNow,
   getAppClient,
   getAppPublicUrl,
@@ -41,6 +43,7 @@ import {
   listInvites,
   revokeInvite,
 } from '@server/lib/userAccess/invites';
+import { markServiceAccount } from '@server/lib/userAccess/rename';
 import logger from '@server/logger';
 import { Router } from 'express';
 
@@ -369,11 +372,60 @@ userAccessRoutes.post<
     if (e instanceof AccountNotFoundError) {
       return next({ status: 404, message: e.message });
     }
+    if (e instanceof ServiceAccountError) {
+      return next({ status: 400, message: e.message });
+    }
     return next({
       status: 502,
       message: `${USER_ACCESS_APP_NAMES[app]}: ${(e as Error).message}`,
     });
   }
+});
+
+/**
+ * Marks an account as a service account (true), as a person's (false), or
+ * leaves it to the usual rules (null)
+ */
+userAccessRoutes.post<
+  { app: string; remoteUserId: string },
+  AppAccountsResponse,
+  { service?: unknown }
+>('/apps/:app/accounts/:remoteUserId/service', async (req, res, next) => {
+  const { app, remoteUserId } = req.params;
+  const service = req.body?.service;
+
+  if (!isUserAccessApp(app)) {
+    return next({ status: 404, message: 'Unknown app.' });
+  }
+  if (typeof service !== 'boolean' && service !== null) {
+    return next({ status: 400, message: 'Say whether it is a service.' });
+  }
+
+  await markServiceAccount(app, remoteUserId, service);
+
+  try {
+    return res.status(200).json({ app, accounts: await listAppAccounts(app) });
+  } catch (e) {
+    return next({
+      status: 502,
+      message: `${USER_ACCESS_APP_NAMES[app]}: ${(e as Error).message}`,
+    });
+  }
+});
+
+/**
+ * The latest renames to Plex usernames, newest first, so the admin can tell
+ * people their new usernames
+ */
+userAccessRoutes.get<never, AppAccountRenameItem[]>('/renames', (_req, res) => {
+  res.status(200).json(getSettings().userAccess.renames ?? []);
+});
+
+userAccessRoutes.delete('/renames', async (_req, res) => {
+  const settings = getSettings();
+  settings.userAccess = { ...settings.userAccess, renames: [] };
+  await settings.save();
+  res.status(204).send();
 });
 
 /**

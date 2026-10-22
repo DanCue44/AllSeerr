@@ -6,7 +6,10 @@ import type { BookService } from '@server/constants/bookService';
 import { usesChaptarr } from '@server/constants/bookService';
 import type { BookFormatChoice } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
-import type { ReadingAppChoices } from '@server/constants/userAccess';
+import type {
+  ReadingAppChoices,
+  UserAccessApp,
+} from '@server/constants/userAccess';
 import {
   USER_ACCESS_APPS,
   defaultReadingAppChoices,
@@ -169,6 +172,24 @@ export interface UserAccessSettings {
   // The app each kind of book is read or heard in, for the Reading apps
   // settings and the prompt after a request, the defaults when missing
   readingApps?: ReadingAppChoices;
+  // Keeps every linked app username the same as the person's Plex
+  // username, on when missing
+  matchPlexUsernames?: boolean;
+  // App accounts an admin marked as a service, not a person, and accounts
+  // Allseerr would take for one that an admin marked as a person, by app
+  serviceAccounts?: Partial<Record<UserAccessApp, string[]>>;
+  personAccounts?: Partial<Record<UserAccessApp, string[]>>;
+  // The latest renames, so the admin can tell people their new usernames
+  renames?: AppAccountRename[];
+}
+
+export interface AppAccountRename {
+  userId: number;
+  displayName: string;
+  app: UserAccessApp;
+  from: string;
+  to: string;
+  date: string;
 }
 
 export interface AudiobookshelfSettings {

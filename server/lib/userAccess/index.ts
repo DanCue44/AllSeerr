@@ -35,6 +35,13 @@ import type { AgeLimit } from '@server/lib/userAccess/ageLimits';
 import { isRestricted } from '@server/lib/userAccess/ageLimits';
 import { sendAppAccountEmail } from '@server/lib/userAccess/email';
 import { applyPlexDefaults } from '@server/lib/userAccess/plexDefaults';
+import { savedKey } from '@server/lib/userAccess/readingApps';
+import {
+  connectionAccountIdFor,
+  isMatchingPlexUsernames,
+  renameToPlexUsername,
+  serviceReasonFor,
+} from '@server/lib/userAccess/rename';
 import logger from '@server/logger';
 import { randomInt } from 'crypto';
 
@@ -64,14 +71,14 @@ export const generateAppPassword = (): string =>
   ).join('-');
 
 /**
- * The username a person gets in the apps: their Allseerr, Plex or Jellyfin
- * username, else the start of their email, with only letters, digits, dots,
- * dashes and underscores
+ * The username a person gets in the apps: their Plex username, so it is the
+ * name Plex shows, else their Allseerr or Jellyfin username, else the start
+ * of their email, with only letters, digits, dots, dashes and underscores
  */
 export const appUsernameFor = (user: User): string => {
   const base =
-    user.username ||
     user.plexUsername ||
+    user.username ||
     user.jellyfinUsername ||
     user.email?.split('@')[0] ||
     `user${user.id}`;
@@ -675,6 +682,7 @@ export const syncEveryone = async (): Promise<void> => {
       });
     }
     await syncAllAccounts();
+    await renameDriftedAccounts();
   } finally {
     syncRunning = false;
   }
@@ -700,6 +708,7 @@ const syncAllAccounts = async (): Promise<void> => {
 };
 
 export class AccountLinkConflictError extends Error {}
+export class ServiceAccountError extends Error {}
 export class AccountNotFoundError extends Error {}
 
 const sameName = (a?: string | null, b?: string | null): boolean =>
@@ -790,13 +799,14 @@ export const listAppAccounts = async (
     throw new Error(`${USER_ACCESS_APP_NAMES[app]} is not connected.`);
   }
 
-  const [accounts, links, users] = await Promise.all([
+  const [accounts, links, users, connectionAccountId] = await Promise.all([
     client.listAccounts(),
     getRepository(UserAppAccount).find({
       where: { app },
       relations: { user: true },
     }),
     getRepository(User).find({ order: { id: 'ASC' } }),
+    connectionAccountIdFor(client),
   ]);
   const linkedTo = new Map(
     links
@@ -808,7 +818,9 @@ export const listAppAccounts = async (
 
   return accounts.map((account) => {
     const linked = linkedTo.get(account.id);
-    const suggested = linked ? null : suggestPerson(unlinkedUsers, account);
+    const service = serviceReasonFor(app, account, connectionAccountId);
+    const suggested =
+      linked || service ? null : suggestPerson(unlinkedUsers, account);
 
     return {
       id: account.id,
@@ -819,6 +831,7 @@ export const listAppAccounts = async (
       linkedDisplayName: linked?.displayName ?? null,
       suggestedUserId: suggested?.id ?? null,
       suggestedDisplayName: suggested?.displayName ?? null,
+      service,
     };
   });
 };
@@ -847,12 +860,19 @@ export const linkAppAccount = async (
     throw new Error(`${appName} is not connected.`);
   }
 
-  const remote = (await client.listAccounts()).find(
-    (account) => account.id === remoteUserId
-  );
+  const accounts = await client.listAccounts();
+  const remote = accounts.find((account) => account.id === remoteUserId);
 
   if (!remote) {
     throw new AccountNotFoundError(`${appName} has no such account.`);
+  }
+
+  const connectionAccountId = await connectionAccountIdFor(client);
+
+  if (serviceReasonFor(app, remote, connectionAccountId)) {
+    throw new ServiceAccountError(
+      `${remote.username} is a service account, not a person's.`
+    );
   }
 
   const repository = getRepository(UserAppAccount);
@@ -920,6 +940,23 @@ export const linkAppAccount = async (
 
   await syncAppAccount(user, account, { create: false });
 
+  // The account takes the person's Plex username right away
+  if (account.remoteUserId === remote.id) {
+    const renamed = await renameToPlexUsername({
+      user,
+      account,
+      client,
+      accounts,
+      connectionAccountId,
+      targetName: appUsernameFor(user),
+      keyStillWorks: (linked) => nobookendsKeyWorks(client, linked),
+    });
+
+    if (renamed.status === 'clash' || renamed.status === 'failed') {
+      warning = [warning, renamed.message].filter(Boolean).join(' ');
+    }
+  }
+
   if (warning) {
     logger.warn('Linked an app account without its email', {
       label: 'User Access',
@@ -960,4 +997,85 @@ export const unlinkAppAccount = async (
   }
 
   return getPerson(userId);
+};
+
+/**
+ * Whether the key NoBookEnds signs in with still works for the account,
+ * true when there is none
+ */
+const nobookendsKeyWorks = async (
+  client: UserAccessAppClient,
+  account: UserAppAccount
+): Promise<boolean> => {
+  const remote = remoteOf(account);
+  const saved = await savedKey(account);
+
+  if (!remote || !saved || !client.isUserKeyValid) {
+    return true;
+  }
+
+  return client.isUserKeyValid(remote, saved.key);
+};
+
+/**
+ * Renames linked accounts whose username drifted from the person's Plex
+ * username, such as after a Plex rename, for the scheduled sync
+ */
+const renameDriftedAccounts = async (): Promise<void> => {
+  if (!isMatchingPlexUsernames()) {
+    return;
+  }
+
+  for (const app of USER_ACCESS_APPS) {
+    const client = getAppClient(app);
+
+    if (!client?.renameAccount) {
+      continue;
+    }
+
+    const linked = (
+      await getRepository(UserAppAccount).find({
+        where: { app },
+        relations: { user: true },
+      })
+    ).filter((account) => account.remoteUserId && account.user);
+
+    if (linked.length === 0) {
+      continue;
+    }
+
+    try {
+      const [accounts, connectionAccountId] = await Promise.all([
+        client.listAccounts(),
+        connectionAccountIdFor(client),
+      ]);
+
+      for (const account of linked) {
+        const outcome = await renameToPlexUsername({
+          user: account.user,
+          account,
+          client,
+          accounts,
+          connectionAccountId,
+          targetName: appUsernameFor(account.user),
+          keyStillWorks: (renamed) => nobookendsKeyWorks(client, renamed),
+        });
+
+        if (outcome.status === 'clash' || outcome.status === 'failed') {
+          logger.warn('Could not rename an app account to match Plex', {
+            label: 'User Access',
+            app,
+            userId: account.user.id,
+            message: outcome.message,
+          });
+        }
+      }
+    } catch (e) {
+      logger.warn('Could not check app usernames against Plex', {
+        label: 'User Access',
+        app,
+        errorMessage: (e as Error).message,
+      });
+    }
+  }
 };

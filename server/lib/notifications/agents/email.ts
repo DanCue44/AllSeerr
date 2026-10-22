@@ -221,7 +221,8 @@ class EmailAgent
       type === Notification.SCAN_FAILURE ||
       type === Notification.DOWNLOAD_NEEDS_ATTENTION ||
       type === Notification.ACCESS_REQUESTED ||
-      type === Notification.ACCESS_GRANTED
+      type === Notification.ACCESS_GRANTED ||
+      type === Notification.APP_USERNAME_CHANGED
     ) {
       const appPath = getPayloadPath(payload);
       const adminActionUrl =
@@ -234,9 +235,11 @@ class EmailAgent
           ? `Open ${applicationTitle} Settings`
           : type === Notification.ACCESS_GRANTED
             ? 'Set it up'
-            : appPath
-              ? undefined
-              : payload.externalLink?.title;
+            : type === Notification.APP_USERNAME_CHANGED
+              ? 'Open Reading apps'
+              : appPath
+                ? undefined
+                : payload.externalLink?.title;
 
       return {
         template: path.join(

@@ -31,6 +31,8 @@ export interface UserAccessSettingsResponse {
   kavita: UserAccessAppConnectionResponse;
   komga: UserAccessAppConnectionResponse;
   emailPasswords: boolean;
+  // Keeps linked app usernames the same as Plex usernames
+  matchPlexUsernames: boolean;
 }
 
 export interface PlexDefaultAppSettings {
@@ -118,6 +120,19 @@ export interface AppAccountListItem {
   // same email, the same username, or one username inside the other
   suggestedUserId: number | null;
   suggestedDisplayName: string | null;
+  // Why the account is a service account and no person's: its name is one
+  // Allseerr's tools use, the app connection signs in with it, or an admin
+  // marked it. Service accounts are never suggested, linked or renamed.
+  service: 'name' | 'connection' | 'marked' | null;
+}
+
+export interface AppAccountRenameItem {
+  userId: number;
+  displayName: string;
+  app: UserAccessApp;
+  from: string;
+  to: string;
+  date: string;
 }
 
 export interface AppAccountsResponse {

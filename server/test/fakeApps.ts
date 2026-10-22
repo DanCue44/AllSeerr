@@ -193,8 +193,16 @@ export const startFakeAudiobookshelf = async (apiKey: string) => {
       if (!user) {
         return { status: 404 };
       }
-      if (user.type === 'root') {
+      // The key belongs to root, who may change itself but not its type
+      // or permissions
+      if (user.type === 'root' && (b.permissions || b.isActive !== undefined)) {
         return { status: 403 };
+      }
+      if (typeof b.username === 'string' && b.username !== user.username) {
+        if (users.some((u) => u.username === b.username)) {
+          return { status: 400, body: 'Username already taken' };
+        }
+        user.username = b.username;
       }
       if (b.isActive !== undefined) {
         user.isActive = !!b.isActive;
@@ -392,6 +400,20 @@ export const startFakeKavita = async (apiKey: string) => {
           return { status: 400, body: 'email-taken' };
         }
         member.email = b.email;
+      }
+      if (
+        typeof b.username === 'string' &&
+        b.username &&
+        b.username !== member.username
+      ) {
+        if (
+          members.some(
+            (m) => m.username.toLowerCase() === String(b.username).toLowerCase()
+          )
+        ) {
+          return { status: 400, body: 'username-taken' };
+        }
+        member.username = b.username;
       }
       member.roles = [
         ...new Set([

@@ -134,6 +134,30 @@ export class AudiobookshelfAdminAPI implements UserAccessAppClient {
     }));
   }
 
+  public async ownAccountId(): Promise<string | null> {
+    const me = await this.call(() =>
+      this.axios.get<{ id?: string }>('/api/me')
+    );
+
+    return me?.id ?? null;
+  }
+
+  /**
+   * Renames an account. Audiobookshelf signs the account out of its
+   * sessions, while API keys, which belong to the account's id, keep
+   * working. Only the root user may rename the root user.
+   */
+  public async renameAccount(
+    account: RemoteAccount,
+    username: string
+  ): Promise<void> {
+    await this.call(() =>
+      this.axios.patch(`/api/users/${encodeURIComponent(account.id)}`, {
+        username,
+      })
+    );
+  }
+
   public async getAccountAccess(
     account: RemoteAccount
   ): Promise<CurrentAppAccess> {

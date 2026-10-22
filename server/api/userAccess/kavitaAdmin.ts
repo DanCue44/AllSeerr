@@ -250,6 +250,83 @@ export class KavitaAdminAPI implements UserAccessAppClient {
   }
 
   /**
+   * Changes the username or email of an account through Kavita's admin
+   * update, sending everything else back as it is
+   */
+  private async updateMember(
+    member: KavitaMember,
+    changes: { username?: string; email?: string }
+  ): Promise<void> {
+    await this.call((headers) =>
+      this.axios.post(
+        '/api/Account/update',
+        {
+          userId: member.id,
+          username: changes.username ?? member.username,
+          email: changes.email ?? member.email,
+          // The same roles, or Kavita would sign the account out of its
+          // auth keys
+          roles: member.roles ?? [],
+          libraries: (member.libraries ?? []).map((library) => library.id),
+          ageRestriction: member.ageRestriction ?? {
+            ageRating: -1,
+            includeUnknowns: true,
+          },
+          identityProvider: member.identityProvider ?? 0,
+        },
+        { headers }
+      )
+    );
+  }
+
+  /**
+   * The account the API key belongs to, as Kavita names it when the key
+   * signs in
+   */
+  public async ownAccountId(): Promise<string | null> {
+    if (!this.options.apiKey && !this.options.username) {
+      return null;
+    }
+
+    let username = this.options.username;
+
+    if (this.options.apiKey) {
+      try {
+        const response = await this.axios.post<{ username?: string }>(
+          '/api/Plugin/authenticate',
+          undefined,
+          {
+            params: { apiKey: this.options.apiKey, pluginName: 'Allseerr' },
+          }
+        );
+        username = response.data?.username;
+      } catch (e) {
+        throw new UserAccessAppError(describeAppError('Kavita', e));
+      }
+    }
+
+    const member = username ? await this.findMember({ username }) : null;
+
+    return member ? String(member.id) : null;
+  }
+
+  /**
+   * Renames an account, the API key's own included. Auth keys keep working.
+   */
+  public async renameAccount(
+    account: RemoteAccount,
+    username: string
+  ): Promise<void> {
+    const member = await this.findMember({ remoteUserId: account.id });
+
+    if (!member) {
+      throw new UserAccessAppError('Kavita no longer has this account.');
+    }
+
+    await this.updateMember(member, { username });
+  }
+
+  /**
    * Sets the email of an account, which Kavita's sign in with Allseerr
    * links existing accounts by. Kavita's admin update takes it as confirmed,
    * and keeps everything else as it is here. Kavita ignores the email of
@@ -270,26 +347,7 @@ export class KavitaAdminAPI implements UserAccessAppClient {
       return true;
     }
 
-    await this.call((headers) =>
-      this.axios.post(
-        '/api/Account/update',
-        {
-          userId: member.id,
-          username: member.username,
-          email,
-          // The same roles, or Kavita would sign the account out of its
-          // auth keys
-          roles: member.roles ?? [],
-          libraries: (member.libraries ?? []).map((library) => library.id),
-          ageRestriction: member.ageRestriction ?? {
-            ageRating: -1,
-            includeUnknowns: true,
-          },
-          identityProvider: member.identityProvider ?? 0,
-        },
-        { headers }
-      )
-    );
+    await this.updateMember(member, { email });
 
     const updated = await this.findMember({ remoteUserId: account.id });
 

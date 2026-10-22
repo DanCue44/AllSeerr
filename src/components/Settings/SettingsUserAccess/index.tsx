@@ -2,7 +2,9 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import AppConnections from '@app/components/Settings/SettingsUserAccess/AppConnections';
 import Invites from '@app/components/Settings/SettingsUserAccess/Invites';
-import LinkExistingAccounts from '@app/components/Settings/SettingsUserAccess/LinkAccount';
+import LinkExistingAccounts, {
+  RenamedAccounts,
+} from '@app/components/Settings/SettingsUserAccess/LinkAccount';
 import People from '@app/components/Settings/SettingsUserAccess/People';
 import PlexDefaultAccess from '@app/components/Settings/SettingsUserAccess/PlexDefaultAccess';
 import ReadingAppChoices from '@app/components/Settings/SettingsUserAccess/ReadingAppChoices';
@@ -62,6 +64,7 @@ const SettingsUserAccess = () => {
       <PlexDefaultAccess apps={apps} />
       <People apps={apps} />
       <LinkExistingAccounts apps={apps} />
+      <RenamedAccounts />
       <ReadingAppChoices />
       <Invites apps={apps} />
       <SignInWithAllseerr />

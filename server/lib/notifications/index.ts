@@ -27,6 +27,7 @@ export enum Notification {
   DOWNLOAD_NEEDS_ATTENTION = 1048576,
   ACCESS_REQUESTED = 2097152,
   ACCESS_GRANTED = 4194304,
+  APP_USERNAME_CHANGED = 8388608,
 }
 
 export const hasNotificationType = (

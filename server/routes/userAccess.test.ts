@@ -104,6 +104,10 @@ beforeEach(() => {
     emailPasswords: true,
     oidc: { enabled: false, clients: [] },
     plexDefault: defaultPlexDefaultAccess(),
+    matchPlexUsernames: true,
+    serviceAccounts: { audiobookshelf: [], kavita: [], komga: [] },
+    personAccounts: { audiobookshelf: [], kavita: [], komga: [] },
+    renames: [],
   };
 });
 
@@ -482,10 +486,8 @@ describe('linking existing app accounts', () => {
 
     assert.equal(res.body.person.apps.audiobookshelf.status, 'active');
     assert.equal(res.body.person.apps.audiobookshelf.enabled, true);
-    assert.equal(
-      res.body.person.apps.audiobookshelf.remoteUsername,
-      'DemoReader'
-    );
+    // Renamed to the Plex username right away
+    assert.equal(res.body.person.apps.audiobookshelf.remoteUsername, 'demo');
     const family = abs.users.find((u) => u.id === 'abs-family');
     // The password stays the person's own; the email is set for tidiness
     assert.equal(family?.password, undefined);
@@ -617,6 +619,17 @@ describe('linking existing app accounts', () => {
 
   it("warns when Kavita keeps the admin key owner's email", async () => {
     const agent = await loginAs('admin@seerr.dev');
+    // The key's own account is taken for Allseerr's until marked a person's
+    await agent
+      .post(
+        `/user-access/people/${await userIdOf('admin@seerr.dev')}/apps/kavita/link`
+      )
+      .send({ remoteUserId: '1' })
+      .expect(400);
+    await agent
+      .post('/user-access/apps/kavita/accounts/1/service')
+      .send({ service: false })
+      .expect(200);
 
     const res = await agent
       .post(
@@ -687,5 +700,243 @@ describe('accountMatchScore', () => {
       }),
       0
     );
+  });
+});
+
+describe('app usernames that match Plex', () => {
+  const userIdOf = async (email: string) =>
+    (await getRepository(User).findOneOrFail({ where: { email } })).id;
+  const renameNotices = () =>
+    notifications.mock.calls.filter(
+      (call) => call.arguments[0] === Notification.APP_USERNAME_CHANGED
+    );
+
+  beforeEach(() => {
+    notifications.mock.resetCalls();
+    abs.users.push(
+      {
+        id: 'abs-old',
+        username: 'DReader',
+        email: null,
+        type: 'user',
+        isActive: true,
+        permissions: {},
+      },
+      {
+        id: 'abs-service',
+        username: 'Talearr',
+        email: null,
+        type: 'admin',
+        isActive: true,
+        permissions: {},
+      }
+    );
+  });
+
+  it('renames a linked account to the Plex username and tells the person once', async () => {
+    const agent = await loginAs('admin@seerr.dev');
+    const userId = await userIdOf('demo@seerr.dev');
+
+    const res = await agent
+      .post(`/user-access/people/${userId}/apps/audiobookshelf/link`)
+      .send({ remoteUserId: 'abs-old' })
+      .expect(200);
+
+    assert.equal(res.body.warning, null);
+    assert.equal(abs.users.find((u) => u.id === 'abs-old')?.username, 'demo');
+    // The password stays the person's own
+    assert.equal(
+      abs.users.find((u) => u.id === 'abs-old')?.password,
+      undefined
+    );
+    const notices = renameNotices();
+    assert.equal(notices.length, 1);
+    const payload = notices[0].arguments[1] as {
+      subject: string;
+      message: string;
+      notifyUser: User;
+    };
+    assert.equal(
+      payload.subject,
+      'Your Audiobookshelf username now matches Plex'
+    );
+    assert.match(payload.message, /Your new username is demo\./);
+    assert.equal(payload.notifyUser.id, userId);
+
+    const renames = await agent.get('/user-access/renames').expect(200);
+    assert.deepEqual(
+      renames.body.map(
+        (r: { app: string; from: string; to: string }) =>
+          `${r.app} ${r.from} ${r.to}`
+      ),
+      ['audiobookshelf DReader demo']
+    );
+
+    // Nothing changed, so nothing is sent again
+    await syncEveryone();
+    assert.equal(renameNotices().length, 1);
+
+    // A Plex rename is followed by the sync
+    const user = await getRepository(User).findOneOrFail({
+      where: { id: userId },
+    });
+    user.plexUsername = 'demo2';
+    await getRepository(User).save(user);
+    await syncEveryone();
+    assert.equal(abs.users.find((u) => u.id === 'abs-old')?.username, 'demo2');
+    assert.equal(renameNotices().length, 2);
+    const account = await getRepository(UserAppAccount).findOneOrFail({
+      where: { app: 'audiobookshelf' },
+    });
+    assert.equal(account.remoteUsername, 'demo2');
+    assert.equal(account.remoteUserId, 'abs-old');
+  });
+
+  it('keeps the name when another account has it, and says so', async () => {
+    abs.users.push({
+      id: 'abs-other',
+      username: 'Demo',
+      email: null,
+      type: 'user',
+      isActive: true,
+      permissions: {},
+    });
+    const agent = await loginAs('admin@seerr.dev');
+
+    const res = await agent
+      .post(
+        `/user-access/people/${await userIdOf('demo@seerr.dev')}/apps/audiobookshelf/link`
+      )
+      .send({ remoteUserId: 'abs-old' })
+      .expect(200);
+
+    assert.match(res.body.warning, /already has an account named Demo/);
+    assert.equal(
+      abs.users.find((u) => u.id === 'abs-old')?.username,
+      'DReader'
+    );
+    assert.equal(renameNotices().length, 0);
+  });
+
+  it('renames nothing while the setting is off', async () => {
+    const agent = await loginAs('admin@seerr.dev');
+    await agent
+      .post('/settings/user-access')
+      .send({ matchPlexUsernames: false })
+      .expect(200);
+
+    await agent
+      .post(
+        `/user-access/people/${await userIdOf('demo@seerr.dev')}/apps/audiobookshelf/link`
+      )
+      .send({ remoteUserId: 'abs-old' })
+      .expect(200);
+
+    assert.equal(
+      abs.users.find((u) => u.id === 'abs-old')?.username,
+      'DReader'
+    );
+    assert.equal(renameNotices().length, 0);
+    const settings = await agent.get('/settings/user-access').expect(200);
+    assert.equal(settings.body.matchPlexUsernames, false);
+  });
+
+  it('never suggests, links or renames service accounts', async () => {
+    const agent = await loginAs('admin@seerr.dev');
+
+    const list = await agent
+      .get('/user-access/apps/audiobookshelf/accounts')
+      .expect(200);
+    const byId = (id: string) =>
+      list.body.accounts.find((a: { id: string }) => a.id === id);
+    assert.equal(byId('abs-service').service, 'name');
+    assert.equal(byId('abs-service').suggestedUserId, null);
+    // The account the connection's key belongs to
+    assert.equal(byId('root').service, 'connection');
+    assert.equal(byId('abs-old').service, null);
+
+    await agent
+      .post(
+        `/user-access/people/${await userIdOf('demo@seerr.dev')}/apps/audiobookshelf/link`
+      )
+      .send({ remoteUserId: 'abs-service' })
+      .expect(400);
+
+    // An admin can mark any account as a service
+    const marked = await agent
+      .post('/user-access/apps/audiobookshelf/accounts/abs-old/service')
+      .send({ service: true })
+      .expect(200);
+    assert.equal(
+      marked.body.accounts.find((a: { id: string }) => a.id === 'abs-old')
+        .service,
+      'marked'
+    );
+    await agent
+      .post(
+        `/user-access/people/${await userIdOf('demo@seerr.dev')}/apps/audiobookshelf/link`
+      )
+      .send({ remoteUserId: 'abs-old' })
+      .expect(400);
+  });
+
+  it("leaves app admin accounts alone unless they are an Allseerr admin's own", async () => {
+    abs.users.push({
+      id: 'abs-admin',
+      username: 'helper',
+      email: null,
+      type: 'admin',
+      isActive: true,
+      permissions: {},
+    });
+    const agent = await loginAs('admin@seerr.dev');
+
+    await agent
+      .post(
+        `/user-access/people/${await userIdOf('demo@seerr.dev')}/apps/audiobookshelf/link`
+      )
+      .send({ remoteUserId: 'abs-admin' })
+      .expect(200);
+    assert.equal(
+      abs.users.find((u) => u.id === 'abs-admin')?.username,
+      'helper'
+    );
+
+    // The root account is the key's, marked as the Allseerr admin's own
+    await agent
+      .post('/user-access/apps/audiobookshelf/accounts/root/service')
+      .send({ service: false })
+      .expect(200);
+    await agent
+      .post(
+        `/user-access/people/${await userIdOf('admin@seerr.dev')}/apps/audiobookshelf/link`
+      )
+      .send({ remoteUserId: 'root' })
+      .expect(200);
+    assert.equal(abs.users.find((u) => u.id === 'root')?.username, 'admin');
+  });
+
+  it('leaves Komga, which signs people in by email, alone', async () => {
+    komga.users.push({
+      id: 'komga-old',
+      email: 'reader@example.com',
+      roles: ['PAGE_STREAMING'],
+      sharedAllLibraries: true,
+      sharedLibrariesIds: [],
+    });
+    const agent = await loginAs('admin@seerr.dev');
+
+    await agent
+      .post(
+        `/user-access/people/${await userIdOf('demo@seerr.dev')}/apps/komga/link`
+      )
+      .send({ remoteUserId: 'komga-old' })
+      .expect(200);
+
+    assert.equal(
+      komga.users.find((u) => u.id === 'komga-old')?.email,
+      'reader@example.com'
+    );
+    assert.equal(renameNotices().length, 0);
   });
 });

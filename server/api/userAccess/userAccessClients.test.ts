@@ -399,6 +399,58 @@ describe('listing accounts for linking', () => {
     komga.users.pop();
   });
 
+  it('renames accounts, keys still signing in, and knows its own account', async () => {
+    const absClient = new AudiobookshelfAdminAPI({
+      url: abs.url,
+      apiKey: 'abs-key',
+    });
+    assert.equal(await absClient.ownAccountId(), 'root');
+    const key = await absClient.createUserKey(
+      { id: 'abs-fam', username: 'FamilyReader' },
+      'NoBookEnds'
+    );
+    await absClient.renameAccount(
+      { id: 'abs-fam', username: 'FamilyReader' },
+      'familyplex'
+    );
+    assert.equal(
+      abs.users.find((u) => u.id === 'abs-fam')?.username,
+      'familyplex'
+    );
+    assert.equal(
+      await absClient.isUserKeyValid(
+        { id: 'abs-fam', username: 'familyplex' },
+        key?.key ?? ''
+      ),
+      true
+    );
+    await assert.rejects(
+      absClient.renameAccount({ id: 'abs-fam', username: '' }, 'root'),
+      /Username already taken/
+    );
+
+    const kavitaClient = new KavitaAdminAPI({
+      url: kavita.url,
+      apiKey: 'kavita-key',
+    });
+    assert.equal(await kavitaClient.ownAccountId(), '1');
+    // The key's own account can be renamed too
+    await kavitaClient.renameAccount({ id: '1', username: 'admin' }, 'dan');
+    assert.equal(kavita.members[0].username, 'dan');
+    assert.deepEqual(kavita.members[0].roles, ['Admin']);
+    await kavitaClient.renameAccount({ id: '1', username: 'dan' }, 'admin');
+
+    const komgaClient = new KomgaAdminAPI({
+      url: komga.url,
+      apiKey: 'komga-key',
+    });
+    assert.equal(await komgaClient.ownAccountId(), 'admin');
+    assert.equal(
+      (komgaClient as { renameAccount?: unknown }).renameAccount,
+      undefined
+    );
+  });
+
   it('lists Komga accounts by their email', async () => {
     const client = new KomgaAdminAPI({ url: komga.url, apiKey: 'komga-key' });
 
