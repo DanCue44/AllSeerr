@@ -176,6 +176,15 @@ mock.method(
     return addImpl(body);
   }
 );
+let monitorCalls: number[] = [];
+mock.method(
+  TalearrComicsAPI.prototype,
+  'monitorMissingVolumes',
+  async (seriesId: number) => {
+    monitorCalls.push(seriesId);
+    return 11;
+  }
+);
 mock.method(
   TalearrComicsAPI.prototype,
   'searchSeries',
@@ -307,6 +316,7 @@ beforeEach(async () => {
   addCalls = [];
   addImpl = async () => ({ id: 41 });
   searchCalls = [];
+  monitorCalls = [];
   searchesOnAdd = true;
   sendNotificationMock.resetCalls();
   resetComicsStatusCache();
@@ -699,8 +709,7 @@ describe('comic requests', () => {
     assert.strictEqual(res.status, 403);
   });
 
-  it('refuses a series Talearr has already, matched on its title', async () => {
-    await searchFirst();
+  const frierenInLibrary = (downloadedCount: number) =>
     setLibrary([
       {
         series: {
@@ -710,11 +719,15 @@ describe('comic requests', () => {
           monitored: true,
         },
         volumeCount: 13,
-        downloadedCount: 2,
-        missingCount: 11,
+        downloadedCount,
+        missingCount: 13 - downloadedCount,
         downloadingCount: 0,
       },
     ]);
+
+  it('refuses a series Talearr has every volume of, matched on its title', async () => {
+    await searchFirst();
+    frierenInLibrary(13);
     const agent = await loginAs('demo@seerr.dev');
 
     const detail = await agent.get(`/comic/${FRIEREN_ID}`);
@@ -725,6 +738,31 @@ describe('comic requests', () => {
     assert.strictEqual(detail.body.library.seriesId, 9);
     assert.strictEqual(res.status, 409);
     assert.strictEqual(addCalls.length, 0);
+  });
+
+  it('requests the missing volumes of a series Talearr has some of', async () => {
+    await searchFirst();
+    frierenInLibrary(2);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: FRIEREN_ID });
+
+    assert.strictEqual(created.status, 201, created.body.message);
+    assert.strictEqual(created.body.status, MediaRequestStatus.PENDING);
+    await settleTestBackgroundTasks();
+    assert.deepStrictEqual(monitorCalls, []);
+
+    const admin = await loginAs('admin@seerr.dev');
+    await admin.post(`/request/${created.body.id}/approve`).expect(200);
+
+    await waitFor(() => searchCalls.length > 0);
+    // Monitored and searched in place, not added again
+    assert.deepStrictEqual(monitorCalls, [9]);
+    assert.deepStrictEqual(searchCalls, [9]);
+    assert.strictEqual(addCalls.length, 0);
+    assert.strictEqual((await findMedia(FRIEREN_ID)).externalServiceId, 9);
   });
 
   it('needs the book request permission', async () => {

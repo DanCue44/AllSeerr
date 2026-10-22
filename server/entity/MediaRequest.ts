@@ -41,6 +41,7 @@ import {
   getComicNotificationDetails,
   getComicsServer,
   getLibrarySeries,
+  hasEveryVolume,
   isComicId,
 } from '@server/lib/comics';
 import {
@@ -1167,10 +1168,17 @@ export class MediaRequest {
       throw new InvalidComicRequestError('Unknown comic series.');
     }
 
-    // A series Talearr has already needs no request
-    if (findLibrarySeries(await getLibrarySeries(), comicId, metadata)) {
+    // A series Talearr has every volume of needs no request. One with
+    // volumes missing is requested for them.
+    const inLibrary = findLibrarySeries(
+      await getLibrarySeries(),
+      comicId,
+      metadata
+    );
+
+    if (inLibrary && hasEveryVolume(inLibrary)) {
       throw new DuplicateMediaRequestError(
-        'This series is in the library already.'
+        'Every volume of this series is in the library already.'
       );
     }
 

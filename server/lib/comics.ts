@@ -437,6 +437,12 @@ export const getLibrarySeries = async (): Promise<
   return cachedLibrary.series;
 };
 
+/**
+ * Whether Talearr has every volume of a series, which then needs no request
+ */
+export const hasEveryVolume = (summary: TalearrComicSeriesSummary): boolean =>
+  summary.volumeCount > 0 && summary.downloadedCount >= summary.volumeCount;
+
 export const getLibraryStatus = (
   summary: TalearrComicSeriesSummary
 ): MediaStatus =>
@@ -677,7 +683,12 @@ export const sendComicToTalearr = async (
   });
   const existing = findLibrarySeries(library, comicId, metadata);
 
+  // A series Talearr has already gets its missing volumes: every volume is
+  // monitored and searched for
   if (existing) {
+    resetComicsLibraryCache();
+    await api.monitorMissingVolumes(existing.series.id);
+    await api.searchSeries(existing.series.id);
     return { seriesId: existing.series.id, alreadyInLibrary: true };
   }
 

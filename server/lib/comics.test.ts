@@ -242,6 +242,7 @@ describe('TalearrComicsAPI', () => {
     };
     http.get = answer('get');
     http.post = answer('post');
+    http.put = answer('put');
     return api;
   };
 
@@ -266,6 +267,39 @@ describe('TalearrComicsAPI', () => {
       available: false,
       reason: 'database is locked',
       ageRatings: [],
+    });
+  });
+
+  it('monitors the series and every volume it has not got', async () => {
+    const calls: { method: string; url: string; data?: unknown }[] = [];
+    const api = stub(
+      {
+        'put /talearr/comics/series/9': { status: 200 },
+        'get /talearr/comics/series/9': {
+          status: 200,
+          data: {
+            volumes: [
+              { id: 1, monitored: true, state: 'downloaded' },
+              { id: 2, monitored: false, state: 'unmonitored' },
+              { id: 3, monitored: false, state: 'unreleased' },
+              { id: 4, monitored: false, state: 'downloaded' },
+              { id: 5, monitored: true, state: 'missing' },
+            ],
+          },
+        },
+        'put /talearr/comics/volumes/monitor': { status: 200 },
+      },
+      calls
+    );
+
+    assert.strictEqual(await api.monitorMissingVolumes(9), 2);
+    assert.deepStrictEqual(calls[0].data, {
+      monitored: true,
+      monitorNewVolumes: true,
+    });
+    assert.deepStrictEqual(calls[2].data, {
+      volumeIds: [2, 3],
+      monitored: true,
     });
   });
 

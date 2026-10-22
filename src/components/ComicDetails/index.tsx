@@ -6,7 +6,10 @@ import Button from '@app/components/Common/Button';
 import FormatIcon, { useFormatLabel } from '@app/components/Common/FormatIcon';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
-import { getComicStatus } from '@app/components/TitleCard/ComicTitleCard';
+import {
+  getComicStatus,
+  getMissingVolumes,
+} from '@app/components/TitleCard/ComicTitleCard';
 import useComicsEnabled from '@app/hooks/useComicsEnabled';
 import useReadingAppPrompt from '@app/hooks/useReadingAppPrompt';
 import useToasts from '@app/hooks/useToasts';
@@ -39,6 +42,7 @@ const messages = defineMessages('components.ComicDetails', {
   fileashint:
     'Only Hardcover knows this series, so it is not certain whether it is manga or a comic. Pick how Talearr files it.',
   requestseries: 'Request Series',
+  requestmissing: 'Request Missing Volumes',
   requestsuccess: '<strong>{title}</strong> requested successfully!',
   requesterror: 'Something went wrong while requesting the series.',
   overviewunavailable: 'Overview unavailable.',
@@ -132,17 +136,19 @@ const ComicDetails = () => {
       request.status === MediaRequestStatus.PENDING ||
       request.status === MediaRequestStatus.APPROVED
   );
+  const missingVolumes = getMissingVolumes(data);
   const canRequest =
     comicsEnabled &&
     hasPermission([Permission.REQUEST, Permission.REQUEST_BOOK], {
       type: 'or',
     }) &&
     !activeRequest &&
-    // A series Talearr has already needs no request
-    !data.library &&
-    (!status ||
-      status === MediaStatus.UNKNOWN ||
-      status === MediaStatus.DELETED);
+    // A series Talearr has already is requested for its missing volumes
+    (data.library
+      ? missingVolumes > 0
+      : !status ||
+        status === MediaStatus.UNKNOWN ||
+        status === MediaStatus.DELETED);
 
   const request = async () => {
     setIsRequesting(true);
@@ -257,7 +263,9 @@ const ComicDetails = () => {
                 {intl.formatMessage(
                   isRequesting
                     ? globalMessages.requesting
-                    : messages.requestseries
+                    : data.library
+                      ? messages.requestmissing
+                      : messages.requestseries
                 )}
               </span>
             </Button>

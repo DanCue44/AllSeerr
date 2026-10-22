@@ -4,6 +4,7 @@ import TitleCard from '@app/components/TitleCard';
 import BookTitleCard from '@app/components/TitleCard/BookTitleCard';
 import ComicTitleCard, {
   getComicStatus,
+  getMissingVolumes,
 } from '@app/components/TitleCard/ComicTitleCard';
 import MusicTitleCard from '@app/components/TitleCard/MusicTitleCard';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
@@ -244,6 +245,7 @@ const ListView = ({
                     year={title.year}
                     image={title.posterPath}
                     status={getComicStatus(title)}
+                    missingVolumes={getMissingVolumes(title)}
                     canExpand
                   />
                 );

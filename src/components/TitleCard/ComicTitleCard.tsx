@@ -3,12 +3,14 @@ import FormatIcon, { useFormatLabel } from '@app/components/Common/FormatIcon';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import TitleCard from '@app/components/TitleCard';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
+import defineMessages from '@app/utils/defineMessages';
 import { ChatBubbleOvalLeftIcon } from '@heroicons/react/24/solid';
 import type { ComicKind } from '@server/constants/media';
 import { MediaStatus } from '@server/constants/media';
 import type { ComicDetails } from '@server/models/Comic';
 import Link from 'next/link';
 import { useInView } from 'react-intersection-observer';
+import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 /**
@@ -25,6 +27,17 @@ export const getComicStatus = (comic: {
     ? comic.mediaInfo.status
     : (comic.library?.status ?? comic.mediaInfo?.status);
 
+/**
+ * How many volumes of a series in Talearr's library are missing, 0 when it
+ * is not there
+ */
+export const getMissingVolumes = (comic: {
+  library?: { volumeCount: number; downloadedCount: number };
+}): number =>
+  comic.library
+    ? Math.max(0, comic.library.volumeCount - comic.library.downloadedCount)
+    : 0;
+
 interface ComicTitleCardProps {
   id: string;
   kind: ComicKind;
@@ -34,6 +47,8 @@ interface ComicTitleCardProps {
   year?: number;
   image?: string | null;
   status?: MediaStatus;
+  // Volumes missing from Talearr's library, which can be requested
+  missingVolumes?: number;
   canExpand?: boolean;
 }
 
@@ -41,6 +56,11 @@ interface ComicTitleCardProps {
  * Portrait card for comic and manga series, the comic counterpart of
  * BookTitleCard. Series are requested on their page.
  */
+const messages = defineMessages('components.TitleCard.ComicTitleCard', {
+  requestmissing:
+    'Request {count, plural, one {# missing volume} other {# missing volumes}}',
+});
+
 const ComicTitleCard = ({
   id,
   kind,
@@ -49,12 +69,27 @@ const ComicTitleCard = ({
   year,
   image,
   status,
+  missingVolumes = 0,
   canExpand = false,
 }: ComicTitleCardProps) => {
   const [interfaceStyle] = useInterfaceStyle();
   const ambient = interfaceStyle === 'ambient';
+  const intl = useIntl();
   const kindLabel = useFormatLabel(kind);
   const href = `/comic/${id}`;
+  const missingLink =
+    missingVolumes > 0 ? (
+      <Link
+        href={href}
+        className={`mt-1 block truncate text-[13px] font-semibold ${
+          ambient ? 'text-as-accent' : 'text-indigo-400'
+        } hover:underline`}
+      >
+        {intl.formatMessage(messages.requestmissing, {
+          count: missingVolumes,
+        })}
+      </Link>
+    ) : null;
 
   return (
     <div
@@ -151,6 +186,7 @@ const ComicTitleCard = ({
           </div>
         </Link>
       )}
+      {missingLink}
     </div>
   );
 };
@@ -191,6 +227,7 @@ export const ComicIdTitleCard = ({
       year={comic.year}
       image={comic.posterPath}
       status={getComicStatus(comic)}
+      missingVolumes={getMissingVolumes(comic)}
       canExpand={canExpand}
     />
   );

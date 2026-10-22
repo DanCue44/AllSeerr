@@ -2240,7 +2240,7 @@ components:
           $ref: '#/components/schemas/ComicLibraryInfo'
     ComicLibraryInfo:
       type: object
-      description: What Talearr's comics library holds of a series, once it is there. A series found in the library is matched on its AniList or Hardcover id, or failing those its title, and cannot be requested.
+      description: What Talearr's comics library holds of a series, once it is there. A series found in the library is matched on its AniList or Hardcover id, or failing those its title. It can be requested for its missing volumes, which on approval are monitored and searched for in Talearr, until every volume is there; then a request is refused with 409.
       properties:
         seriesId:
           type: number
