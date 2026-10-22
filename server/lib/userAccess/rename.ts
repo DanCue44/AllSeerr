@@ -2,6 +2,7 @@ import type {
   AppAccountSummary,
   UserAccessAppClient,
 } from '@server/api/userAccess/types';
+import { MediaServerType } from '@server/constants/server';
 import type { UserAccessApp } from '@server/constants/userAccess';
 import { USER_ACCESS_APP_NAMES } from '@server/constants/userAccess';
 import { getRepository } from '@server/datasource';
@@ -114,7 +115,13 @@ const TOLD_FOR_MS = 60 * 60 * 1000;
  * and no app otherwise.
  */
 export const sendUsernameChanged = (user: User, username: string): void => {
-  const withNoBookEnds = !!getSettings().nobookendsSync.enabled;
+  const settings = getSettings();
+  const withNoBookEnds = !!settings.nobookendsSync.enabled;
+  // NoBookEnds signs people in through Allseerr, with Plex on a Plex server
+  const signIn =
+    settings.main.mediaServerType === MediaServerType.PLEX
+      ? 'If NoBookEnds asks you to sign in, tap Sign in with Plex.'
+      : 'If NoBookEnds asks you to sign in, tap Sign in with Allseerr.';
 
   notificationManager.sendNotification(Notification.APP_USERNAME_CHANGED, {
     event: 'Username Changed',
@@ -122,7 +129,7 @@ export const sendUsernameChanged = (user: User, username: string): void => {
       ? 'Your NoBookEnds username now matches Plex'
       : 'Your reading app username now matches Plex',
     message: withNoBookEnds
-      ? `The accounts NoBookEnds uses for your books and audiobooks changed their username to match your Plex name. Your new username is ${username}. Your password, progress and bookmarks stay the same. If NoBookEnds asks you to sign in, use the new username.`
+      ? `The accounts NoBookEnds uses for your books and audiobooks changed their username to match your Plex name. Your new username is ${username}. Your password, progress and bookmarks stay the same. ${signIn}`
       : `The accounts your books and audiobooks are read in changed their username to match your Plex name. Your new username is ${username}. Your password, progress and bookmarks stay the same. If an app asks you to sign in, use the new username.`,
     notifyAdmin: false,
     notifySystem: false,

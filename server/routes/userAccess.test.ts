@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it, mock } from 'node:test';
 
+import { MediaServerType } from '@server/constants/server';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import { UserAppAccount } from '@server/entity/UserAppAccount';
@@ -793,8 +794,11 @@ describe('app usernames that match Plex', () => {
   it('sends one message naming NoBookEnds for renames in two apps', async (t) => {
     const settings = getSettings();
     settings.nobookendsSync = { enabled: true };
+    const mediaServerType = settings.main.mediaServerType;
+    settings.main.mediaServerType = MediaServerType.PLEX;
     t.after(() => {
       settings.nobookendsSync = { enabled: false };
+      settings.main.mediaServerType = mediaServerType;
     });
     kavita.members.push({
       id: 7,
@@ -826,6 +830,7 @@ describe('app usernames that match Plex', () => {
       message: string;
     };
     assert.equal(payload.subject, 'Your NoBookEnds username now matches Plex');
+    assert.match(payload.message, /tap Sign in with Plex\./);
     assert.doesNotMatch(payload.message, /Audiobookshelf|Kavita/);
   });
 

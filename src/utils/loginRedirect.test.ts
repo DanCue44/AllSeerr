@@ -5,6 +5,7 @@ import {
   getLoginPath,
   getSafeNextPath,
   rememberLoginNext,
+  startPlexFor,
   takeLoginNext,
 } from './loginRedirect';
 
@@ -125,5 +126,15 @@ describe('takeLoginNext', () => {
   it('never keeps a page that is not allowed', () => {
     rememberLoginNext('https://evil.example.com');
     assert.equal(takeLoginNext('/settings'), '/');
+  });
+
+  it('starts Plex once for a page that asks for it', () => {
+    const next = '/nobookends/connect?device=iPhone&signin=plex';
+
+    assert.equal(startPlexFor(next), true);
+    // A sign in that did not finish shows the login page instead
+    assert.equal(startPlexFor(next), false);
+    assert.equal(startPlexFor('/nobookends/connect?device=iPhone'), false);
+    assert.equal(startPlexFor('/settings?signin=plex'), false);
   });
 });

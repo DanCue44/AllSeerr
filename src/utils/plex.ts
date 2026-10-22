@@ -20,6 +20,11 @@ export interface PlexPin {
   code: string;
 }
 
+// Where Plex sends the browser back to after a sign in by redirect
+export const PLEX_RETURN_PATH = '/login/plex/return';
+
+const PIN_STORAGE_KEY = 'allseerr-plex-pin';
+
 class PlexOAuth {
   private plexHeaders?: PlexHeaders;
 
@@ -92,7 +97,27 @@ class PlexOAuth {
       throw new Error('Unable to call login if class is not initialized.');
     }
 
-    const params = {
+    const params = this.authParams();
+
+    if (!this.popup || this.popup.closed) {
+      throw new Error(
+        'Unable to open the Plex login window. Please allow popups for this site and try again.'
+      );
+    }
+
+    this.popup.location.href = `https://app.plex.tv/auth/#!?${this.encodeData(
+      params
+    )}`;
+
+    return this.pinPoll();
+  }
+
+  private authParams(): Record<string, string> {
+    if (!this.plexHeaders || !this.pin) {
+      throw new Error('Unable to call login if class is not initialized.');
+    }
+
+    return {
       clientID: this.plexHeaders['X-Plex-Client-Identifier'],
       'context[device][product]': this.plexHeaders['X-Plex-Product'],
       'context[device][version]': this.plexHeaders['X-Plex-Version'],
@@ -107,16 +132,56 @@ class PlexOAuth {
       'context[device][layout]': 'desktop',
       code: this.pin.code,
     };
+  }
 
-    if (!this.popup || this.popup.closed) {
-      throw new Error(
-        'Unable to open the Plex login window. Please allow popups for this site and try again.'
-      );
+  /**
+   * Signs in by leaving the page for Plex, which sends the browser back to
+   * the return page when done. For windows that cannot open a popup, such
+   * as the sign in window an app opens.
+   */
+  public async loginByRedirect(plexClientIdentifier: string): Promise<void> {
+    this.initializeHeaders(plexClientIdentifier);
+    const pin = await this.getPin();
+
+    try {
+      window.sessionStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pin));
+    } catch {
+      throw new Error('Unable to sign in with Plex in this window.');
     }
 
-    this.popup.location.href = `https://app.plex.tv/auth/#!?${this.encodeData(
-      params
-    )}`;
+    const params = {
+      ...this.authParams(),
+      forwardUrl: `${window.location.origin}${PLEX_RETURN_PATH}`,
+    };
+    window.location.assign(
+      `https://app.plex.tv/auth/#!?${this.encodeData(params)}`
+    );
+  }
+
+  /**
+   * Finishes a sign in begun by loginByRedirect, once Plex sent the browser
+   * back
+   */
+  public async finishRedirectLogin(
+    plexClientIdentifier: string
+  ): Promise<string> {
+    let pin: PlexPin | null = null;
+
+    try {
+      pin = JSON.parse(
+        window.sessionStorage.getItem(PIN_STORAGE_KEY) ?? 'null'
+      ) as PlexPin | null;
+      window.sessionStorage.removeItem(PIN_STORAGE_KEY);
+    } catch {
+      pin = null;
+    }
+
+    if (!pin?.id) {
+      throw new Error('The Plex sign in was not started here. Try again.');
+    }
+
+    this.initializeHeaders(plexClientIdentifier);
+    this.pin = pin;
 
     return this.pinPoll();
   }

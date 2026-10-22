@@ -109,3 +109,36 @@ export const takeLoginNext = (value: unknown): string => {
 
   return getSafeNextPath(value) ?? getSafeNextPath(stored) ?? '/';
 };
+
+const PLEX_STARTED_KEY = 'allseerr-plex-started';
+
+/**
+ * Whether the page to return to asked for Plex, as the NoBookEnds app's
+ * "Sign in with Plex" does, and Plex was not started for it in this tab yet.
+ * Marks it started, so a sign in that did not finish shows the login page
+ * instead of starting again.
+ */
+export const startPlexFor = (value: unknown): boolean => {
+  const next = getSafeNextPath(value);
+
+  if (!next) {
+    return false;
+  }
+
+  const url = new URL(next, 'http://allseerr.invalid');
+
+  if (url.searchParams.get('signin') !== 'plex') {
+    return false;
+  }
+
+  try {
+    if (window.sessionStorage.getItem(PLEX_STARTED_KEY) === next) {
+      return false;
+    }
+    window.sessionStorage.setItem(PLEX_STARTED_KEY, next);
+  } catch {
+    return false;
+  }
+
+  return true;
+};

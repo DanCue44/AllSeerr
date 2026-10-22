@@ -20,7 +20,12 @@ import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import useSettings from '@app/hooks/useSettings';
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
-import { rememberLoginNext, takeLoginNext } from '@app/utils/loginRedirect';
+import {
+  rememberLoginNext,
+  startPlexFor,
+  takeLoginNext,
+} from '@app/utils/loginRedirect';
+import PlexOAuth from '@app/utils/plex';
 import { Transition } from '@headlessui/react';
 import { XCircleIcon } from '@heroicons/react/24/solid';
 import { MediaServerType } from '@server/constants/server';
@@ -39,6 +44,8 @@ const messages = defineMessages('components.Login', {
   signinwithoverseerr: 'Use your {applicationTitle} account',
   orsigninwith: 'Or sign in with',
 });
+
+const plexOAuth = new PlexOAuth();
 
 const Login = () => {
   const intl = useIntl();
@@ -86,6 +93,35 @@ const Login = () => {
       rememberLoginNext(router.query.next);
     }
   }, [router.isReady, router.query.next]);
+
+  // The NoBookEnds app's sign in window asks for Plex: go straight there,
+  // leaving the page, since that window cannot open a popup
+  useEffect(() => {
+    if (
+      !router.isReady ||
+      user ||
+      !settings.currentSettings.mediaServerLogin ||
+      settings.currentSettings.mediaServerType !== MediaServerType.PLEX ||
+      !startPlexFor(router.query.next)
+    ) {
+      return;
+    }
+
+    setProcessing(true);
+    plexOAuth
+      .loginByRedirect(settings.currentSettings.plexClientIdentifier)
+      .catch((e) => {
+        setError(e.message);
+        setProcessing(false);
+      });
+  }, [
+    router.isReady,
+    router.query.next,
+    user,
+    settings.currentSettings.mediaServerLogin,
+    settings.currentSettings.mediaServerType,
+    settings.currentSettings.plexClientIdentifier,
+  ]);
 
   // Effect that is triggered whenever `useUser`'s user changes. If we get a new
   // valid user, we redirect the user to the page they asked for, or the home
