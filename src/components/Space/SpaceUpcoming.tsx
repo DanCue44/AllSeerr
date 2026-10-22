@@ -170,7 +170,7 @@ const BookReleaseGrid = ({
                 caption={release.authorName}
                 posterSrc={
                   release.posterUrl ??
-                  '/images/seerr_poster_not_found_logo_top.png'
+                  '/images/allseerr_poster_not_found_logo_top.png'
                 }
                 imageType="book"
                 dayLabel={dateLabel(release.date)}

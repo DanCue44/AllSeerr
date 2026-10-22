@@ -59,7 +59,7 @@ export const TitleHero = ({
       ? `https://image.tmdb.org/t/p/w600_and_h900_bestv2${posterPath}`
       : posterPath
     : isTmdb
-      ? '/images/seerr_poster_not_found.png'
+      ? '/images/allseerr_poster_not_found.png'
       : undefined;
 
   return (

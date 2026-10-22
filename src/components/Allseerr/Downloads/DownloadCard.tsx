@@ -178,7 +178,7 @@ export const PosterImage = ({
     return (
       <CachedImage
         type="tmdb"
-        src="/images/seerr_poster_not_found.png"
+        src="/images/allseerr_poster_not_found.png"
         alt=""
         style={imageStyle}
         className={className}

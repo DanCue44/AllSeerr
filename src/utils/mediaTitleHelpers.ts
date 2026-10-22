@@ -79,7 +79,7 @@ export interface MediaTitleImage {
   square: boolean;
 }
 
-const POSTER_NOT_FOUND = '/images/seerr_poster_not_found.png';
+const POSTER_NOT_FOUND = '/images/allseerr_poster_not_found.png';
 
 export const getMediaTitlePoster = (title?: MediaTitle): MediaTitleImage => {
   if (!title) {

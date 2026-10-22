@@ -868,7 +868,7 @@ const RequestCard = ({
   ) : isBook(title) ? (
     <CachedImage
       type="book"
-      src={title.posterPath ?? '/images/seerr_poster_not_found.png'}
+      src={title.posterPath ?? '/images/allseerr_poster_not_found.png'}
       alt=""
       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
       fill
@@ -879,7 +879,7 @@ const RequestCard = ({
       src={
         title.posterPath
           ? `https://image.tmdb.org/t/p/w600_and_h900_bestv2${title.posterPath}`
-          : '/images/seerr_poster_not_found.png'
+          : '/images/allseerr_poster_not_found.png'
       }
       alt=""
       style={{ width: '100%', height: '100%', objectFit: 'cover' }}

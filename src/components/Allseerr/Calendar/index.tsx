@@ -59,7 +59,7 @@ const getPosterSource = (posterUrl?: string): string =>
         /^https:\/\/image\.tmdb\.org\/t\/p\/original\//,
         'https://image.tmdb.org/t/p/w300_and_h450_face/'
       )
-    : '/images/seerr_poster_not_found_logo_top.png';
+    : '/images/allseerr_poster_not_found_logo_top.png';
 
 const getHref = (item: CalendarItem): string | undefined => {
   if (!item.tmdbId) {

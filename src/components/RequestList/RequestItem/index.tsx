@@ -555,7 +555,9 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               ) : isBook(title) ? (
                 <CachedImage
                   type="book"
-                  src={title.posterPath ?? '/images/seerr_poster_not_found.png'}
+                  src={
+                    title.posterPath ?? '/images/allseerr_poster_not_found.png'
+                  }
                   alt=""
                   sizes="100vw"
                   style={{ width: '100%', height: 'auto', objectFit: 'cover' }}
@@ -568,7 +570,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                   src={
                     title.posterPath
                       ? `https://image.tmdb.org/t/p/w600_and_h900_bestv2${title.posterPath}`
-                      : '/images/seerr_poster_not_found.png'
+                      : '/images/allseerr_poster_not_found.png'
                   }
                   alt=""
                   sizes="100vw"

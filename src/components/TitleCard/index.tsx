@@ -395,7 +395,7 @@ const TitleCard = ({
             src={
               image
                 ? `https://image.tmdb.org/t/p/w300_and_h450_face${image}`
-                : `/images/seerr_poster_not_found_logo_top.png`
+                : `/images/allseerr_poster_not_found_logo_top.png`
             }
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             fill

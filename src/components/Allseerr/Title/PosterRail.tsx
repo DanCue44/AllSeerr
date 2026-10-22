@@ -57,7 +57,7 @@ const PosterRail = ({ title, url, linkUrl, seeAllLabel }: PosterRailProps) => {
                       src={
                         item.posterPath
                           ? `https://image.tmdb.org/t/p/w300_and_h450_face${item.posterPath}`
-                          : '/images/seerr_poster_not_found.png'
+                          : '/images/allseerr_poster_not_found.png'
                       }
                       alt=""
                       style={{

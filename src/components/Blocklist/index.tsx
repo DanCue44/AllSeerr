@@ -448,7 +448,7 @@ const BlocklistedItem = ({ item, revalidateList }: BlocklistedItemProps) => {
           >
             <CachedImage
               type={display.posterType}
-              src={display.poster ?? '/images/seerr_poster_not_found.png'}
+              src={display.poster ?? '/images/allseerr_poster_not_found.png'}
               alt=""
               sizes="100vw"
               style={{ width: '100%', height: 'auto', objectFit: 'cover' }}

@@ -19,7 +19,7 @@ const getPosterSource = (posterUrl?: string): string =>
         /^https:\/\/image\.tmdb\.org\/t\/p\/original\//,
         'https://image.tmdb.org/t/p/w300_and_h450_face/'
       )
-    : '/images/seerr_poster_not_found_logo_top.png';
+    : '/images/allseerr_poster_not_found_logo_top.png';
 
 const getImageType = (item: CalendarItem): 'tmdb' | 'tvdb' | 'music' =>
   item.type === 'album'
