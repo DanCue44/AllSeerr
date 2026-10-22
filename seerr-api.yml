@@ -5642,6 +5642,114 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserAccessPerson'
+  /user-access/apps/{app}/accounts:
+    get:
+      summary: List an app's accounts for linking
+      description: Every account in the app with the person it is linked to and, for the others, the person it likely belongs to (the same email, the same username ignoring case, or one username inside the other). Nothing is linked by this call.
+      tags:
+        - user-access
+      parameters:
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      responses:
+        '200':
+          description: The accounts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  app:
+                    type: string
+                  accounts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        username:
+                          type: string
+                        email:
+                          type: string
+                          nullable: true
+                        isAdmin:
+                          type: boolean
+                        linkedUserId:
+                          type: number
+                          nullable: true
+                        linkedDisplayName:
+                          type: string
+                          nullable: true
+                        suggestedUserId:
+                          type: number
+                          nullable: true
+                        suggestedDisplayName:
+                          type: string
+                          nullable: true
+        '400':
+          description: The app is not connected
+  /user-access/people/{userId}/apps/{app}/link:
+    post:
+      summary: Link a person to an account they already have in an app
+      description: Links the account and turns the app on for the person. The account keeps its password and is kept in line with the person's access from then on. With Kavita the account gets the person's email when they have a real one, as Kavita links people signing in with Allseerr by email; Kavita keeps the email of the account its admin key belongs to, which `warning` then says. Audiobookshelf links people by username, which signing in sends as the linked account's.
+      tags:
+        - user-access
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                remoteUserId:
+                  type: string
+              required:
+                - remoteUserId
+      responses:
+        '200':
+          description: The person, with a warning when the email could not be set
+        '404':
+          description: Unknown person, app or account
+        '409':
+          description: The account is linked to someone else
+  /user-access/people/{userId}/apps/{app}/unlink:
+    post:
+      summary: Stop managing a person's account in an app
+      description: Unlinks the account without changing it in the app and turns the app off for the person, so the next sync does not link it again.
+      tags:
+        - user-access
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: app
+          required: true
+          schema:
+            type: string
+            enum: [audiobookshelf, kavita, komga]
+      responses:
+        '200':
+          description: The person
   /user-access/people/{userId}/apps/{app}/create:
     post:
       summary: Make a person's account in an app now

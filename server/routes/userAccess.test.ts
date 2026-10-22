@@ -7,7 +7,12 @@ import { UserAppAccount } from '@server/entity/UserAppAccount';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { Permission } from '@server/lib/permissions';
 import { defaultPlexDefaultAccess, getSettings } from '@server/lib/settings';
-import { appUsernameFor, generateAppPassword } from '@server/lib/userAccess';
+import {
+  accountMatchScore,
+  appUsernameFor,
+  generateAppPassword,
+  syncEveryone,
+} from '@server/lib/userAccess';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
 import authRoutes from '@server/routes/auth';
 import userAccessSettingsRoutes from '@server/routes/settings/userAccess';
@@ -415,5 +420,227 @@ describe('user access people', () => {
       .send({ apps: { plex: { enabled: true } } })
       .expect(400);
     await agent.post('/user-access/people/9999').send({}).expect(404);
+  });
+});
+
+describe('linking existing app accounts', () => {
+  const userIdOf = async (email: string) =>
+    (await getRepository(User).findOneOrFail({ where: { email } })).id;
+
+  beforeEach(() => {
+    // Accounts made before Allseerr managed the apps, under other names
+    abs.users.push({
+      id: 'abs-family',
+      username: 'DemoReader',
+      email: null,
+      type: 'user',
+      isActive: true,
+      permissions: {},
+    });
+    kavita.members.push({
+      id: 7,
+      username: 'demoreads',
+      email: 'old@example.com',
+      isPending: false,
+      roles: ['Login', 'Pleb'],
+      libraries: [{ id: 2, name: 'Manga' }],
+      ageRestriction: { ageRating: -1, includeUnknowns: true },
+      identityProvider: 0,
+    });
+  });
+
+  it('lists the accounts with a likely owner, linking nothing', async () => {
+    const agent = await loginAs('admin@seerr.dev');
+
+    const res = await agent
+      .get('/user-access/apps/audiobookshelf/accounts')
+      .expect(200);
+
+    const family = res.body.accounts.find(
+      (a: { id: string }) => a.id === 'abs-family'
+    );
+    assert.equal(family.linkedUserId, null);
+    // demo is inside DemoReader
+    assert.equal(family.suggestedUserId, await userIdOf('demo@seerr.dev'));
+    const root = res.body.accounts.find((a: { id: string }) => a.id === 'root');
+    assert.equal(root.isAdmin, true);
+    assert.equal(
+      (await getRepository(UserAppAccount).count()) === 0,
+      true,
+      'listing links nothing'
+    );
+  });
+
+  it('links an account under another name and keeps it linked through the sync', async () => {
+    const agent = await loginAs('admin@seerr.dev');
+    const userId = await userIdOf('demo@seerr.dev');
+
+    const res = await agent
+      .post(`/user-access/people/${userId}/apps/audiobookshelf/link`)
+      .send({ remoteUserId: 'abs-family' })
+      .expect(200);
+
+    assert.equal(res.body.person.apps.audiobookshelf.status, 'active');
+    assert.equal(res.body.person.apps.audiobookshelf.enabled, true);
+    assert.equal(
+      res.body.person.apps.audiobookshelf.remoteUsername,
+      'DemoReader'
+    );
+    const family = abs.users.find((u) => u.id === 'abs-family');
+    // The password stays the person's own; the email is set for tidiness
+    assert.equal(family?.password, undefined);
+    assert.equal(family?.email, 'demo@seerr.dev');
+    const saved = await getRepository(UserAppAccount).findOneOrFail({
+      where: { app: 'audiobookshelf' },
+    });
+    assert.equal(saved.madeByAllseerr, false);
+
+    // The scheduled sync finds the account by its id, not its name
+    await syncEveryone();
+    const synced = await getRepository(UserAppAccount).findOneOrFail({
+      where: { app: 'audiobookshelf' },
+    });
+    assert.equal(synced.remoteUserId, 'abs-family');
+    assert.equal(synced.status, 'active');
+    assert.equal(abs.users.length, 2, 'no second account was made');
+
+    const listed = await agent
+      .get('/user-access/apps/audiobookshelf/accounts')
+      .expect(200);
+    assert.equal(
+      listed.body.accounts.find((a: { id: string }) => a.id === 'abs-family')
+        .linkedUserId,
+      userId
+    );
+  });
+
+  it('refuses an account linked to someone else', async () => {
+    const agent = await loginAs('admin@seerr.dev');
+
+    await agent
+      .post(
+        `/user-access/people/${await userIdOf('demo@seerr.dev')}/apps/audiobookshelf/link`
+      )
+      .send({ remoteUserId: 'abs-family' })
+      .expect(200);
+    const res = await agent
+      .post(
+        `/user-access/people/${await userIdOf('admin@seerr.dev')}/apps/audiobookshelf/link`
+      )
+      .send({ remoteUserId: 'abs-family' });
+
+    assert.equal(res.status, 409);
+    await agent
+      .post(
+        `/user-access/people/${await userIdOf('admin@seerr.dev')}/apps/audiobookshelf/link`
+      )
+      .send({ remoteUserId: 'nobody' })
+      .expect(404);
+    await agent
+      .post(
+        `/user-access/people/${await userIdOf('admin@seerr.dev')}/apps/audiobookshelf/link`
+      )
+      .send({})
+      .expect(400);
+  });
+
+  it("gives a linked Kavita account the person's email, which its sign in links by", async () => {
+    const agent = await loginAs('admin@seerr.dev');
+
+    const res = await agent
+      .post(
+        `/user-access/people/${await userIdOf('demo@seerr.dev')}/apps/kavita/link`
+      )
+      .send({ remoteUserId: '7' })
+      .expect(200);
+
+    assert.equal(res.body.warning, null);
+    const member = kavita.members.find((m) => m.id === 7);
+    assert.equal(member?.email, 'demo@seerr.dev');
+    // Kavita's update sent the account's own roles back
+    const emailUpdate = kavita.calls.find(
+      (call) =>
+        call.path === '/api/Account/update' &&
+        (call.body as { userId?: number }).userId === 7 &&
+        (call.body as { email?: string }).email === 'demo@seerr.dev'
+    );
+    assert.deepEqual((emailUpdate?.body as { roles: string[] }).roles, [
+      'Login',
+      'Pleb',
+    ]);
+  });
+
+  it("warns when Kavita keeps the admin key owner's email", async () => {
+    const agent = await loginAs('admin@seerr.dev');
+
+    const res = await agent
+      .post(
+        `/user-access/people/${await userIdOf('admin@seerr.dev')}/apps/kavita/link`
+      )
+      .send({ remoteUserId: '1' })
+      .expect(200);
+
+    assert.match(res.body.warning, /kept the old email/);
+    assert.equal(kavita.members[0].email, 'admin@example.com');
+    assert.equal(res.body.person.apps.kavita.status, 'active');
+  });
+
+  it('unlinks without touching the account in the app', async () => {
+    const agent = await loginAs('admin@seerr.dev');
+    const userId = await userIdOf('demo@seerr.dev');
+
+    await agent
+      .post(`/user-access/people/${userId}/apps/kavita/link`)
+      .send({ remoteUserId: '7' })
+      .expect(200);
+    const res = await agent
+      .post(`/user-access/people/${userId}/apps/kavita/unlink`)
+      .expect(200);
+
+    assert.equal(res.body.apps.kavita.status, 'none');
+    assert.equal(res.body.apps.kavita.enabled, false);
+    assert.ok(kavita.members.some((m) => m.id === 7));
+
+    await syncEveryone();
+    const account = await getRepository(UserAppAccount).findOneOrFail({
+      where: { app: 'kavita' },
+    });
+    assert.equal(account.remoteUserId, null);
+  });
+});
+
+describe('accountMatchScore', () => {
+  const person = new User({
+    id: 9,
+    username: 'dcuellar44',
+    plexUsername: 'dcuellar44',
+    email: 'dan@example.com',
+  });
+
+  it('ranks the same email over the same username over a name inside another', () => {
+    assert.equal(
+      accountMatchScore(person, { username: 'x', email: 'DAN@example.com' }),
+      3
+    );
+    assert.equal(
+      accountMatchScore(person, { username: 'DCuellar44', email: null }),
+      2
+    );
+    assert.equal(
+      accountMatchScore(person, { username: 'dcuellar', email: null }),
+      1
+    );
+    assert.equal(
+      accountMatchScore(person, { username: 'cue', email: null }),
+      0,
+      'short names are not matched inside others'
+    );
+    assert.equal(
+      accountMatchScore(new User({ id: 10, email: 'kid@allseerr.invalid' }), {
+        username: 'x',
+        email: 'kid@allseerr.invalid',
+      }),
+      0
+    );
   });
 });

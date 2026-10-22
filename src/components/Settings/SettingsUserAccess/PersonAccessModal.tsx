@@ -4,6 +4,10 @@ import Button from '@app/components/Common/Button';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
 import Modal from '@app/components/Common/Modal';
 import {
+  LinkAccountPicker,
+  UnlinkAccountButton,
+} from '@app/components/Settings/SettingsUserAccess/LinkAccount';
+import {
   AGE_LIMIT_OPTIONS,
   APPS,
   APP_NAMES,
@@ -361,6 +365,13 @@ const PersonAccessModal = ({
                     </div>
                   </div>
                 )}
+                {!access.remoteUsername && info?.connected && (
+                  <LinkAccountPicker
+                    person={person}
+                    app={app}
+                    onLinked={(linked) => onSaved(linked, {})}
+                  />
+                )}
                 {!hasAccount && access.enabled && (
                   <div className="mt-3">
                     <Button
@@ -386,6 +397,14 @@ const PersonAccessModal = ({
                     >
                       {intl.formatMessage(messages.resetPassword)}
                     </Button>
+                    {access.remoteUsername && (
+                      <UnlinkAccountButton
+                        person={person}
+                        app={app}
+                        disabled={!!busyApp}
+                        onUnlinked={(unlinked) => onSaved(unlinked, {})}
+                      />
+                    )}
                     <ConfirmButton
                       onClick={() => removeAccount(app)}
                       confirmText={intl.formatMessage(messages.removeConfirm)}

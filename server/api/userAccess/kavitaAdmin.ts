@@ -3,6 +3,7 @@ import type { AxiosInstance } from 'axios';
 import { isAxiosError } from 'axios';
 import type {
   AppAccess,
+  AppAccountSummary,
   AppConnectionInfo,
   AppLibrary,
   AppUserKey,
@@ -25,6 +26,7 @@ interface KavitaMember {
   isPending?: boolean;
   roles?: string[] | null;
   libraries?: { id: number; name: string }[] | null;
+  ageRestriction?: { ageRating: number; includeUnknowns: boolean } | null;
   identityProvider?: number;
 }
 
@@ -209,6 +211,62 @@ export class KavitaAdminAPI implements UserAccessAppClient {
           email: member.email,
         }
       : null;
+  }
+
+  public async listAccounts(): Promise<AppAccountSummary[]> {
+    return (await this.getMembers()).map((member) => ({
+      id: String(member.id),
+      username: member.username ?? '',
+      email: member.email,
+      isAdmin: !!member.roles?.includes('Admin'),
+    }));
+  }
+
+  /**
+   * Sets the email of an account, which Kavita's sign in with Allseerr
+   * links existing accounts by. Kavita's admin update takes it as confirmed,
+   * and keeps everything else as it is here. Kavita ignores the email of
+   * the account the admin key belongs to, which only its owner can change
+   * (with a confirmation email), so this answers false for it.
+   */
+  public async setEmail(
+    account: RemoteAccount,
+    email: string
+  ): Promise<boolean> {
+    const member = await this.findMember({ remoteUserId: account.id });
+
+    if (!member) {
+      throw new UserAccessAppError('Kavita no longer has this account.');
+    }
+
+    if (member.email?.toLowerCase() === email.toLowerCase()) {
+      return true;
+    }
+
+    await this.call((headers) =>
+      this.axios.post(
+        '/api/Account/update',
+        {
+          userId: member.id,
+          username: member.username,
+          email,
+          // The same roles, or Kavita would sign the account out of its
+          // auth keys
+          roles: member.roles ?? [],
+          libraries: (member.libraries ?? []).map((library) => library.id),
+          ageRestriction: member.ageRestriction ?? {
+            ageRating: -1,
+            includeUnknowns: true,
+          },
+          identityProvider: member.identityProvider ?? 0,
+        },
+        { headers }
+      )
+    );
+
+    const updated = await this.findMember({ remoteUserId: account.id });
+
+    return updated?.email?.toLowerCase() === email.toLowerCase();
   }
 
   /**

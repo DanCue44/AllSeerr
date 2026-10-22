@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios';
 import semver from 'semver';
 import type {
   AppAccess,
+  AppAccountSummary,
   AppConnectionInfo,
   AppLibrary,
   AppUserKey,
@@ -115,6 +116,33 @@ export class AudiobookshelfAdminAPI implements UserAccessAppClient {
     return user
       ? { id: user.id, username: user.username, email: user.email }
       : null;
+  }
+
+  public async listAccounts(): Promise<AppAccountSummary[]> {
+    return (await this.getUsers()).map((user) => ({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      isAdmin: user.type === 'admin' || user.type === 'root',
+    }));
+  }
+
+  /**
+   * Sets the email of an account. Audiobookshelf matches people signing in
+   * with Allseerr by username, so this only keeps the account tidy. Only
+   * the root user may change the root user.
+   */
+  public async setEmail(
+    account: RemoteAccount,
+    email: string
+  ): Promise<boolean> {
+    await this.call(() =>
+      this.axios.patch(`/api/users/${encodeURIComponent(account.id)}`, {
+        email,
+      })
+    );
+
+    return true;
   }
 
   public async createAccount(account: NewAppAccount): Promise<RemoteAccount> {

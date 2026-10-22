@@ -6,7 +6,11 @@ import {
 } from '@server/constants/userAccess';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
-import type { UserAccessAppInfo } from '@server/interfaces/api/userAccessInterfaces';
+import type {
+  AppAccountsResponse,
+  LinkAppAccountResult,
+  UserAccessAppInfo,
+} from '@server/interfaces/api/userAccessInterfaces';
 import { getSettings } from '@server/lib/settings';
 import type {
   PersonAccess,
@@ -14,15 +18,20 @@ import type {
   PersonUpdateResult,
 } from '@server/lib/userAccess';
 import {
+  AccountLinkConflictError,
+  AccountNotFoundError,
   createAppAccountNow,
   getAppClient,
   getAppPublicUrl,
   getPerson,
   isAppConnected,
+  linkAppAccount,
+  listAppAccounts,
   listPeople,
   removeAppAccount,
   resetAppPassword,
   syncPerson,
+  unlinkAppAccount,
   updatePerson,
 } from '@server/lib/userAccess';
 import { isAgeLimit } from '@server/lib/userAccess/ageLimits';
@@ -288,6 +297,102 @@ userAccessRoutes.delete<{ userId: string; app: string }, PersonAccess>(
         message: `${USER_ACCESS_APP_NAMES[app]}: ${(e as Error).message}`,
       });
     }
+  }
+);
+
+/**
+ * Every account in an app, who each is linked to and who each likely
+ * belongs to, for linking people to the accounts they already have
+ */
+userAccessRoutes.get<{ app: string }, AppAccountsResponse>(
+  '/apps/:app/accounts',
+  async (req, res, next) => {
+    const { app } = req.params;
+
+    if (!isUserAccessApp(app)) {
+      return next({ status: 404, message: 'Unknown app.' });
+    }
+    if (!isAppConnected(app)) {
+      return next({
+        status: 400,
+        message: `${USER_ACCESS_APP_NAMES[app]} is not connected.`,
+      });
+    }
+
+    try {
+      return res
+        .status(200)
+        .json({ app, accounts: await listAppAccounts(app) });
+    } catch (e) {
+      return next({
+        status: 502,
+        message: `${USER_ACCESS_APP_NAMES[app]}: ${(e as Error).message}`,
+      });
+    }
+  }
+);
+
+/**
+ * Links the person to an account they already have in the app. The
+ * account keeps its password.
+ */
+userAccessRoutes.post<
+  { userId: string; app: string },
+  LinkAppAccountResult,
+  { remoteUserId?: unknown }
+>('/people/:userId/apps/:app/link', async (req, res, next) => {
+  const userId = parseUserId(req.params.userId);
+  const { app } = req.params;
+  const remoteUserId = req.body?.remoteUserId;
+
+  if (!userId || !(await userExists(userId))) {
+    return next({ status: 404, message: 'User not found.' });
+  }
+  if (!isUserAccessApp(app)) {
+    return next({ status: 404, message: 'Unknown app.' });
+  }
+  if (
+    (typeof remoteUserId !== 'string' && typeof remoteUserId !== 'number') ||
+    String(remoteUserId) === ''
+  ) {
+    return next({ status: 400, message: 'Pick an account to link.' });
+  }
+
+  try {
+    return res
+      .status(200)
+      .json(await linkAppAccount(userId, app, String(remoteUserId)));
+  } catch (e) {
+    if (e instanceof AccountLinkConflictError) {
+      return next({ status: 409, message: e.message });
+    }
+    if (e instanceof AccountNotFoundError) {
+      return next({ status: 404, message: e.message });
+    }
+    return next({
+      status: 502,
+      message: `${USER_ACCESS_APP_NAMES[app]}: ${(e as Error).message}`,
+    });
+  }
+});
+
+/**
+ * Stops managing the person's account in the app, leaving it as it is there
+ */
+userAccessRoutes.post<{ userId: string; app: string }, PersonAccess>(
+  '/people/:userId/apps/:app/unlink',
+  async (req, res, next) => {
+    const userId = parseUserId(req.params.userId);
+    const { app } = req.params;
+
+    if (!userId || !(await userExists(userId))) {
+      return next({ status: 404, message: 'User not found.' });
+    }
+    if (!isUserAccessApp(app)) {
+      return next({ status: 404, message: 'Unknown app.' });
+    }
+
+    return res.status(200).json(await unlinkAppAccount(userId, app));
   }
 );
 

@@ -107,7 +107,7 @@ export const absPermissionsClaim = (input: OidcClaimsInput) => ({
   allowedTags: [],
 });
 
-const hasRealEmail = (email: string): boolean =>
+export const hasRealEmail = (email: string): boolean =>
   email.includes('@') && !email.endsWith('@allseerr.invalid');
 
 /**

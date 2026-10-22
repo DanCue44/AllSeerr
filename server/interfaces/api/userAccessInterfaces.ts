@@ -103,6 +103,33 @@ export interface PersonUpdateResult {
   passwords: NewPasswords;
 }
 
+/**
+ * An account in an app, who it is linked to and who it likely belongs to
+ */
+export interface AppAccountListItem {
+  id: string;
+  username: string;
+  email: string | null;
+  isAdmin: boolean;
+  // The person the account is linked to
+  linkedUserId: number | null;
+  linkedDisplayName: string | null;
+  // A person without an account in the app who likely owns this one: the
+  // same email, the same username, or one username inside the other
+  suggestedUserId: number | null;
+  suggestedDisplayName: string | null;
+}
+
+export interface AppAccountsResponse {
+  app: UserAccessApp;
+  accounts: AppAccountListItem[];
+}
+
+export interface LinkAppAccountResult extends PersonUpdateResult {
+  // Something the link could not do, such as set the email in the app
+  warning: string | null;
+}
+
 export type InviteApps = Partial<
   Record<UserAccessApp, { libraryIds: string[] | null }>
 >;

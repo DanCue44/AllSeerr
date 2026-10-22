@@ -202,6 +202,9 @@ export const startFakeAudiobookshelf = async (apiKey: string) => {
       if (typeof b.password === 'string') {
         user.password = b.password;
       }
+      if (typeof b.email === 'string') {
+        user.email = b.email;
+      }
       if (b.permissions) {
         user.permissions = b.permissions as Record<string, unknown>;
       }
@@ -377,7 +380,25 @@ export const startFakeKavita = async (apiKey: string) => {
       if (!member) {
         return { status: 400 };
       }
-      member.roles = [...(b.roles as string[]), 'Pleb'];
+      // Kavita takes an email for any account but the admin's own, the one
+      // signed in here
+      if (
+        typeof b.email === 'string' &&
+        b.email &&
+        b.email !== member.email &&
+        member.id !== 1
+      ) {
+        if (members.some((m) => m.email === b.email)) {
+          return { status: 400, body: 'email-taken' };
+        }
+        member.email = b.email;
+      }
+      member.roles = [
+        ...new Set([
+          ...(b.roles as string[]),
+          ...(member.roles.includes('Admin') ? [] : ['Pleb']),
+        ]),
+      ];
       member.libraries = libraries.filter((l) =>
         (b.libraries as number[]).includes(l.id)
       );

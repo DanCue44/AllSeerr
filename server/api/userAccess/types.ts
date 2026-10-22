@@ -16,6 +16,13 @@ export interface RemoteAccount {
 }
 
 /**
+ * An account in an app as the admin's list of accounts shows it
+ */
+export interface AppAccountSummary extends RemoteAccount {
+  isAdmin: boolean;
+}
+
+/**
  * What a person may do in an app: use it at all, which libraries (null for
  * all of them) and up to which age
  */
@@ -57,10 +64,15 @@ export interface UserAccessAppClient {
     username?: string | null;
     email?: string | null;
   }): Promise<RemoteAccount | null>;
+  // Every account in the app, for linking people to the accounts they have
+  listAccounts(): Promise<AppAccountSummary[]>;
   createAccount(account: NewAppAccount): Promise<RemoteAccount>;
   updateAccount(account: RemoteAccount, access: AppAccess): Promise<void>;
   setPassword(account: RemoteAccount, password: string): Promise<void>;
   deleteAccount(account: RemoteAccount): Promise<void>;
+  // Sets the email of an account, so the app can match the person by it
+  // when they sign in with Allseerr. False when the app kept the old one.
+  setEmail?(account: RemoteAccount, email: string): Promise<boolean>;
   // Whether the account is an admin of the app, whose password Allseerr
   // leaves to its owner
   isAppAdmin?(account: RemoteAccount): Promise<boolean>;

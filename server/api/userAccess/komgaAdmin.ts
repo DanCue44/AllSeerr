@@ -2,6 +2,7 @@ import { toKomgaAgeRestriction } from '@server/lib/userAccess/ageLimits';
 import type { AxiosInstance } from 'axios';
 import type {
   AppAccess,
+  AppAccountSummary,
   AppConnectionInfo,
   AppLibrary,
   NewAppAccount,
@@ -118,6 +119,16 @@ export class KomgaAdminAPI implements UserAccessAppClient {
     );
 
     return user;
+  }
+
+  public async listAccounts(): Promise<AppAccountSummary[]> {
+    // Komga's username is the email
+    return (await this.getUsers()).map((user) => ({
+      id: user.id,
+      username: user.email,
+      email: user.email,
+      isAdmin: !!user.roles?.includes('ADMIN'),
+    }));
   }
 
   public async createAccount(account: NewAppAccount): Promise<RemoteAccount> {

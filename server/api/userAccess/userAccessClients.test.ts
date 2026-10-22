@@ -245,3 +245,112 @@ describe('KomgaAdminAPI', () => {
     assert.equal(account.username, 'nomail@allseerr.invalid');
   });
 });
+
+describe('listing accounts for linking', () => {
+  let abs: Awaited<ReturnType<typeof startFakeAudiobookshelf>>;
+  let kavita: Awaited<ReturnType<typeof startFakeKavita>>;
+  let komga: Awaited<ReturnType<typeof startFakeKomga>>;
+
+  before(async () => {
+    abs = await startFakeAudiobookshelf('abs-key');
+    kavita = await startFakeKavita('kavita-key');
+    komga = await startFakeKomga('komga-key');
+  });
+  after(async () => {
+    await abs.close();
+    await kavita.close();
+    await komga.close();
+  });
+
+  it('lists every Audiobookshelf account and which are admins', async () => {
+    abs.users.push({
+      id: 'abs-fam',
+      username: 'FamilyReader',
+      email: null,
+      type: 'user',
+      isActive: true,
+      permissions: {},
+    });
+    const client = new AudiobookshelfAdminAPI({
+      url: abs.url,
+      apiKey: 'abs-key',
+    });
+
+    assert.deepEqual(await client.listAccounts(), [
+      { id: 'root', username: 'root', email: null, isAdmin: true },
+      { id: 'abs-fam', username: 'FamilyReader', email: null, isAdmin: false },
+    ]);
+    assert.equal(
+      await client.setEmail(
+        { id: 'abs-fam', username: 'FamilyReader' },
+        'fam@example.com'
+      ),
+      true
+    );
+    assert.equal(abs.users[1].email, 'fam@example.com');
+  });
+
+  it('lists Kavita accounts and sets an email, keeping roles and libraries', async () => {
+    kavita.members.push({
+      id: 5,
+      username: 'reader',
+      email: 'old@example.com',
+      isPending: false,
+      roles: ['Login', 'Download', 'Pleb'],
+      libraries: [{ id: 2, name: 'Manga' }],
+      ageRestriction: { ageRating: 9, includeUnknowns: false },
+      identityProvider: 0,
+    });
+    const client = new KavitaAdminAPI({
+      url: kavita.url,
+      apiKey: 'kavita-key',
+    });
+
+    const accounts = await client.listAccounts();
+    assert.deepEqual(
+      accounts.map(({ id, isAdmin }) => [id, isAdmin]),
+      [
+        ['1', true],
+        ['5', false],
+      ]
+    );
+
+    assert.equal(
+      await client.setEmail(
+        { id: '5', username: 'reader' },
+        'reader@example.com'
+      ),
+      true
+    );
+    const member = kavita.members.find((m) => m.id === 5);
+    assert.equal(member?.email, 'reader@example.com');
+    assert.deepEqual(
+      member?.libraries.map((l) => l.id),
+      [2]
+    );
+    assert.deepEqual(member?.ageRestriction, {
+      ageRating: 9,
+      includeUnknowns: false,
+    });
+    assert.deepEqual(member?.roles, ['Login', 'Download', 'Pleb']);
+
+    // Kavita keeps the email of the account the admin key belongs to
+    assert.equal(
+      await client.setEmail({ id: '1', username: 'admin' }, 'me@example.com'),
+      false
+    );
+  });
+
+  it('lists Komga accounts by their email', async () => {
+    const client = new KomgaAdminAPI({ url: komga.url, apiKey: 'komga-key' });
+
+    assert.deepEqual(await client.listAccounts(), [
+      {
+        id: 'admin',
+        username: 'admin@example.com',
+        email: 'admin@example.com',
+        isAdmin: true,
+      },
+    ]);
+  });
+});
