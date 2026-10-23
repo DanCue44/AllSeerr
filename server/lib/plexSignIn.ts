@@ -72,7 +72,7 @@ export const signInWithPlex = async ({
       ?.status;
 
     // Plex turned the token down, so the person signs in to Plex again
-    if (status === 401 || status === 403) {
+    if (status === 401 || status === 403 || status === 422) {
       throw new PlexSignInError(
         401,
         'Plex did not accept this sign in. Sign in with Plex again.'
