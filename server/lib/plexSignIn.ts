@@ -50,12 +50,17 @@ export const signInWithPlex = async ({
   inviteToken,
   ip,
   allowSetup = true,
+  keepStoredToken = false,
 }: {
   authToken: string;
   inviteToken?: string;
   ip?: string;
   // Lets the first account set Allseerr up as its admin
   allowSetup?: boolean;
+  // Keeps the Plex token Allseerr already has for the user. A token made for
+  // another app stops working when that device is removed in Plex, and the
+  // admin's token is the one Allseerr reaches Plex with.
+  keepStoredToken?: boolean;
 }): Promise<User> => {
   const settings = getSettings();
   const userRepository = getRepository(User);
@@ -70,6 +75,8 @@ export const signInWithPlex = async ({
   // Next let's see if the user already exists
   let user = await userRepository
     .createQueryBuilder('user')
+    // Hidden by default, read to know whether one is stored
+    .addSelect('user.plexToken')
     .where('user.plexId = :id', { id: account.id })
     .orWhere('user.email = :email', {
       email: account.email.toLowerCase(),
@@ -135,7 +142,9 @@ export const signInWithPlex = async ({
         });
       }
 
-      user.plexToken = authToken;
+      if (!keepStoredToken || !user.plexToken) {
+        user.plexToken = authToken;
+      }
       user.plexId = account.id;
       user.avatar = account.thumb;
       user.email = account.email;

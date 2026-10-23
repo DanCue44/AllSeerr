@@ -166,6 +166,10 @@ async function loginAs(email: string, password = 'test1234') {
 describe('POST /auth/nobookends/plex', () => {
   it('connects NoBookEnds for an existing user without a session', async () => {
     enableBooks();
+    await getRepository(User).update(
+      { email: 'demo@seerr.dev' },
+      { plexToken: 'stored-token' }
+    );
 
     const res = await request(app)
       .post('/api/v1/auth/nobookends/plex')
@@ -184,6 +188,12 @@ describe('POST /auth/nobookends/plex', () => {
       where: { email: 'demo@seerr.dev' },
     });
     assert.equal(demo.plexId, 5150);
+    // The token Allseerr already had stays, not the app's
+    const stored = await getRepository(User).findOneOrFail({
+      where: { id: demo.id },
+      select: { id: true, plexToken: true },
+    });
+    assert.equal(stored.plexToken, 'stored-token');
     const devices = await getRepository(NoBookEndsDevice).find({
       where: { user: { id: demo.id } },
     });

@@ -182,6 +182,7 @@ authRoutes.post<
         authToken,
         ip: req.ip,
         allowSetup: false,
+        keepStoredToken: true,
       });
       const { appUrl } = await connectNoBookEndsDevice(
         user,
