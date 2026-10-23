@@ -67,7 +67,19 @@ export const signInWithPlex = async ({
 
   // First we need to use this auth token to get the user's email from plex.tv
   const plextv = new PlexTvAPI(authToken);
-  const account = await plextv.getUser();
+  const account = await plextv.getUser().catch((e: Error) => {
+    const status = (e.cause as { response?: { status?: number } })?.response
+      ?.status;
+
+    // Plex turned the token down, so the person signs in to Plex again
+    if (status === 401 || status === 403) {
+      throw new PlexSignInError(
+        401,
+        'Plex did not accept this sign in. Sign in with Plex again.'
+      );
+    }
+    throw e;
+  });
 
   // An invite lets a Plex account in that has no access to the server
   const invite = inviteToken ? await findValidInvite(inviteToken) : null;

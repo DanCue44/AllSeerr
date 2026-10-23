@@ -38,7 +38,11 @@ let plexAccount = {
   authToken: 'plex-token-demo',
 };
 
-mock.method(PlexTvAPI.prototype, 'getUser', async () => plexAccount);
+const getPlexUser = mock.method(
+  PlexTvAPI.prototype,
+  'getUser',
+  async () => plexAccount
+);
 const checkAccess = mock.method(
   PlexTvAPI.prototype,
   'checkUserAccess',
@@ -199,6 +203,22 @@ describe('POST /auth/nobookends/plex', () => {
     });
     assert.equal(devices.length, 1);
     assert.equal(devices[0].label, 'iPhone 16');
+  });
+
+  it('asks for a new Plex sign in when Plex turns the token down', async () => {
+    enableBooks();
+    getPlexUser.mock.mockImplementationOnce(async () => {
+      throw new Error('Invalid auth token', {
+        cause: { response: { status: 401 } },
+      });
+    });
+
+    const res = await request(app)
+      .post('/api/v1/auth/nobookends/plex')
+      .send({ authToken: 'expired-token' })
+      .expect(401);
+
+    assert.match(res.body.message, /Sign in with Plex again/);
   });
 
   it('refuses a Plex account without access to the server', async () => {
