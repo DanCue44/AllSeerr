@@ -8,11 +8,13 @@ import StudioSlider from '@app/components/Discover/StudioSlider';
 import TvGenreSlider from '@app/components/Discover/TvGenreSlider';
 import { sliderTitles } from '@app/components/Discover/constants';
 import MediaSlider from '@app/components/MediaSlider';
+import useComicsEnabled from '@app/hooks/useComicsEnabled';
 import { encodeURIExtraParams } from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
 import { getBookSubjectSliderUrls } from '@app/utils/bookSubjectSlider';
 import defineMessages from '@app/utils/defineMessages';
 import type { SpaceMediaType } from '@app/utils/discoverMediaFilter';
+import { COMICS_PATH } from '@app/utils/spaces';
 import { DiscoverSliderType } from '@server/constants/discover';
 import type DiscoverSlider from '@server/entity/DiscoverSlider';
 import { useIntl } from 'react-intl';
@@ -36,15 +38,22 @@ interface DiscoverSliderRowProps {
   slider: Partial<DiscoverSlider>;
   /** The media type of the space the row is in, if any */
   narrowTo?: SpaceMediaType;
+  /** Shown on the Comics & Manga page, which has the comic rows already */
+  onComicsPage?: boolean;
 }
 
 /**
  * One configured Discover row, as shown on the For You home and in the
  * spaces. Rows for a service that is not set up render nothing.
  */
-const DiscoverSliderRow = ({ slider, narrowTo }: DiscoverSliderRowProps) => {
+const DiscoverSliderRow = ({
+  slider,
+  narrowTo,
+  onComicsPage = false,
+}: DiscoverSliderRowProps) => {
   const intl = useIntl();
   const settings = useSettings();
+  const comicsEnabled = useComicsEnabled();
   const upcomingDate = getUpcomingDate();
   let sliderComponent: React.ReactNode = null;
 
@@ -300,6 +309,64 @@ const DiscoverSliderRow = ({ slider, narrowTo }: DiscoverSliderRowProps) => {
             title={slider.title ?? ''}
             url={url}
             linkUrl={linkUrl}
+          />
+        );
+      }
+      break;
+    // Comic rows need Talearr's comics library, and hide while a Talearr
+    // without discover lists answers none
+    case DiscoverSliderType.TRENDING_COMICS:
+      if (comicsEnabled) {
+        sliderComponent = onComicsPage ? (
+          <MediaSlider
+            sliderKey="trending-manga"
+            title={intl.formatMessage(sliderTitles.trendingmanga)}
+            url="/api/v1/discover/comics/trending"
+            hideWhenEmpty
+          />
+        ) : (
+          <MediaSlider
+            sliderKey="trending-comics"
+            title={intl.formatMessage(sliderTitles.trendingcomics)}
+            url="/api/v1/discover/comics"
+            linkUrl={COMICS_PATH}
+            hideWhenEmpty
+          />
+        );
+      }
+      break;
+    case DiscoverSliderType.POPULAR_MANGA:
+      if (comicsEnabled) {
+        sliderComponent = (
+          <MediaSlider
+            sliderKey="popular-manga"
+            title={intl.formatMessage(sliderTitles.popularmanga)}
+            url="/api/v1/discover/comics/popular"
+            hideWhenEmpty
+          />
+        );
+      }
+      break;
+    case DiscoverSliderType.NEW_MANGA:
+      if (comicsEnabled) {
+        sliderComponent = (
+          <MediaSlider
+            sliderKey="new-manga"
+            title={intl.formatMessage(sliderTitles.newmanga)}
+            url="/api/v1/discover/comics/releasing"
+            hideWhenEmpty
+          />
+        );
+      }
+      break;
+    case DiscoverSliderType.POPULAR_COMICS:
+      if (comicsEnabled) {
+        sliderComponent = (
+          <MediaSlider
+            sliderKey="popular-comics"
+            title={intl.formatMessage(sliderTitles.popularcomics)}
+            url="/api/v1/discover/comics/western"
+            hideWhenEmpty
           />
         );
       }

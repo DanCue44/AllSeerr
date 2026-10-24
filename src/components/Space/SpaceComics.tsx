@@ -5,15 +5,18 @@ import {
 } from '@app/components/Allseerr/ListPage';
 import ListView from '@app/components/Common/ListView';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import DiscoverSliderRow from '@app/components/Discover/DiscoverSliderRow';
 import SpaceLayout from '@app/components/Space';
 import TitleCard from '@app/components/TitleCard';
 import useComicsEnabled from '@app/hooks/useComicsEnabled';
 import useInterfaceStyle from '@app/hooks/useInterfaceStyle';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import { selectComicsPageSliders } from '@app/utils/discoverMediaFilter';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import type { ComicKind } from '@server/constants/media';
 import { isComicKind } from '@server/constants/media';
+import type DiscoverSlider from '@server/entity/DiscoverSlider';
 import type { ComicResult } from '@server/models/Search';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
@@ -39,7 +42,8 @@ interface ComicSearchResponse {
 
 /**
  * Comics and manga in the books space: a search of Talearr's comics lookup,
- * and the series requested so far. The lookup asks AniList and Hardcover,
+ * and without a search the comic rows of Customize Discover (trending,
+ * popular and new manga, popular comics) above the series requested so far. The lookup asks AniList and Hardcover,
  * so it runs when the search is sent rather than on every key.
  */
 const SpaceComics = () => {
@@ -68,6 +72,9 @@ const SpaceComics = () => {
   );
   const { data: library } = useSWR<{ results: ComicResult[] }>(
     comicsEnabled && !query ? '/api/v1/comic/library' : null
+  );
+  const { data: sliders } = useSWR<DiscoverSlider[]>(
+    comicsEnabled && !query ? '/api/v1/settings/discover' : null
   );
 
   const setQuery = (next: { query?: string; kind?: ComicKind }) =>
@@ -138,8 +145,6 @@ const SpaceComics = () => {
           />
         </>
       );
-  } else if (!library) {
-    body = <LoadingSpinner />;
   } else {
     body = (
       <>
@@ -150,7 +155,13 @@ const SpaceComics = () => {
         >
           {intl.formatMessage(messages.intro)}
         </p>
-        {library.results.length > 0 && (
+        {selectComicsPageSliders(sliders ?? []).map((slider) => (
+          <div key={`comics-slider-${slider.id}`}>
+            <DiscoverSliderRow slider={slider} onComicsPage />
+          </div>
+        ))}
+        {!library && <LoadingSpinner />}
+        {library && library.results.length > 0 && (
           <>
             <h2
               className={

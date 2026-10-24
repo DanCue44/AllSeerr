@@ -5,7 +5,9 @@ import { DiscoverSliderType } from '@server/constants/discover';
 import {
   getSliderMediaKind,
   getSliderPlacements,
+  isHomeSlider,
   isSliderInDiscoverFilter,
+  selectComicsPageSliders,
   selectDiscoverSliders,
   selectHomeSliders,
 } from './discoverMediaFilter';
@@ -40,6 +42,10 @@ describe('getSliderMediaKind', () => {
       [DiscoverSliderType.POPULAR_BOOKS]: 'book',
       [DiscoverSliderType.COMING_UP]: 'mixed',
       [DiscoverSliderType.BOOK_SUBJECT]: 'book',
+      [DiscoverSliderType.TRENDING_COMICS]: 'mixed',
+      [DiscoverSliderType.POPULAR_MANGA]: 'comic',
+      [DiscoverSliderType.NEW_MANGA]: 'comic',
+      [DiscoverSliderType.POPULAR_COMICS]: 'comic',
     };
 
     for (const [type, kind] of Object.entries(expected)) {
@@ -253,6 +259,66 @@ describe('getSliderPlacements', () => {
         isBuiltIn: false,
       }),
       ['all', 'book']
+    );
+  });
+});
+
+describe('comic sliders', () => {
+  const comicTypes = [
+    DiscoverSliderType.POPULAR_MANGA,
+    DiscoverSliderType.NEW_MANGA,
+    DiscoverSliderType.POPULAR_COMICS,
+  ];
+
+  it('keeps the comic rows out of the books space and the home', () => {
+    for (const type of comicTypes) {
+      assert.ok(!isSliderInDiscoverFilter(type, 'book'), `type ${type}`);
+      assert.ok(!isHomeSlider({ type, isBuiltIn: true }), `type ${type}`);
+    }
+    assert.ok(
+      !isSliderInDiscoverFilter(DiscoverSliderType.TRENDING_COMICS, 'book')
+    );
+  });
+
+  it('shows trending comics on the home', () => {
+    assert.ok(
+      isHomeSlider({
+        type: DiscoverSliderType.TRENDING_COMICS,
+        isBuiltIn: true,
+      })
+    );
+  });
+
+  it('picks the enabled comic rows for the comics page, in order', () => {
+    const sliders = [
+      { id: 1, type: DiscoverSliderType.TRENDING_BOOKS, enabled: true },
+      { id: 2, type: DiscoverSliderType.TRENDING_COMICS, enabled: true },
+      { id: 3, type: DiscoverSliderType.POPULAR_MANGA, enabled: true },
+      { id: 4, type: DiscoverSliderType.NEW_MANGA, enabled: false },
+      { id: 5, type: DiscoverSliderType.POPULAR_COMICS, enabled: true },
+      { id: 6, type: DiscoverSliderType.TRENDING, enabled: true },
+    ];
+
+    assert.deepEqual(
+      selectComicsPageSliders(sliders).map((slider) => slider.id),
+      [2, 3, 5]
+    );
+  });
+
+  it('labels where the comic rows show', () => {
+    assert.deepEqual(
+      getSliderPlacements({
+        type: DiscoverSliderType.TRENDING_COMICS,
+        isBuiltIn: true,
+      }),
+      ['all', 'comics']
+    );
+    assert.deepEqual(
+      getSliderPlacements({
+        type: DiscoverSliderType.POPULAR_COMICS,
+        isBuiltIn: true,
+      }),
+      ['comics']
     );
   });
 });

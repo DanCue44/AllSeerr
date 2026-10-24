@@ -3,6 +3,10 @@ import PersonCard from '@app/components/PersonCard';
 import Slider from '@app/components/Slider';
 import TitleCard from '@app/components/TitleCard';
 import BookTitleCard from '@app/components/TitleCard/BookTitleCard';
+import ComicTitleCard, {
+  getComicStatus,
+  getMissingVolumes,
+} from '@app/components/TitleCard/ComicTitleCard';
 import MusicTitleCard from '@app/components/TitleCard/MusicTitleCard';
 import useSettings from '@app/hooks/useSettings';
 import { useUser } from '@app/hooks/useUser';
@@ -13,6 +17,7 @@ import type {
   AlbumResult,
   ArtistResult,
   BookResult,
+  ComicResult,
   MovieResult,
   PersonResult,
   TvResult,
@@ -32,6 +37,7 @@ interface MixedResult {
     | AlbumResult
     | ArtistResult
     | BookResult
+    | ComicResult
   )[];
 }
 
@@ -81,6 +87,7 @@ const MediaSlider = ({
       | AlbumResult
       | ArtistResult
       | BookResult
+      | ComicResult
     )[]
   );
 
@@ -233,6 +240,20 @@ const MediaSlider = ({
               statusAudio={title.mediaInfo?.statusAudio}
             />
           );
+        case 'comic':
+          return (
+            <ComicTitleCard
+              key={title.id}
+              id={title.id}
+              kind={title.kind}
+              title={title.title}
+              subtitle={title.authors}
+              year={title.year}
+              image={title.posterPath}
+              status={getComicStatus(title)}
+              missingVolumes={getMissingVolumes(title)}
+            />
+          );
       }
     });
 
@@ -246,7 +267,8 @@ const MediaSlider = ({
             title.mediaType !== 'person' &&
             title.mediaType !== 'album' &&
             title.mediaType !== 'artist' &&
-            title.mediaType !== 'book'
+            title.mediaType !== 'book' &&
+            title.mediaType !== 'comic'
               ? title.posterPath
               : undefined
           )}

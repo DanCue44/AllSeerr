@@ -12,7 +12,11 @@ export type SpaceMediaType = (typeof SPACE_MEDIA_TYPES)[number];
 /** A media type, or every type at once as on the For You home */
 export type DiscoverMediaFilter = 'all' | SpaceMediaType;
 
-export type SliderMediaKind = SpaceMediaType | 'mixed';
+/**
+ * Comic rows hold comic and manga series, which the books space shows on
+ * its Comics & Manga page rather than among the books
+ */
+export type SliderMediaKind = SpaceMediaType | 'comic' | 'mixed';
 
 /**
  * The kind of media a Discover slider shows. Mixed sliders hold more than one
@@ -47,6 +51,10 @@ export const getSliderMediaKind = (
     case DiscoverSliderType.POPULAR_BOOKS:
     case DiscoverSliderType.BOOK_SUBJECT:
       return 'book';
+    case DiscoverSliderType.POPULAR_MANGA:
+    case DiscoverSliderType.NEW_MANGA:
+    case DiscoverSliderType.POPULAR_COMICS:
+      return 'comic';
     default:
       return 'mixed';
   }
@@ -124,12 +132,34 @@ export const selectHomeSliders = <T extends SliderLike>(sliders: T[]): T[] =>
   sliders.filter((slider) => !!slider.enabled && isHomeSlider(slider));
 
 /**
- * Where a slider shows up when it is enabled: the For You home ('all') and
- * the spaces of the media types it holds. Labels the rows while customizing.
+ * Whether a slider is shown on the Comics & Manga page of the books space:
+ * the comic rows, and the trending comics row of the home, which the page
+ * narrows to trending manga
  */
-export const getSliderPlacements = (
-  slider: SliderLike
-): DiscoverMediaFilter[] => {
+export const isComicsPageSlider = (type: DiscoverSliderType): boolean =>
+  type === DiscoverSliderType.TRENDING_COMICS ||
+  getSliderMediaKind(type) === 'comic';
+
+/** The enabled sliders of the Comics & Manga page, in the configured order */
+export const selectComicsPageSliders = <T extends SliderLike>(
+  sliders: T[]
+): T[] =>
+  sliders.filter(
+    (slider) =>
+      slider.type !== undefined &&
+      !!slider.enabled &&
+      isComicsPageSlider(slider.type)
+  );
+
+/** A place a slider shows up: the home, a space or the Comics & Manga page */
+export type SliderPlacement = DiscoverMediaFilter | 'comics';
+
+/**
+ * Where a slider shows up when it is enabled: the For You home ('all'), the
+ * spaces of the media types it holds and the Comics & Manga page. Labels
+ * the rows while customizing.
+ */
+export const getSliderPlacements = (slider: SliderLike): SliderPlacement[] => {
   const type = slider.type;
 
   if (type === undefined) {
@@ -141,5 +171,6 @@ export const getSliderPlacements = (
     ...SPACE_MEDIA_TYPES.filter((mediaType) =>
       isSliderInDiscoverFilter(type, mediaType)
     ),
+    ...(isComicsPageSlider(type) ? (['comics'] as const) : []),
   ];
 };

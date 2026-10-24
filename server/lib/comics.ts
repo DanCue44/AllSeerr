@@ -1,5 +1,6 @@
 import ChaptarrAPI from '@server/api/servarr/chaptarr';
 import type {
+  TalearrComicDiscoverList,
   TalearrComicLookupResult,
   TalearrComicRootFolder,
   TalearrComicSeriesSummary,
@@ -607,6 +608,100 @@ export const searchComics = async ({
     results: saved,
     notices: [...new Set(answers.flatMap((answer) => answer.notices))],
   };
+};
+
+// How long a discover list is kept: Talearr builds it from AniList and
+// Hardcover, whose lists change through the day at most
+const DISCOVER_TTL_MS = 60 * 60_000;
+// An empty list, as from a Talearr without discover lists, is asked again
+// sooner, so an updated Talearr shows its rows
+const DISCOVER_EMPTY_TTL_MS = 10 * 60_000;
+
+export interface ComicDiscoverPage {
+  results: MetadataComic[];
+  notices: string[];
+}
+
+const discoverCache = new Map<
+  string,
+  { until: number; page: Promise<ComicDiscoverPage> }
+>();
+
+export const resetComicsDiscoverCache = (): void => {
+  discoverCache.clear();
+};
+
+/**
+ * One page of a Talearr discover list, its series saved like search
+ * results so their pages can be shown. Kept for an hour, see
+ * DISCOVER_TTL_MS. Empty when Talearr has no discover lists.
+ */
+export const discoverComics = async (
+  list: TalearrComicDiscoverList,
+  page = 1
+): Promise<ComicDiscoverPage> => {
+  const server = getComicsServer();
+
+  if (!server) {
+    return { results: [], notices: [] };
+  }
+
+  const key = `${server.id}:${server.hostname}:${server.port}:${list}:${page}`;
+  const cached = discoverCache.get(key);
+
+  if (cached && cached.until > Date.now()) {
+    return cached.page;
+  }
+
+  const entry = {
+    until: Date.now() + DISCOVER_TTL_MS,
+    page: Promise.resolve<ComicDiscoverPage>({ results: [], notices: [] }),
+  };
+
+  entry.page = getComicsApi(server)
+    .discover(list, page)
+    .then(async (answer) => {
+      const saved = await saveComicMetadata(
+        dropHardcoverDuplicates(answer?.results ?? [])
+      );
+
+      if (saved.length === 0) {
+        entry.until = Date.now() + DISCOVER_EMPTY_TTL_MS;
+      }
+
+      return { results: saved, notices: answer?.notices ?? [] };
+    })
+    .catch((e) => {
+      // A failed list is asked again on the next call
+      discoverCache.delete(key);
+      throw e;
+    });
+  discoverCache.set(key, entry);
+
+  return entry.page;
+};
+
+/**
+ * Takes turns between lists, so a row mixing manga and comics shows both
+ * from the start. A series in more than one list is kept once.
+ */
+export const interleaveComics = (lists: MetadataComic[][]): MetadataComic[] => {
+  const seen = new Set<string>();
+  const mixed: MetadataComic[] = [];
+  const longest = Math.max(0, ...lists.map((list) => list.length));
+
+  for (let i = 0; i < longest; i++) {
+    for (const list of lists) {
+      const row = list[i];
+
+      if (row && !seen.has(row.comicId)) {
+        seen.add(row.comicId);
+        mixed.push(row);
+      }
+    }
+  }
+
+  return mixed;
 };
 
 export interface ComicNotificationDetails {

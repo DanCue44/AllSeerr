@@ -49,6 +49,20 @@ export interface TalearrComicLookupResponse {
   notices: string[];
 }
 
+/**
+ * The lists Talearr's comics discover route serves: AniList manga for the
+ * first three, popular Western comics from Hardcover for comics
+ */
+export const TALEARR_COMIC_DISCOVER_LISTS = [
+  'trending',
+  'popular',
+  'releasing',
+  'comics',
+] as const;
+
+export type TalearrComicDiscoverList =
+  (typeof TALEARR_COMIC_DISCOVER_LISTS)[number];
+
 export interface TalearrComicSeries {
   id: number;
   kind: ComicKind;
@@ -225,6 +239,34 @@ class TalearrComicsAPI extends ExternalAPI {
     if (response.status !== 200) {
       throw new TalearrComicsError(
         refusalMessage(response.data, 'Talearr could not search for comics.')
+      );
+    }
+
+    return parseComicLookupResponse(response.data);
+  }
+
+  /**
+   * A discover list: AniList's trending, popular or releasing manga, or
+   * popular Western comics from Hardcover. Undefined when Talearr has no
+   * discover lists, as older Talearr does not.
+   */
+  public async discover(
+    list: TalearrComicDiscoverList,
+    page = 1
+  ): Promise<TalearrComicLookupResponse | undefined> {
+    const response = await this.axios.get<unknown>('/talearr/comics/discover', {
+      params: { list, page },
+      timeout: LOOKUP_TIMEOUT_MS,
+      validateStatus: (status) => status < 500 && status !== 401,
+    });
+
+    if (response.status === 404) {
+      return undefined;
+    }
+
+    if (response.status !== 200) {
+      throw new TalearrComicsError(
+        refusalMessage(response.data, 'Talearr could not list comics.')
       );
     }
 
