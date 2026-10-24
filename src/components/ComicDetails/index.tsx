@@ -1,7 +1,13 @@
-import { Card, DetailRow, TitleHero } from '@app/components/Allseerr/Title';
+import {
+  Card,
+  DetailRow,
+  LinkChips,
+  TitleHero,
+} from '@app/components/Allseerr/Title';
 import Biography from '@app/components/Allseerr/Title/Biography';
 import StatusPill from '@app/components/Allseerr/Title/StatusPill';
 import { chip, pillPrimary } from '@app/components/Allseerr/Title/styles';
+import ComicVolumes from '@app/components/ComicDetails/ComicVolumes';
 import Button from '@app/components/Common/Button';
 import FormatIcon, { useFormatLabel } from '@app/components/Common/FormatIcon';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
@@ -43,9 +49,19 @@ const messages = defineMessages('components.ComicDetails', {
     'Only Hardcover knows this series, so it is not certain whether it is manga or a comic. Pick how Talearr files it.',
   requestseries: 'Request Series',
   requestmissing: 'Request Missing Volumes',
+  requestallvolumes:
+    '{count, plural, one {Request # Volume} other {Request All # Volumes}}',
+  requestmissingvolumes:
+    '{count, plural, one {Request # Missing Volume} other {Request # Missing Volumes}}',
+  volumescount: 'Volumes',
+  year: 'Year',
+  format: 'Format',
+  genres: 'Genres',
+  authors: 'Authors',
+  library: 'In library',
   requestsuccess: '<strong>{title}</strong> requested successfully!',
   requesterror: 'Something went wrong while requesting the series.',
-  overviewunavailable: 'Overview unavailable.',
+  overviewunavailable: 'No description available.',
   comicsoff: 'Comics are not turned on.',
 });
 
@@ -150,6 +166,28 @@ const ComicDetails = () => {
         status === MediaStatus.UNKNOWN ||
         status === MediaStatus.DELETED);
 
+  // Says what a request asks Talearr for, when the volumes are counted
+  const requestLabel = data.library
+    ? missingVolumes > 0
+      ? {
+          message: messages.requestmissingvolumes,
+          values: { count: missingVolumes },
+        }
+      : { message: messages.requestmissing }
+    : data.volumes
+      ? { message: messages.requestallvolumes, values: { count: data.volumes } }
+      : { message: messages.requestseries };
+
+  const sourceLinks = data.aniListId
+    ? [
+        {
+          key: 'anilist',
+          href: `https://anilist.co/manga/${data.aniListId}`,
+          label: 'AniList',
+        },
+      ]
+    : [];
+
   const request = async () => {
     setIsRequesting(true);
 
@@ -187,8 +225,8 @@ const ComicDetails = () => {
       <PageTitle title={data.title} />
       <TitleHero
         imageType="book"
-        backdropPath={data.posterPath}
-        blurBackdrop
+        backdropPath={data.bannerPath ?? data.posterPath}
+        blurBackdrop={!data.bannerPath}
         posterPath={data.posterPath}
         posterAlt={data.title}
         posterShape="book"
@@ -199,6 +237,9 @@ const ComicDetails = () => {
               <FormatIcon format={kind} size="inline" />
               {kindLabel}
             </span>
+            {isRated(data.ageRating) && (
+              <span className={chip}>{data.ageRating}</span>
+            )}
             <StatusPill status={status} />
           </>
         }
@@ -224,24 +265,42 @@ const ComicDetails = () => {
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-as-ink-muted">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-as-ink-muted">
           {!!data.volumes && (
             <span>
               {intl.formatMessage(messages.volumes, { count: data.volumes })}
             </span>
           )}
-          {data.library && (
-            <span>
-              {intl.formatMessage(messages.inlibrary, {
-                downloaded: data.library.downloadedCount,
-                total: data.library.volumeCount,
-              })}
-            </span>
+          {data.status && (
+            <>
+              {!!data.volumes && <span aria-hidden="true">·</span>}
+              <span>{data.status}</span>
+            </>
           )}
-          {isRated(data.ageRating) && (
-            <span className={chip}>{data.ageRating}</span>
+          {data.library && (
+            <>
+              {(!!data.volumes || !!data.status) && (
+                <span aria-hidden="true">·</span>
+              )}
+              <span>
+                {intl.formatMessage(messages.inlibrary, {
+                  downloaded: data.library.downloadedCount,
+                  total: data.library.volumeCount,
+                })}
+              </span>
+            </>
           )}
         </div>
+
+        {data.genres.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {data.genres.slice(0, 5).map((genre) => (
+              <span key={`genre-chip-${genre}`} className={chip}>
+                {genre}
+              </span>
+            ))}
+          </div>
+        )}
 
         <Biography
           text={overview || intl.formatMessage(messages.overviewunavailable)}
@@ -263,9 +322,8 @@ const ComicDetails = () => {
                 {intl.formatMessage(
                   isRequesting
                     ? globalMessages.requesting
-                    : data.library
-                      ? messages.requestmissing
-                      : messages.requestseries
+                    : requestLabel.message,
+                  requestLabel.values
                 )}
               </span>
             </Button>
@@ -278,31 +336,77 @@ const ComicDetails = () => {
         </div>
       </TitleHero>
 
-      <div className="mt-6 flex flex-col gap-6 lg:mx-10">
-        <Card title={intl.formatMessage(messages.details)}>
-          <div>
-            <DetailRow label={intl.formatMessage(messages.kind)}>
-              {kindLabel}
-            </DetailRow>
-            {data.status && (
-              <DetailRow label={intl.formatMessage(messages.status)}>
-                {data.status}
-              </DetailRow>
-            )}
-            {isRated(data.ageRating) && (
-              <DetailRow label={intl.formatMessage(messages.agerating)}>
-                {data.ageRating}
-              </DetailRow>
-            )}
-            {data.alternateTitles.length > 0 && (
-              <DetailRow label={intl.formatMessage(messages.alsoknownas)}>
-                {data.alternateTitles.slice(0, 4).map((title) => (
-                  <span key={title}>{title}</span>
-                ))}
-              </DetailRow>
+      <div className="px-4 lg:px-10">
+        <section className="grid items-start gap-6 pt-7 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="flex min-w-0 flex-col gap-6">
+            {data.volumeList.length > 0 && (
+              <ComicVolumes volumes={data.volumeList} count={data.volumes} />
             )}
           </div>
-        </Card>
+
+          <div className="flex min-w-0 flex-col gap-6">
+            <Card title={intl.formatMessage(messages.details)}>
+              <div>
+                {!!data.volumes && (
+                  <DetailRow label={intl.formatMessage(messages.volumescount)}>
+                    {intl.formatNumber(data.volumes)}
+                  </DetailRow>
+                )}
+                {data.library && (
+                  <DetailRow label={intl.formatMessage(messages.library)}>
+                    {intl.formatMessage(messages.inlibrary, {
+                      downloaded: data.library.downloadedCount,
+                      total: data.library.volumeCount,
+                    })}
+                  </DetailRow>
+                )}
+                {data.status && (
+                  <DetailRow label={intl.formatMessage(messages.status)}>
+                    {data.status}
+                  </DetailRow>
+                )}
+                {!!data.year && (
+                  <DetailRow label={intl.formatMessage(messages.year)}>
+                    {data.year}
+                  </DetailRow>
+                )}
+                <DetailRow label={intl.formatMessage(messages.kind)}>
+                  {kindLabel}
+                </DetailRow>
+                {data.format && (
+                  <DetailRow label={intl.formatMessage(messages.format)}>
+                    {data.format}
+                  </DetailRow>
+                )}
+                {isRated(data.ageRating) && (
+                  <DetailRow label={intl.formatMessage(messages.agerating)}>
+                    {data.ageRating}
+                  </DetailRow>
+                )}
+                {data.genres.length > 0 && (
+                  <DetailRow label={intl.formatMessage(messages.genres)}>
+                    {data.genres.join(', ')}
+                  </DetailRow>
+                )}
+                {data.authors && (
+                  <DetailRow label={intl.formatMessage(messages.authors)}>
+                    {data.authors}
+                  </DetailRow>
+                )}
+                {data.alternateTitles.length > 0 && (
+                  <DetailRow label={intl.formatMessage(messages.alsoknownas)}>
+                    {data.alternateTitles.slice(0, 6).map((title) => (
+                      <span key={title} className="break-words">
+                        {title}
+                      </span>
+                    ))}
+                  </DetailRow>
+                )}
+              </div>
+              {sourceLinks.length > 0 && <LinkChips links={sourceLinks} />}
+            </Card>
+          </div>
+        </section>
       </div>
     </>
   );

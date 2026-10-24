@@ -9,6 +9,8 @@ const STATUS_TIMEOUT_MS = 5_000;
 const LOOKUP_TIMEOUT_MS = 30_000;
 // Adding a series loads its volumes from the metadata sources first
 const ADD_TIMEOUT_MS = 60_000;
+// A preview asks AniList or Hardcover for one series while its page loads
+const PREVIEW_TIMEOUT_MS = 15_000;
 
 /**
  * Whether Talearr's comics library can be used. Unavailable when the server
@@ -104,6 +106,67 @@ export interface TalearrComicAddBody {
 }
 
 /**
+ * One volume of a series as the metadata sources list it
+ */
+export interface TalearrComicPreviewVolume {
+  number: number;
+  title: string | null;
+  // yyyy-MM-dd
+  releaseDate: string | null;
+  coverUrl: string | null;
+}
+
+/**
+ * What the metadata sources say of one series, with its volumes, looked up
+ * by id without adding it to the library
+ */
+export interface TalearrComicPreview {
+  aniListId: number | null;
+  hardcoverSeriesId: number | null;
+  kind: ComicKind;
+  title: string;
+  alternateTitles: string[];
+  // Plain text
+  overview: string | null;
+  authors: string | null;
+  year: number | null;
+  status: string | null;
+  genres: string[];
+  format: string | null;
+  ageRating: string | null;
+  isAdult: boolean;
+  coverUrl: string | null;
+  bannerUrl: string | null;
+  volumeCount: number | null;
+  volumes: TalearrComicPreviewVolume[];
+  // Talearr's library id of the series, when it is there
+  seriesId: number | null;
+  notices: string[];
+}
+
+/**
+ * The answer to a preview: the series, an id Talearr does not know, or a
+ * Talearr with no preview route, as older Talearr has not. Talearr answers
+ * 404 for both of the last two; its own refusal carries a message, the
+ * missing route does not.
+ */
+export type TalearrComicPreviewAnswer =
+  | { found: true; preview: TalearrComicPreview }
+  | { found: false; unsupported: boolean };
+
+/**
+ * One volume in Talearr's library, with what Talearr has of it
+ */
+export interface TalearrComicLibraryVolume {
+  number: number;
+  title: string | null;
+  releaseDate: string | null;
+  coverUrl: string | null;
+  // downloaded, downloading, missing, unreleased or unmonitored
+  state: string | null;
+}
+
+/**
  * A refusal from Talearr's comics routes, with Talearr's own message, such
  * as a series already being in the library
  */
@@ -178,6 +241,93 @@ export const parseComicLookupResponse = (
     notices: (Array.isArray(response.notices) ? response.notices : []).filter(
       (notice): notice is string => typeof notice === 'string' && !!notice
     ),
+  };
+};
+
+const asStrings = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && !!item)
+    : [];
+
+// Dates come as yyyy-MM-dd, or as a full timestamp from the library
+const asDate = (value: unknown): string | null => {
+  const text = asString(value);
+  return text && /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : null;
+};
+
+const parseVolume = (
+  value: unknown
+): (TalearrComicPreviewVolume & { state: string | null }) | undefined => {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const volume = value as Record<string, unknown>;
+  const number = asNumber(volume.number);
+
+  if (number === null) {
+    return undefined;
+  }
+
+  return {
+    number,
+    title: asString(volume.title),
+    releaseDate: asDate(volume.releaseDate),
+    coverUrl: asString(volume.coverUrl),
+    state: asString(volume.state),
+  };
+};
+
+/**
+ * Reads a preview, or undefined when it names no series
+ */
+export const parseComicPreview = (
+  value: unknown
+): TalearrComicPreview | undefined => {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const preview = value as Record<string, unknown>;
+  const aniListId = asNumber(preview.aniListId);
+  const hardcoverSeriesId = asNumber(preview.hardcoverSeriesId);
+  const title = asString(preview.title);
+
+  if ((!aniListId && !hardcoverSeriesId) || !title) {
+    return undefined;
+  }
+
+  const volumeCount = asNumber(preview.volumeCount);
+
+  return {
+    aniListId,
+    hardcoverSeriesId,
+    kind: isComicKind(preview.kind) ? preview.kind : 'manga',
+    title,
+    alternateTitles: asStrings(preview.alternateTitles),
+    overview: asString(preview.overview),
+    authors: asString(preview.authors),
+    year: asNumber(preview.year),
+    status: asString(preview.status),
+    genres: asStrings(preview.genres),
+    format: asString(preview.format),
+    ageRating: asString(preview.ageRating),
+    isAdult: preview.isAdult === true,
+    coverUrl: asString(preview.coverUrl),
+    bannerUrl: asString(preview.bannerUrl),
+    volumeCount:
+      volumeCount !== null && volumeCount >= 0 ? Math.floor(volumeCount) : null,
+    volumes: (Array.isArray(preview.volumes) ? preview.volumes : [])
+      .map(parseVolume)
+      .filter((volume): volume is NonNullable<typeof volume> => !!volume)
+      .map(({ number, title, releaseDate, coverUrl }) => ({
+        number,
+        title,
+        releaseDate,
+        coverUrl,
+      })),
+    seriesId: asNumber(preview.seriesId),
+    notices: asStrings(preview.notices),
   };
 };
 
@@ -271,6 +421,62 @@ class TalearrComicsAPI extends ExternalAPI {
     }
 
     return parseComicLookupResponse(response.data);
+  }
+
+  /**
+   * What the metadata sources say of one series and its volumes, by its
+   * AniList or Hardcover id
+   */
+  public async preview({
+    aniListId,
+    hardcoverSeriesId,
+    kind,
+  }: {
+    aniListId?: number;
+    hardcoverSeriesId?: number;
+    kind?: ComicKind;
+  }): Promise<TalearrComicPreviewAnswer> {
+    const response = await this.axios.get<unknown>('/talearr/comics/preview', {
+      params: aniListId ? { aniListId, kind } : { hardcoverSeriesId, kind },
+      timeout: PREVIEW_TIMEOUT_MS,
+      // 503 is Talearr's answer while its metadata sources are down
+      validateStatus: (status) =>
+        (status < 500 && status !== 401) || status === 503,
+    });
+
+    if (response.status === 404) {
+      const message = (response.data as { message?: unknown } | undefined)
+        ?.message;
+      return { found: false, unsupported: typeof message !== 'string' };
+    }
+
+    // Includes 503, whose sources are down: thrown, so it is asked again
+    if (response.status !== 200) {
+      throw new TalearrComicsError(
+        refusalMessage(response.data, 'Talearr could not look up the series.')
+      );
+    }
+
+    const preview = parseComicPreview(response.data);
+
+    return preview
+      ? { found: true, preview }
+      : { found: false, unsupported: false };
+  }
+
+  /**
+   * The volumes of a series in the library, with what Talearr has of each
+   */
+  public async getSeriesVolumes(
+    seriesId: number
+  ): Promise<TalearrComicLibraryVolume[]> {
+    const response = await this.axios.get<{ volumes?: unknown }>(
+      `/talearr/comics/series/${seriesId}`
+    );
+
+    return (Array.isArray(response.data?.volumes) ? response.data.volumes : [])
+      .map(parseVolume)
+      .filter((volume): volume is TalearrComicLibraryVolume => !!volume);
   }
 
   public async getSeries(): Promise<TalearrComicSeriesSummary[]> {

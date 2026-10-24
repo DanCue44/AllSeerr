@@ -3,10 +3,14 @@ import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import MetadataComic from '@server/entity/MetadataComic';
 import {
+  applyComicPreview,
   applyLibraryStatus,
+  buildComicVolumeList,
   findLibrarySeries,
+  getComicPreview,
   getComicsStatus,
   getLibrarySeries,
+  getLibraryVolumes,
   isComicId,
   mapComicResults,
   searchComics,
@@ -103,7 +107,7 @@ comicRoutes.get<{ comicId: string }>('/:comicId', async (req, res, next) => {
   }
 
   try {
-    const metadata = await getRepository(MetadataComic).findOne({
+    let metadata = await getRepository(MetadataComic).findOne({
       where: { comicId },
     });
 
@@ -112,21 +116,53 @@ comicRoutes.get<{ comicId: string }>('/:comicId', async (req, res, next) => {
     }
 
     let media = await Media.getMedia(comicId, MediaType.COMIC);
-    const summary = findLibrarySeries(
-      await getLibrarySeries(),
-      comicId,
-      metadata
-    );
+    const comicsOn = (await getComicsStatus()).enabled;
+    const [preview, librarySeries] = await Promise.all([
+      comicsOn
+        ? getComicPreview(comicId, media?.comicKind ?? metadata.kind)
+        : undefined,
+      getLibrarySeries(),
+    ]);
+    const summary =
+      findLibrarySeries(librarySeries, comicId, metadata) ??
+      (preview?.seriesId
+        ? librarySeries.find((series) => series.series.id === preview.seriesId)
+        : undefined);
     const library = summary ? toLibraryInfo(summary) : undefined;
 
     if (media && summary && (await applyLibraryStatus(media, summary))) {
       media = await Media.getMedia(comicId, MediaType.COMIC);
     }
 
+    if (preview) {
+      try {
+        metadata = await applyComicPreview(metadata, preview);
+      } catch (e) {
+        logger.debug('Could not save the preview of a comic', {
+          label: 'API',
+          errorMessage: e instanceof Error ? e.message : String(e),
+          comicId,
+        });
+      }
+    }
+
+    const libraryVolumes =
+      comicsOn && summary ? await getLibraryVolumes(summary.series.id) : [];
+
     return res.status(200).json(
       mapComicDetails(metadata, {
         media: media?.filter(req.user),
         library,
+        extras: {
+          genres: preview?.genres ?? [],
+          format: preview?.format ?? undefined,
+          bannerUrl: preview?.bannerUrl ?? undefined,
+          volumeList: buildComicVolumeList(
+            preview?.volumes ?? [],
+            libraryVolumes
+          ),
+          notices: preview?.notices ?? [],
+        },
       })
     );
   } catch (e) {

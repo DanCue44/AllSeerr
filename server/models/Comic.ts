@@ -15,6 +15,46 @@ export interface ComicLibraryInfo {
   status: MediaStatus;
 }
 
+/**
+ * What Talearr has of one volume of a series in its library
+ */
+export type ComicVolumeState =
+  | 'downloaded'
+  | 'downloading'
+  | 'missing'
+  | 'unreleased'
+  | 'unmonitored';
+
+export const COMIC_VOLUME_STATES: ComicVolumeState[] = [
+  'downloaded',
+  'downloading',
+  'missing',
+  'unreleased',
+  'unmonitored',
+];
+
+export interface ComicVolumeInfo {
+  number: number;
+  title?: string;
+  // yyyy-MM-dd
+  releaseDate?: string;
+  coverUrl?: string;
+  // Only set for a series in Talearr's library
+  state?: ComicVolumeState;
+}
+
+/**
+ * What the metadata sources added to the saved facts, through Talearr's
+ * preview of the series
+ */
+export interface ComicPreviewExtras {
+  genres: string[];
+  format?: string;
+  bannerUrl?: string;
+  volumeList: ComicVolumeInfo[];
+  notices: string[];
+}
+
 export interface ComicDetails {
   id: string;
   mediaType: 'comic';
@@ -36,11 +76,25 @@ export interface ComicDetails {
   hardcoverSeriesId?: number;
   library?: ComicLibraryInfo;
   mediaInfo?: Media;
+  genres: string[];
+  format?: string;
+  bannerPath?: string;
+  // Each volume of the series, when Talearr could list them
+  volumeList: ComicVolumeInfo[];
+  notices: string[];
 }
 
 export const mapComicDetails = (
   metadata: MetadataComic,
-  { media, library }: { media?: Media; library?: ComicLibraryInfo } = {}
+  {
+    media,
+    library,
+    extras,
+  }: {
+    media?: Media;
+    library?: ComicLibraryInfo;
+    extras?: ComicPreviewExtras;
+  } = {}
 ): ComicDetails => ({
   id: metadata.comicId,
   mediaType: 'comic',
@@ -60,4 +114,9 @@ export const mapComicDetails = (
   hardcoverSeriesId: metadata.hardcoverSeriesId ?? undefined,
   library,
   mediaInfo: media,
+  genres: extras?.genres ?? [],
+  format: extras?.format,
+  bannerPath: extras?.bannerUrl,
+  volumeList: extras?.volumeList ?? [],
+  notices: extras?.notices ?? [],
 });

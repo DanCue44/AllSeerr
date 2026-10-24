@@ -11,6 +11,7 @@ import TalearrComicsAPI, {
 } from '@server/api/servarr/talearrComics';
 import { MediaStatus } from '@server/constants/media';
 import {
+  buildComicVolumeList,
   comicIdOf,
   comicPlainText,
   dropHardcoverDuplicates,
@@ -303,6 +304,115 @@ describe('TalearrComicsAPI', () => {
     });
   });
 
+  it('reads a preview and its volumes', async () => {
+    const calls: { method: string; url: string; data?: unknown }[] = [];
+    const api = stub(
+      {
+        'get /talearr/comics/preview': {
+          status: 200,
+          data: {
+            aniListId: 118586,
+            hardcoverSeriesId: null,
+            kind: 'manga',
+            title: 'Frieren',
+            alternateTitles: ['Sousou no Frieren', 3],
+            overview: 'An elf mage outlives her party.',
+            volumeCount: 13,
+            genres: ['Adventure', 'Drama'],
+            volumes: [
+              { number: 1, title: null, releaseDate: '2021-11-09' },
+              { title: 'no number' },
+            ],
+          },
+        },
+      },
+      calls
+    );
+
+    const answer = await api.preview({ aniListId: 118586, kind: 'manga' });
+
+    assert.ok(answer.found);
+    assert.deepStrictEqual(answer.preview.alternateTitles, [
+      'Sousou no Frieren',
+    ]);
+    assert.strictEqual(answer.preview.volumeCount, 13);
+    assert.deepStrictEqual(answer.preview.volumes, [
+      { number: 1, title: null, releaseDate: '2021-11-09', coverUrl: null },
+    ]);
+    assert.strictEqual(answer.preview.bannerUrl, null);
+  });
+
+  it('tells an unknown series from a Talearr without previews, loosely', async () => {
+    const unknown = stub({
+      'get /talearr/comics/preview': {
+        status: 404,
+        data: { message: 'Series not found' },
+      },
+    });
+    const older = stub({ 'get /talearr/comics/preview': { status: 404 } });
+
+    assert.deepStrictEqual(await unknown.preview({ aniListId: 1 }), {
+      found: false,
+      unsupported: false,
+    });
+    assert.deepStrictEqual(await older.preview({ hardcoverSeriesId: 2 }), {
+      found: false,
+      unsupported: true,
+    });
+  });
+
+  it('throws while Talearr cannot reach its sources', async () => {
+    const api = stub({
+      'get /talearr/comics/preview': {
+        status: 503,
+        data: { message: 'AniList is down' },
+      },
+    });
+
+    await assert.rejects(
+      api.preview({ aniListId: 1 }),
+      (error: unknown) =>
+        error instanceof TalearrComicsError &&
+        error.message === 'AniList is down'
+    );
+  });
+
+  it("reads what Talearr has of a library series' volumes", async () => {
+    const api = stub({
+      'get /talearr/comics/series/9': {
+        status: 200,
+        data: {
+          volumes: [
+            {
+              id: 1,
+              number: 1,
+              releaseDate: '2021-11-09T00:00:00Z',
+              state: 'downloaded',
+            },
+            { id: 2, number: 2, state: 'missing' },
+          ],
+        },
+      },
+    });
+
+    assert.deepStrictEqual(await api.getSeriesVolumes(9), [
+      {
+        number: 1,
+        title: null,
+        releaseDate: '2021-11-09',
+        coverUrl: null,
+        state: 'downloaded',
+      },
+      {
+        number: 2,
+        title: null,
+        releaseDate: null,
+        coverUrl: null,
+        state: 'missing',
+      },
+    ]);
+  });
+
   it("passes Talearr's refusal of a series on", async () => {
     const api = stub({
       'post /talearr/comics/series': {
@@ -366,5 +476,43 @@ describe('dropHardcoverDuplicates', () => {
     );
     assert.strictEqual(results[0].hardcoverSeriesId, 62928);
     assert.strictEqual(results[0].coverUrl, 'https://s4.anilist.co/witch.jpg');
+  });
+});
+
+describe('buildComicVolumeList', () => {
+  const volume = (number: number, state: string | null = null) => ({
+    number,
+    title: null,
+    releaseDate: null,
+    coverUrl: null,
+    state,
+  });
+
+  it("marks the listed volumes with what Talearr's library has", () => {
+    const list = buildComicVolumeList(
+      [{ ...volume(2), title: 'The Second' }, volume(1), volume(3), volume(1)],
+      [volume(1, 'downloaded'), volume(2, 'downloading'), volume(9, 'odd')]
+    );
+
+    assert.deepStrictEqual(
+      list.map((item) => [item.number, item.title, item.state]),
+      [
+        [1, undefined, 'downloaded'],
+        [2, 'The Second', 'downloading'],
+        [3, undefined, undefined],
+      ]
+    );
+  });
+
+  it("falls back to the library's volumes without a preview", () => {
+    const list = buildComicVolumeList([], [volume(2, 'missing'), volume(1)]);
+
+    assert.deepStrictEqual(
+      list.map((item) => [item.number, item.state]),
+      [
+        [1, undefined],
+        [2, 'missing'],
+      ]
+    );
   });
 });

@@ -2334,6 +2334,44 @@ components:
               type: number
             library:
               $ref: '#/components/schemas/ComicLibraryInfo'
+            genres:
+              type: array
+              description: From Talearr's preview of the series, empty without one
+              items:
+                type: string
+            format:
+              type: string
+              example: Manga
+            bannerPath:
+              type: string
+              description: Wide banner image, from Talearr's preview
+            volumeList:
+              type: array
+              description: Each volume of the series from Talearr's preview, or failing that from Talearr's library. Empty when neither lists them.
+              items:
+                $ref: '#/components/schemas/ComicVolumeInfo'
+            notices:
+              type: array
+              description: Plain notes from Talearr, such as a metadata source being down
+              items:
+                type: string
+    ComicVolumeInfo:
+      type: object
+      properties:
+        number:
+          type: number
+          example: 1
+        title:
+          type: string
+        releaseDate:
+          type: string
+          example: '2021-11-09'
+        coverUrl:
+          type: string
+        state:
+          type: string
+          description: What Talearr has of the volume, only for a series in its library
+          enum: [downloaded, downloading, missing, unreleased, unmonitored]
     BookResult:
       type: object
       properties:
@@ -13407,7 +13445,7 @@ paths:
   /comic/{comicId}:
     get:
       summary: Get comic or manga series details
-      description: Returns what Talearr's lookup said of the series when it was last found by a search, its request status and what Talearr's library holds of it.
+      description: Returns what Talearr's lookup said of the series when it was last found by a search, its request status and what Talearr's library holds of it. While comics are on, Talearr's preview of the series adds its genres, banner and volumes and refreshes the saved facts; it is kept for six hours, and the saved facts are shown alone when Talearr has no preview of it.
       tags:
         - comics
       parameters:
