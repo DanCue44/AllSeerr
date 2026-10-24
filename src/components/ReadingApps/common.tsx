@@ -37,19 +37,28 @@ export const purposeMessage = (status: ReadingAppStatus) => {
   );
 };
 
-// How long "Not now" keeps a prompt or nudge away
+// How long "Not now" keeps a nudge away
 export const DISMISS_DAYS = 30;
+
+// Stored for a prompt the person asked never to see again
+const NEVER = 'never';
 
 const dismissKey = (name: string, userId: number) =>
   `allseerr-reading-apps-${name}-${userId}`;
 
 /**
- * Whether the person said "Not now" to this in the last 30 days. Browsers
- * that block storage just show it again.
+ * Whether the person said "Not now" to this in the last 30 days, or asked
+ * never to see it again. Browsers that block storage just show it again.
  */
 export const isDismissed = (name: string, userId: number): boolean => {
   try {
-    const at = Number(window.localStorage.getItem(dismissKey(name, userId)));
+    const stored = window.localStorage.getItem(dismissKey(name, userId));
+
+    if (stored === NEVER) {
+      return true;
+    }
+
+    const at = Number(stored);
 
     return !!at && Date.now() - at < DISMISS_DAYS * 24 * 60 * 60 * 1000;
   } catch {
@@ -60,6 +69,14 @@ export const isDismissed = (name: string, userId: number): boolean => {
 export const dismiss = (name: string, userId: number): void => {
   try {
     window.localStorage.setItem(dismissKey(name, userId), String(Date.now()));
+  } catch {
+    // Storage is blocked, so it is asked again next time
+  }
+};
+
+export const dismissForever = (name: string, userId: number): void => {
+  try {
+    window.localStorage.setItem(dismissKey(name, userId), NEVER);
   } catch {
     // Storage is blocked, so it is asked again next time
   }

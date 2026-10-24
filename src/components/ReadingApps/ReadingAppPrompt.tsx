@@ -3,7 +3,7 @@ import Modal from '@app/components/Common/Modal';
 import type { ReadingKind } from '@app/components/ReadingApps/common';
 import {
   NewPasswordBox,
-  dismiss,
+  dismissForever,
   isDismissed,
 } from '@app/components/ReadingApps/common';
 import useSettings from '@app/hooks/useSettings';
@@ -45,6 +45,12 @@ const messages = defineMessages('components.ReadingApps.ReadingAppPrompt', {
   setupError:
     'Something went wrong while setting up {app}. You can try again in your settings.',
   openSettings: 'Open settings',
+  dontShowAgain: "Don't show this message again",
+  hiddenTitle: "We won't show this again",
+  hidden:
+    'To set up {app} later, tap your profile picture at the top right, then Settings, then Reading apps.',
+  gotIt: 'Got it',
+  goThere: 'Take me there',
 });
 
 interface Prompt {
@@ -78,6 +84,9 @@ export const ReadingAppPromptProvider = ({
   const [result, setResult] = useState<ReadingAppSetupResult | null>(null);
   const [failed, setFailed] = useState(false);
   const [asked, setAsked] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+  // The app the person just asked never to be prompted about
+  const [hiddenApp, setHiddenApp] = useState<ReadingAppStatus | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
   const prompt = useCallback(
@@ -106,6 +115,7 @@ export const ReadingAppPromptProvider = ({
             setResult(null);
             setFailed(false);
             setAsked(false);
+            setDontShowAgain(false);
             setCurrent({ kind, status });
             return;
           }
@@ -124,16 +134,22 @@ export const ReadingAppPromptProvider = ({
     setAsked(false);
   };
 
+  // Asked again on the next request, unless the box was ticked
   const notNow = () => {
-    if (current && user) {
-      dismiss(current.status.app, user.id);
+    if (current && user && dontShowAgain) {
+      dismissForever(current.status.app, user.id);
+      setHiddenApp(current.status);
     }
     close();
   };
 
+  const goToSettings = (app: string) => {
+    router.push(`/profile/settings/apps?app=${app}`);
+  };
+
   const openSettings = () => {
     if (current) {
-      router.push(`/profile/settings/apps?app=${current.status.app}`);
+      goToSettings(current.status.app);
     }
     close();
   };
@@ -180,7 +196,7 @@ export const ReadingAppPromptProvider = ({
     }
   };
 
-  const app = current?.status.name ?? '';
+  const app = current?.status.name ?? hiddenApp?.name ?? '';
   const isNotGranted = current?.status.state === 'notGranted';
 
   return (
@@ -188,7 +204,7 @@ export const ReadingAppPromptProvider = ({
       {children}
       <Transition
         as="div"
-        show={!!current}
+        show={!!current || !!hiddenApp}
         enter="transition-opacity duration-300"
         enterFrom="opacity-0"
         enterTo="opacity-100"
@@ -244,6 +260,22 @@ export const ReadingAppPromptProvider = ({
               )}
             </p>
           </Modal>
+        ) : hiddenApp ? (
+          <Modal
+            title={intl.formatMessage(messages.hiddenTitle)}
+            onOk={() => setHiddenApp(null)}
+            okText={intl.formatMessage(messages.gotIt)}
+            onSecondary={() => {
+              goToSettings(hiddenApp.app);
+              setHiddenApp(null);
+            }}
+            secondaryText={intl.formatMessage(messages.goThere)}
+            onCancel={() => setHiddenApp(null)}
+          >
+            <p data-testid="reading-app-hidden">
+              {intl.formatMessage(messages.hidden, { app })}
+            </p>
+          </Modal>
         ) : current ? (
           <Modal
             title={intl.formatMessage(messages.title, { app })}
@@ -264,6 +296,16 @@ export const ReadingAppPromptProvider = ({
                 {intl.formatMessage(messages.notGranted)}
               </p>
             )}
+            <label className="mt-4 flex items-center gap-2.5 text-sm text-as-ink-soft">
+              <input
+                type="checkbox"
+                className="rounded accent-as-accent"
+                checked={dontShowAgain}
+                onChange={(e) => setDontShowAgain(e.target.checked)}
+                data-testid="reading-app-dont-show"
+              />
+              {intl.formatMessage(messages.dontShowAgain)}
+            </label>
           </Modal>
         ) : null}
       </Transition>
