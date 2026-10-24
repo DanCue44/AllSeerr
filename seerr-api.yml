@@ -2235,6 +2235,27 @@ components:
         artistBackdrop:
           type: string
           nullable: true
+    ComicDiscoverPage:
+      type: object
+      properties:
+        page:
+          type: number
+          example: 1
+        totalPages:
+          type: number
+          example: 2
+        totalResults:
+          type: number
+          example: 20
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComicResult'
+        notices:
+          type: array
+          description: Plain notes from Talearr, such as a metadata source being down
+          items:
+            type: string
     ComicResult:
       type: object
       properties:
@@ -11340,6 +11361,106 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/BookResult'
+  /discover/comics:
+    get:
+      summary: Discover trending comics and manga
+      description: Trending manga from AniList and popular Western comics from Hardcover, taking turns, from Talearr. Series rated above the user's age limit are left out. Answers 404 while comics are off, and an empty page when Talearr has no discover lists.
+      tags:
+        - comics
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComicDiscoverPage'
+  /discover/comics/trending:
+    get:
+      summary: Discover trending manga
+      description: Manga trending on AniList, from Talearr. Series rated above the user's age limit are left out. Answers 404 while comics are off, and an empty page when Talearr has no discover lists.
+      tags:
+        - comics
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComicDiscoverPage'
+  /discover/comics/popular:
+    get:
+      summary: Discover popular manga
+      description: The most popular manga on AniList, from Talearr. Series rated above the user's age limit are left out. Answers 404 while comics are off, and an empty page when Talearr has no discover lists.
+      tags:
+        - comics
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComicDiscoverPage'
+  /discover/comics/releasing:
+    get:
+      summary: Discover new manga
+      description: Manga releasing now on AniList, from Talearr. Series rated above the user's age limit are left out. Answers 404 while comics are off, and an empty page when Talearr has no discover lists.
+      tags:
+        - comics
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComicDiscoverPage'
+  /discover/comics/western:
+    get:
+      summary: Discover popular comics
+      description: Popular Western comics from Hardcover, from Talearr. Series rated above the user's age limit are left out. Answers 404 while comics are off, and an empty page when Talearr has no discover lists.
+      tags:
+        - comics
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComicDiscoverPage'
   /discover/books/subjects:
     get:
       summary: Search book subjects

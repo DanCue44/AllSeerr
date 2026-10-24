@@ -10,7 +10,7 @@ import KeywordTag from '@app/components/KeywordTag';
 import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
-import type { DiscoverMediaFilter } from '@app/utils/discoverMediaFilter';
+import type { SliderPlacement } from '@app/utils/discoverMediaFilter';
 import { getSliderPlacements } from '@app/utils/discoverMediaFilter';
 import { BookOpenIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import {
@@ -39,12 +39,13 @@ const messages = defineMessages('components.Discover.DiscoverSliderEdit', {
   foryou: 'For You',
 });
 
-const PLACEMENT_TITLES: Record<DiscoverMediaFilter, MessageDescriptor> = {
+const PLACEMENT_TITLES: Record<SliderPlacement, MessageDescriptor> = {
   all: messages.foryou,
   movie: globalMessages.movies,
   tv: globalMessages.tvshows,
   music: globalMessages.music,
   book: globalMessages.books,
+  comics: globalMessages.comicsandmanga,
 };
 
 const Position = {
@@ -195,6 +196,14 @@ const DiscoverSliderEdit = ({
         return intl.formatMessage(sliderTitles.comingup);
       case DiscoverSliderType.BOOK_SUBJECT:
         return intl.formatMessage(sliderTitles.booksubject);
+      case DiscoverSliderType.TRENDING_COMICS:
+        return intl.formatMessage(sliderTitles.trendingcomics);
+      case DiscoverSliderType.POPULAR_MANGA:
+        return intl.formatMessage(sliderTitles.popularmanga);
+      case DiscoverSliderType.NEW_MANGA:
+        return intl.formatMessage(sliderTitles.newmanga);
+      case DiscoverSliderType.POPULAR_COMICS:
+        return intl.formatMessage(sliderTitles.popularcomics);
       default:
         return 'Unknown Slider';
     }

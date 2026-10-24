@@ -94,6 +94,11 @@ export const sliderTitles = defineMessages('components.Discover', {
   popularbooks: 'Popular Books',
   comingup: 'Coming Up',
   booksubject: 'Book Subject',
+  trendingcomics: 'Trending Comics & Manga',
+  trendingmanga: 'Trending Manga',
+  popularmanga: 'Popular Manga',
+  newmanga: 'New & Releasing Manga',
+  popularcomics: 'Popular Comics',
 });
 
 export const QueryFilterOptions = z.object({

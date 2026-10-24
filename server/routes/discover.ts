@@ -31,6 +31,7 @@ import { Router } from 'express';
 import { sortBy } from 'lodash';
 import { z } from 'zod';
 import discoverBooksRoutes from './discoverBooks';
+import discoverComicsRoutes from './discoverComics';
 import discoverMusicRoutes from './discoverMusic';
 
 export const createTmdbWithRegionLanguage = (user?: User): TheMovieDb => {
@@ -69,6 +70,7 @@ const discoverRoutes = Router();
 
 discoverRoutes.use('/music', discoverMusicRoutes);
 discoverRoutes.use('/books', discoverBooksRoutes);
+discoverRoutes.use('/comics', discoverComicsRoutes);
 
 const QueryFilterOptions = z.object({
   page: z.coerce.string().optional(),

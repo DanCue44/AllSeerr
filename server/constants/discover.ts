@@ -29,6 +29,11 @@ export enum DiscoverSliderType {
   COMING_UP,
   // Books on an OpenLibrary subject an admin picks, the key is in `data`
   BOOK_SUBJECT = 27,
+  // Trending manga and popular comics from Talearr, on the For You home
+  TRENDING_COMICS = 28,
+  POPULAR_MANGA,
+  NEW_MANGA,
+  POPULAR_COMICS,
 }
 
 export const defaultSliders: Partial<DiscoverSlider>[] = [
@@ -135,5 +140,30 @@ export const defaultSliders: Partial<DiscoverSlider>[] = [
     enabled: true,
     isBuiltIn: true,
     order: 16,
+  },
+  // Comic and manga rows, shown only while Talearr's comics library is on
+  {
+    type: DiscoverSliderType.TRENDING_COMICS,
+    enabled: true,
+    isBuiltIn: true,
+    order: 17,
+  },
+  {
+    type: DiscoverSliderType.POPULAR_MANGA,
+    enabled: true,
+    isBuiltIn: true,
+    order: 18,
+  },
+  {
+    type: DiscoverSliderType.NEW_MANGA,
+    enabled: true,
+    isBuiltIn: true,
+    order: 19,
+  },
+  {
+    type: DiscoverSliderType.POPULAR_COMICS,
+    enabled: true,
+    isBuiltIn: true,
+    order: 20,
   },
 ];

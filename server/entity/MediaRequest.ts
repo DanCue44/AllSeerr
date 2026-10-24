@@ -902,7 +902,7 @@ export class MediaRequest {
    * The age limit of the person a request is for, null without one. Admins
    * are never limited.
    */
-  private static async getRequestAgeLimit(
+  public static async getRequestAgeLimit(
     requestUser: User
   ): Promise<AgeLimit | null> {
     if (requestUser.hasPermission(Permission.ADMIN)) {

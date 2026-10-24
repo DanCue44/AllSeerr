@@ -97,6 +97,12 @@ describe('seerr-api.yml', () => {
     app.get('/api/v1/discover/books/upcoming', (_req, res) => {
       res.status(200).json({ comingSoon: [], newReleases: [] });
     });
+    app.get('/api/v1/discover/comics', (_req, res) => {
+      res.status(200).json({ results: [] });
+    });
+    app.get('/api/v1/discover/comics/western', (_req, res) => {
+      res.status(200).json({ results: [] });
+    });
     app.get('/api/v1/media', (_req, res) => {
       res.status(200).json({ results: [] });
     });
@@ -415,6 +421,14 @@ describe('seerr-api.yml', () => {
       '/api/v1/discover/books/upcoming'
     );
     assert.strictEqual(upcomingBooks.status, 200, upcomingBooks.body.message);
+
+    for (const route of [
+      '/api/v1/discover/comics',
+      '/api/v1/discover/comics/western',
+    ]) {
+      const comics = await request(app).get(route).query({ page: 2 });
+      assert.strictEqual(comics.status, 200, comics.body.message);
+    }
 
     const musicLibrary = await request(app).get('/api/v1/media').query({
       filter: 'allavailable',
