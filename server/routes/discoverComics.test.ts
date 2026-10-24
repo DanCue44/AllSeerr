@@ -109,6 +109,11 @@ mock.method(
   }
 );
 mock.method(TalearrComicsAPI.prototype, 'getSeries', async () => []);
+// A Talearr without series previews, so pages show the saved facts
+mock.method(TalearrComicsAPI.prototype, 'preview', async () => ({
+  found: false,
+  unsupported: true,
+}));
 
 const talearrServer: ChaptarrSettings = {
   id: 0,

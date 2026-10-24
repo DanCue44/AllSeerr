@@ -1,7 +1,10 @@
 import ChaptarrAPI from '@server/api/servarr/chaptarr';
 import type {
   TalearrComicDiscoverList,
+  TalearrComicLibraryVolume,
   TalearrComicLookupResult,
+  TalearrComicPreview,
+  TalearrComicPreviewVolume,
   TalearrComicRootFolder,
   TalearrComicSeriesSummary,
 } from '@server/api/servarr/talearrComics';
@@ -15,7 +18,12 @@ import MetadataComic from '@server/entity/MetadataComic';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import { getDefaultChaptarr, getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
-import type { ComicLibraryInfo } from '@server/models/Comic';
+import type {
+  ComicLibraryInfo,
+  ComicVolumeInfo,
+  ComicVolumeState,
+} from '@server/models/Comic';
+import { COMIC_VOLUME_STATES } from '@server/models/Comic';
 import type { ComicResult } from '@server/models/Search';
 import { truncate } from 'lodash';
 import { In } from 'typeorm';
@@ -702,6 +710,217 @@ export const interleaveComics = (lists: MetadataComic[][]): MetadataComic[] => {
   }
 
   return mixed;
+};
+
+// How long a series preview is kept: its facts and volume list change a
+// few times a month at most
+const PREVIEW_TTL_MS = 6 * 60 * 60_000;
+// An id Talearr does not know, or a Talearr without previews, is asked
+// again sooner, so an updated Talearr shows them
+const PREVIEW_MISS_TTL_MS = 30 * 60_000;
+// A partial preview, from a source that was down, is asked again soon
+const PREVIEW_PARTIAL_TTL_MS = 10 * 60_000;
+
+const previewCache = new Map<
+  string,
+  { until: number; preview: Promise<TalearrComicPreview | undefined> }
+>();
+
+export const resetComicsPreviewCache = (): void => {
+  previewCache.clear();
+};
+
+/**
+ * What the metadata sources say of a series and its volumes, through
+ * Talearr's preview. Kept for six hours, see PREVIEW_TTL_MS. Undefined when
+ * Talearr does not know the id, has no previews, as older Talearr does
+ * not, cannot reach its sources (503) or cannot be reached: the page then
+ * shows the saved facts. Only a failure is not kept.
+ */
+export const getComicPreview = async (
+  comicId: string,
+  kind?: ComicKind
+): Promise<TalearrComicPreview | undefined> => {
+  const server = getComicsServer();
+  const ids = parseComicId(comicId);
+
+  if (!server || !ids) {
+    return undefined;
+  }
+
+  const key = `${server.id}:${server.hostname}:${server.port}:${comicId}:${
+    kind ?? ''
+  }`;
+  const cached = previewCache.get(key);
+
+  if (cached && cached.until > Date.now()) {
+    return cached.preview;
+  }
+
+  const entry = {
+    until: Date.now() + PREVIEW_TTL_MS,
+    preview: Promise.resolve<TalearrComicPreview | undefined>(undefined),
+  };
+
+  entry.preview = getComicsApi(server)
+    .preview({ ...ids, kind })
+    .then((answer) => {
+      if (answer.found) {
+        if (answer.preview.notices.length > 0) {
+          entry.until = Date.now() + PREVIEW_PARTIAL_TTL_MS;
+        }
+        return answer.preview;
+      }
+
+      entry.until = Date.now() + PREVIEW_MISS_TTL_MS;
+      logger.debug(
+        answer.unsupported
+          ? 'This Talearr has no comics preview'
+          : 'Talearr does not know this series',
+        { label: 'Comics', comicId }
+      );
+      return undefined;
+    })
+    .catch((e) => {
+      // A failed preview is asked again on the next call
+      if (previewCache.get(key) === entry) {
+        previewCache.delete(key);
+      }
+      logger.debug('Talearr comics preview failed', {
+        label: 'Comics',
+        comicId,
+        errorMessage: e instanceof Error ? e.message : String(e),
+      });
+      return undefined;
+    });
+  previewCache.set(key, entry);
+
+  return entry.preview;
+};
+
+/**
+ * Keeps what a preview adds to the saved facts of a series, so lists,
+ * requests and notifications show it too. Answers the facts, changed or
+ * not; they are only saved when something changed. The kind and ids stay as
+ * the search saved them, and an age rating already known is kept, as the
+ * requests are checked against it.
+ */
+export const applyComicPreview = async (
+  metadata: MetadataComic,
+  preview: TalearrComicPreview
+): Promise<MetadataComic> => {
+  const changes: Partial<MetadataComic> = {};
+  const keep = <K extends keyof MetadataComic>(
+    key: K,
+    value: MetadataComic[K] | null | undefined
+  ) => {
+    if (value !== null && value !== undefined && metadata[key] !== value) {
+      changes[key] = value;
+    }
+  };
+
+  keep('overview', preview.overview);
+  keep('year', preview.year);
+  keep('status', preview.status);
+  keep('authors', preview.authors);
+  keep('volumes', preview.volumeCount);
+
+  if (!metadata.coverUrl) {
+    keep('coverUrl', preview.coverUrl);
+  }
+
+  if (
+    preview.alternateTitles.length > 0 &&
+    JSON.stringify(preview.alternateTitles) !==
+      JSON.stringify(metadata.alternateTitles ?? [])
+  ) {
+    changes.alternateTitles = preview.alternateTitles;
+  }
+
+  if (
+    (!metadata.ageRating || metadata.ageRating === 'Unknown') &&
+    preview.ageRating &&
+    preview.ageRating !== 'Unknown'
+  ) {
+    changes.ageRating = preview.ageRating;
+  }
+
+  if (preview.isAdult && !metadata.isAdult) {
+    changes.isAdult = true;
+  }
+
+  if (Object.keys(changes).length === 0) {
+    return metadata;
+  }
+
+  Object.assign(metadata, changes);
+
+  return getRepository(MetadataComic).save(metadata);
+};
+
+/**
+ * The volumes of a series in Talearr's library, with what Talearr has of
+ * each. Empty when they cannot be read.
+ */
+export const getLibraryVolumes = async (
+  seriesId: number
+): Promise<TalearrComicLibraryVolume[]> => {
+  const server = getComicsServer();
+
+  if (!server) {
+    return [];
+  }
+
+  return getComicsApi(server)
+    .getSeriesVolumes(seriesId)
+    .catch((e) => {
+      logger.debug('Could not read the volumes of a Talearr series', {
+        label: 'Comics',
+        seriesId,
+        errorMessage: e instanceof Error ? e.message : String(e),
+      });
+      return [];
+    });
+};
+
+const asVolumeState = (state?: string | null): ComicVolumeState | undefined =>
+  COMIC_VOLUME_STATES.find((known) => known === state);
+
+/**
+ * The volume list of a series page: the volumes the metadata sources list,
+ * each marked with what Talearr has of it when the series is in the
+ * library. Without a preview, the volumes Talearr's library lists.
+ */
+export const buildComicVolumeList = (
+  previewVolumes: TalearrComicPreviewVolume[],
+  libraryVolumes: TalearrComicLibraryVolume[] = []
+): ComicVolumeInfo[] => {
+  const libraryByNumber = new Map(
+    libraryVolumes.map((volume) => [volume.number, volume])
+  );
+  const source = previewVolumes.length > 0 ? previewVolumes : libraryVolumes;
+  const seen = new Set<number>();
+
+  return source
+    .filter((volume) => {
+      if (seen.has(volume.number)) {
+        return false;
+      }
+      seen.add(volume.number);
+      return true;
+    })
+    .map((volume) => {
+      const inLibrary = libraryByNumber.get(volume.number);
+
+      return {
+        number: volume.number,
+        title: volume.title ?? inLibrary?.title ?? undefined,
+        releaseDate: volume.releaseDate ?? inLibrary?.releaseDate ?? undefined,
+        coverUrl: volume.coverUrl ?? inLibrary?.coverUrl ?? undefined,
+        state: asVolumeState(inLibrary?.state),
+      };
+    })
+    .sort((a, b) => a.number - b.number);
 };
 
 export interface ComicNotificationDetails {

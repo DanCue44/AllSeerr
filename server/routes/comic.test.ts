@@ -4,7 +4,10 @@ import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 import OpenLibrary from '@server/api/openlibrary';
 import type {
   TalearrComicAddBody,
+  TalearrComicLibraryVolume,
   TalearrComicLookupResponse,
+  TalearrComicPreview,
+  TalearrComicPreviewAnswer,
   TalearrComicRootFolder,
   TalearrComicSeriesSummary,
 } from '@server/api/servarr/talearrComics';
@@ -25,6 +28,7 @@ import { User } from '@server/entity/User';
 import { UserAccessProfile } from '@server/entity/UserAccessProfile';
 import {
   resetComicsLibraryCache,
+  resetComicsPreviewCache,
   resetComicsStatusCache,
 } from '@server/lib/comics';
 import { Permission } from '@server/lib/permissions';
@@ -193,6 +197,72 @@ mock.method(
   }
 );
 
+// Talearr's preview of a series: what it answers and what it was asked
+let previewImpl: () => Promise<TalearrComicPreviewAnswer>;
+let previewCalls: {
+  aniListId?: number;
+  hardcoverSeriesId?: number;
+  kind?: ComicKind;
+}[] = [];
+mock.method(
+  TalearrComicsAPI.prototype,
+  'preview',
+  async (ids: {
+    aniListId?: number;
+    hardcoverSeriesId?: number;
+    kind?: ComicKind;
+  }) => {
+    previewCalls.push(ids);
+    return previewImpl();
+  }
+);
+let libraryVolumes: TalearrComicLibraryVolume[] = [];
+let volumeReads: number[] = [];
+mock.method(
+  TalearrComicsAPI.prototype,
+  'getSeriesVolumes',
+  async (seriesId: number) => {
+    volumeReads.push(seriesId);
+    return libraryVolumes;
+  }
+);
+
+const frierenPreview = (): TalearrComicPreview => ({
+  aniListId: 118586,
+  hardcoverSeriesId: 9001,
+  kind: 'manga',
+  title: 'Frieren: Beyond Journey’s End',
+  alternateTitles: ['Sousou no Frieren', '葬送のフリーレン'],
+  overview: 'After the hero party defeats the Demon King, Frieren wanders on.',
+  authors: 'Kanehito Yamada, Tsukasa Abe',
+  year: 2020,
+  status: 'Releasing',
+  genres: ['Adventure', 'Drama', 'Fantasy'],
+  format: 'Manga',
+  ageRating: 'Everyone',
+  isAdult: false,
+  coverUrl: 'https://s4.anilist.co/file/frieren-large.jpg',
+  bannerUrl: 'https://s4.anilist.co/file/frieren-banner.jpg',
+  volumeCount: 3,
+  volumes: [
+    {
+      number: 2,
+      title: null,
+      releaseDate: '2022-01-11',
+      coverUrl: 'https://assets.hardcover.app/frieren-2.jpg',
+    },
+    {
+      number: 1,
+      title: 'Volume One',
+      releaseDate: '2021-11-09',
+      coverUrl: null,
+    },
+    { number: 3, title: null, releaseDate: null, coverUrl: null },
+  ],
+  seriesId: null,
+  notices: [],
+});
+
 const talearrServer: ChaptarrSettings = {
   id: 0,
   name: 'Talearr',
@@ -321,6 +391,11 @@ beforeEach(async () => {
   sendNotificationMock.resetCalls();
   resetComicsStatusCache();
   resetComicsLibraryCache();
+  resetComicsPreviewCache();
+  previewImpl = async () => ({ found: false, unsupported: true });
+  previewCalls = [];
+  libraryVolumes = [];
+  volumeReads = [];
   seriesReads = 0;
   configureBooks();
   await setRequester(Permission.REQUEST_BOOK);
@@ -593,6 +668,271 @@ describe('GET /comic/:comicId', () => {
     const media = await findMedia(FRIEREN_ID);
     assert.strictEqual(media.status, MediaStatus.AVAILABLE);
     assert.strictEqual(media.externalServiceId, 41);
+  });
+});
+
+describe('GET /comic/:comicId with a Talearr preview', () => {
+  it('adds the preview to the saved facts and keeps them', async () => {
+    await searchFirst();
+    previewImpl = async () => ({ found: true, preview: frierenPreview() });
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get(`/comic/${FRIEREN_ID}`);
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.deepStrictEqual(previewCalls, [
+      { aniListId: 118586, kind: 'manga' },
+    ]);
+    assert.strictEqual(
+      res.body.overview,
+      'After the hero party defeats the Demon King, Frieren wanders on.'
+    );
+    assert.deepStrictEqual(res.body.genres, ['Adventure', 'Drama', 'Fantasy']);
+    assert.strictEqual(res.body.format, 'Manga');
+    assert.strictEqual(
+      res.body.bannerPath,
+      'https://s4.anilist.co/file/frieren-banner.jpg'
+    );
+    assert.strictEqual(res.body.volumes, 3);
+    assert.deepStrictEqual(res.body.alternateTitles, [
+      'Sousou no Frieren',
+      '葬送のフリーレン',
+    ]);
+    assert.deepStrictEqual(res.body.volumeList, [
+      {
+        number: 1,
+        title: 'Volume One',
+        releaseDate: '2021-11-09',
+      },
+      {
+        number: 2,
+        releaseDate: '2022-01-11',
+        coverUrl: 'https://assets.hardcover.app/frieren-2.jpg',
+      },
+      { number: 3 },
+    ]);
+    // An age rating the search saved is kept, as requests are checked on it
+    assert.strictEqual(res.body.ageRating, 'Teen');
+    // The search's cover stays
+    assert.strictEqual(
+      res.body.posterPath,
+      'https://s4.anilist.co/file/frieren.jpg'
+    );
+
+    const saved = await getRepository(MetadataComic).findOneOrFail({
+      where: { comicId: FRIEREN_ID },
+    });
+    assert.strictEqual(saved.volumes, 3);
+    assert.strictEqual(saved.overview, res.body.overview);
+    assert.deepStrictEqual(saved.alternateTitles, res.body.alternateTitles);
+    assert.strictEqual(saved.ageRating, 'Teen');
+  });
+
+  it('asks Talearr once in six hours', async () => {
+    await searchFirst();
+    previewImpl = async () => ({ found: true, preview: frierenPreview() });
+    const agent = await loginAs('demo@seerr.dev');
+
+    await agent.get(`/comic/${FRIEREN_ID}`).expect(200);
+    const res = await agent.get(`/comic/${FRIEREN_ID}`).expect(200);
+
+    assert.strictEqual(previewCalls.length, 1);
+    assert.strictEqual(res.body.volumeList.length, 3);
+  });
+
+  it('asks by Hardcover id with the kind of a Hardcover only series', async () => {
+    await searchFirst();
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get(`/comic/${SAGA_ID}`);
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.deepStrictEqual(previewCalls, [
+      { hardcoverSeriesId: 4521, kind: 'comic' },
+    ]);
+  });
+
+  it('shows the saved facts for a series Talearr does not know', async () => {
+    await searchFirst();
+    previewImpl = async () => ({ found: false, unsupported: false });
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get(`/comic/${FRIEREN_ID}`);
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.strictEqual(
+      res.body.overview,
+      'An elf mage outlives her party.<br>'
+    );
+    assert.strictEqual(res.body.volumes, 13);
+    assert.deepStrictEqual(res.body.volumeList, []);
+    assert.deepStrictEqual(res.body.genres, []);
+    assert.strictEqual(res.body.bannerPath, undefined);
+  });
+
+  it('shows the saved facts on an older Talearr, or one whose sources are down', async () => {
+    await searchFirst();
+    const agent = await loginAs('demo@seerr.dev');
+
+    const older = await agent.get(`/comic/${FRIEREN_ID}`);
+    assert.strictEqual(older.status, 200, older.body.message);
+    assert.strictEqual(older.body.title, 'Frieren: Beyond Journey’s End');
+    assert.deepStrictEqual(older.body.volumeList, []);
+
+    resetComicsPreviewCache();
+    previewImpl = async () => {
+      // As for a 503 while Talearr's sources are down
+      throw new Error('AniList is down');
+    };
+    const failed = await agent.get(`/comic/${FRIEREN_ID}`);
+    assert.strictEqual(failed.status, 200, failed.body.message);
+    assert.strictEqual(failed.body.volumes, 13);
+
+    // A failure is not kept, so the next page load asks again
+    await agent.get(`/comic/${FRIEREN_ID}`).expect(200);
+    assert.strictEqual(previewCalls.length, 3);
+  });
+
+  it('does not keep a preview whose sources were down for long', async () => {
+    await searchFirst();
+    previewImpl = async () => ({
+      found: true,
+      preview: { ...frierenPreview(), notices: ['Hardcover is down'] },
+    });
+    const agent = await loginAs('demo@seerr.dev');
+    const realNow = Date.now;
+
+    try {
+      await agent.get(`/comic/${FRIEREN_ID}`).expect(200);
+      await agent.get(`/comic/${FRIEREN_ID}`).expect(200);
+      assert.strictEqual(previewCalls.length, 1);
+
+      // Eleven minutes on, a partial preview is asked for again
+      const later = realNow() + 11 * 60_000;
+      Date.now = () => later;
+      const res = await agent.get(`/comic/${FRIEREN_ID}`).expect(200);
+      assert.strictEqual(previewCalls.length, 2);
+      assert.deepStrictEqual(res.body.notices, ['Hardcover is down']);
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it('marks each volume with what Talearr has of a library series', async () => {
+    await searchFirst();
+    previewImpl = async () => ({ found: true, preview: frierenPreview() });
+    setLibrary([
+      {
+        series: {
+          id: 41,
+          kind: 'manga',
+          title: 'Frieren',
+          aniListId: 118586,
+          monitored: true,
+        },
+        volumeCount: 3,
+        downloadedCount: 1,
+        missingCount: 1,
+        downloadingCount: 1,
+      },
+    ]);
+    libraryVolumes = [
+      {
+        number: 1,
+        title: null,
+        releaseDate: null,
+        coverUrl: null,
+        state: 'downloaded',
+      },
+      {
+        number: 2,
+        title: null,
+        releaseDate: null,
+        coverUrl: null,
+        state: 'downloading',
+      },
+      {
+        number: 3,
+        title: null,
+        releaseDate: null,
+        coverUrl: null,
+        state: 'missing',
+      },
+    ];
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get(`/comic/${FRIEREN_ID}`);
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.deepStrictEqual(volumeReads, [41]);
+    assert.deepStrictEqual(
+      res.body.volumeList.map((volume: { number: number; state: string }) => [
+        volume.number,
+        volume.state,
+      ]),
+      [
+        [1, 'downloaded'],
+        [2, 'downloading'],
+        [3, 'missing'],
+      ]
+    );
+    // What Talearr holds stays as it was
+    assert.strictEqual(res.body.library.seriesId, 41);
+    assert.strictEqual(res.body.library.downloadedCount, 1);
+  });
+
+  it("lists the library's volumes when there is no preview", async () => {
+    await searchFirst();
+    setLibrary([
+      {
+        series: {
+          id: 41,
+          kind: 'manga',
+          title: 'Frieren',
+          aniListId: 118586,
+          monitored: true,
+        },
+        volumeCount: 1,
+        downloadedCount: 1,
+        missingCount: 0,
+        downloadingCount: 0,
+      },
+    ]);
+    libraryVolumes = [
+      {
+        number: 1,
+        title: 'Volume One',
+        releaseDate: '2021-11-09',
+        coverUrl: null,
+        state: 'downloaded',
+      },
+    ];
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get(`/comic/${FRIEREN_ID}`);
+
+    assert.deepStrictEqual(res.body.volumeList, [
+      {
+        number: 1,
+        title: 'Volume One',
+        releaseDate: '2021-11-09',
+        state: 'downloaded',
+      },
+    ]);
+  });
+
+  it('does not ask for a preview while comics are off', async () => {
+    await searchFirst();
+    configureBooks('chaptarr');
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get(`/comic/${FRIEREN_ID}`);
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.strictEqual(previewCalls.length, 0);
+    assert.strictEqual(volumeReads.length, 0);
+    assert.strictEqual(res.body.title, 'Frieren: Beyond Journey’s End');
+    assert.deepStrictEqual(res.body.volumeList, []);
   });
 });
 
