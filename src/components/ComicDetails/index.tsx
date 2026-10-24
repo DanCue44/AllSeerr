@@ -7,7 +7,9 @@ import {
 import Biography from '@app/components/Allseerr/Title/Biography';
 import StatusPill from '@app/components/Allseerr/Title/StatusPill';
 import { chip, pillPrimary } from '@app/components/Allseerr/Title/styles';
-import ComicVolumes from '@app/components/ComicDetails/ComicVolumes';
+import ComicVolumes, {
+  listComicVolumes,
+} from '@app/components/ComicDetails/ComicVolumes';
 import Button from '@app/components/Common/Button';
 import FormatIcon, { useFormatLabel } from '@app/components/Common/FormatIcon';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
@@ -26,7 +28,8 @@ import defineMessages from '@app/utils/defineMessages';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { ChatBubbleOvalLeftIcon } from '@heroicons/react/24/solid';
 import type { ComicKind } from '@server/constants/media';
-import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+import { MediaStatus } from '@server/constants/media';
+import { getRequestedComicVolumes } from '@server/lib/comicVolumes';
 import type { ComicDetails as ComicDetailsType } from '@server/models/Comic';
 import axios from 'axios';
 import { useRouter } from 'next/router';
@@ -53,6 +56,10 @@ const messages = defineMessages('components.ComicDetails', {
     '{count, plural, one {Request # Volume} other {Request All # Volumes}}',
   requestmissingvolumes:
     '{count, plural, one {Request # Missing Volume} other {Request # Missing Volumes}}',
+  requestselectedvolumes:
+    '{count, plural, one {Request # Volume} other {Request # Volumes}}',
+  selectedcount:
+    '{count, plural, one {# volume selected} other {# volumes selected}}',
   volumescount: 'Volumes',
   year: 'Year',
   format: 'Format',
@@ -135,6 +142,7 @@ const ComicDetails = () => {
   );
   const [kindChoice, setKindChoice] = useState<ComicKind | undefined>();
   const [isRequesting, setIsRequesting] = useState(false);
+  const [selectedVolumes, setSelectedVolumes] = useState<number[]>([]);
   const kindLabel = useFormatLabel(kindChoice ?? data?.kind ?? 'manga');
 
   if (!data && !error) {
@@ -147,10 +155,24 @@ const ComicDetails = () => {
 
   const kind = kindChoice ?? data.kind;
   const status = getComicStatus(data);
-  const activeRequest = data.mediaInfo?.requests?.find(
-    (request) =>
-      request.status === MediaRequestStatus.PENDING ||
-      request.status === MediaRequestStatus.APPROVED
+  // What standing requests ask for: the whole series or some volumes
+  const requested = getRequestedComicVolumes(data.mediaInfo?.requests ?? []);
+  const someRequested = !requested.wholeSeries && requested.volumes.length > 0;
+  const listedVolumes = listComicVolumes(data.volumeList, data.volumes);
+  // Volumes Talearr has, is fetching or that were asked for already cannot
+  // be picked
+  const selectableVolumes = requested.wholeSeries
+    ? []
+    : listedVolumes
+        .filter(
+          (volume) =>
+            volume.state !== 'downloaded' &&
+            volume.state !== 'downloading' &&
+            !requested.volumes.includes(volume.number)
+        )
+        .map((volume) => volume.number);
+  const selected = selectedVolumes.filter((number) =>
+    selectableVolumes.includes(number)
   );
   const missingVolumes = getMissingVolumes(data);
   const canRequest =
@@ -158,25 +180,54 @@ const ComicDetails = () => {
     hasPermission([Permission.REQUEST, Permission.REQUEST_BOOK], {
       type: 'or',
     }) &&
-    !activeRequest &&
-    // A series Talearr has already is requested for its missing volumes
-    (data.library
-      ? missingVolumes > 0
-      : !status ||
-        status === MediaStatus.UNKNOWN ||
-        status === MediaStatus.DELETED);
+    !requested.wholeSeries &&
+    // More volumes of a series with some asked for already are requested
+    // on their own. A series Talearr has already is requested for its
+    // missing volumes.
+    (someRequested
+      ? selectableVolumes.length > 0
+      : data.library
+        ? missingVolumes > 0
+        : !status ||
+          status === MediaStatus.UNKNOWN ||
+          status === MediaStatus.DELETED);
+  // Volumes are picked once the series lists them
+  const canSelect = canRequest && selectableVolumes.length > 0;
 
   // Says what a request asks Talearr for, when the volumes are counted
-  const requestLabel = data.library
-    ? missingVolumes > 0
+  const requestLabel =
+    selected.length > 0
       ? {
-          message: messages.requestmissingvolumes,
-          values: { count: missingVolumes },
+          message: messages.requestselectedvolumes,
+          values: { count: selected.length },
         }
-      : { message: messages.requestmissing }
-    : data.volumes
-      ? { message: messages.requestallvolumes, values: { count: data.volumes } }
-      : { message: messages.requestseries };
+      : someRequested
+        ? {
+            message: messages.requestmissingvolumes,
+            values: { count: selectableVolumes.length },
+          }
+        : data.library
+          ? missingVolumes > 0
+            ? {
+                message: messages.requestmissingvolumes,
+                values: { count: missingVolumes },
+              }
+            : { message: messages.requestmissing }
+          : data.volumes
+            ? {
+                message: messages.requestallvolumes,
+                values: { count: data.volumes },
+              }
+            : { message: messages.requestseries };
+
+  // The volumes a request asks for: the ones picked, or with some asked
+  // for already, every one that is left. None asks for the whole series.
+  const requestVolumes =
+    selected.length > 0
+      ? selected
+      : someRequested
+        ? selectableVolumes
+        : undefined;
 
   const sourceLinks = data.aniListId
     ? [
@@ -196,7 +247,9 @@ const ComicDetails = () => {
         mediaType: 'comic',
         mediaId: data.id,
         ...(data.kindKnown ? {} : { comicKind: kind }),
+        ...(requestVolumes ? { volumes: requestVolumes } : {}),
       });
+      setSelectedVolumes([]);
       await mutate();
       addToast(
         intl.formatMessage(messages.requestsuccess, {
@@ -219,6 +272,18 @@ const ComicDetails = () => {
   };
 
   const overview = data.overview ? plainText(data.overview) : '';
+
+  const requestButton = (
+    <Button className={pillPrimary} onClick={request} disabled={isRequesting}>
+      <ArrowDownTrayIcon />
+      <span>
+        {intl.formatMessage(
+          isRequesting ? globalMessages.requesting : requestLabel.message,
+          requestLabel.values
+        )}
+      </span>
+    </Button>
+  );
 
   return (
     <>
@@ -311,23 +376,7 @@ const ComicDetails = () => {
         )}
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {canRequest && (
-            <Button
-              className={pillPrimary}
-              onClick={request}
-              disabled={isRequesting}
-            >
-              <ArrowDownTrayIcon />
-              <span>
-                {intl.formatMessage(
-                  isRequesting
-                    ? globalMessages.requesting
-                    : requestLabel.message,
-                  requestLabel.values
-                )}
-              </span>
-            </Button>
-          )}
+          {canRequest && requestButton}
           {comicsEnabled === false && (
             <span className="text-sm text-as-ink-faint">
               {intl.formatMessage(messages.comicsoff)}
@@ -340,7 +389,40 @@ const ComicDetails = () => {
         <section className="grid items-start gap-6 pt-7 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex min-w-0 flex-col gap-6">
             {data.volumeList.length > 0 && (
-              <ComicVolumes volumes={data.volumeList} count={data.volumes} />
+              <ComicVolumes
+                volumes={data.volumeList}
+                count={data.volumes}
+                selection={
+                  canSelect
+                    ? {
+                        selectable: selectableVolumes,
+                        requested: requested.volumes,
+                        selected,
+                        onChange: setSelectedVolumes,
+                        requestBar: (
+                          <>
+                            <span
+                              className="text-sm font-semibold text-as-ink"
+                              aria-live="polite"
+                            >
+                              {intl.formatMessage(messages.selectedcount, {
+                                count: selected.length,
+                              })}
+                            </span>
+                            {requestButton}
+                          </>
+                        ),
+                      }
+                    : requested.volumes.length > 0
+                      ? {
+                          selectable: [],
+                          requested: requested.volumes,
+                          selected: [],
+                          onChange: () => undefined,
+                        }
+                      : undefined
+                }
+              />
             )}
           </div>
 

@@ -9,6 +9,9 @@ import FormatIcon, {
 import DeclineRequestModal from '@app/components/DeclineRequestModal';
 import RequestModal from '@app/components/RequestModal';
 import RequestSeasonBadges from '@app/components/RequestSeasonBadges';
+import RequestedVolumes, {
+  messages as volumeMessages,
+} from '@app/components/RequestedVolumes';
 import StatusBadge from '@app/components/StatusBadge';
 import useBookLanguages from '@app/hooks/useBookLanguages';
 import useDeepLinks from '@app/hooks/useDeepLinks';
@@ -666,6 +669,17 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                     </div>
                   </div>
                 )}
+              {isComic(title) && !!request.comicVolumes?.length && (
+                <div className="card-field">
+                  <span className="card-field-name">
+                    {intl.formatMessage(volumeMessages.volumes)}
+                  </span>
+                  <RequestedVolumes
+                    volumes={request.comicVolumes}
+                    className="truncate"
+                  />
+                </div>
+              )}
             </div>
           </div>
           <div className="z-10 ml-4 mt-4 flex w-full flex-col justify-center gap-1 overflow-hidden pr-4 text-sm sm:ml-2 sm:mt-0 xl:flex-1 xl:pr-0">

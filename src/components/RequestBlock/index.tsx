@@ -5,6 +5,9 @@ import Tooltip from '@app/components/Common/Tooltip';
 import DeclineRequestModal from '@app/components/DeclineRequestModal';
 import RequestModal from '@app/components/RequestModal';
 import RequestSeasonBadges from '@app/components/RequestSeasonBadges';
+import RequestedVolumes, {
+  messages as volumeMessages,
+} from '@app/components/RequestedVolumes';
 import useBookLanguages from '@app/hooks/useBookLanguages';
 import useRequestOverride from '@app/hooks/useRequestOverride';
 import { useUser } from '@app/hooks/useUser';
@@ -315,6 +318,14 @@ const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
                 className="mb-1 mr-2 inline-block"
               />
             </div>
+          </div>
+        )}
+        {!!request.comicVolumes?.length && (
+          <div className="mt-2 flex flex-col text-sm">
+            <div className="mb-1 font-medium">
+              {intl.formatMessage(volumeMessages.volumes)}
+            </div>
+            <RequestedVolumes volumes={request.comicVolumes} />
           </div>
         )}
         {(server ||

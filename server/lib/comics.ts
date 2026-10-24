@@ -11,9 +11,14 @@ import type {
 import TalearrComicsAPI from '@server/api/servarr/talearrComics';
 import { isTalearrService } from '@server/constants/bookService';
 import type { ComicKind } from '@server/constants/media';
-import { MediaStatus, MediaType } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
+import MediaRequest from '@server/entity/MediaRequest';
 import MetadataComic from '@server/entity/MetadataComic';
 import type { ChaptarrSettings } from '@server/lib/settings';
 import { getDefaultChaptarr, getSettings } from '@server/lib/settings';
@@ -535,9 +540,57 @@ export const syncComicAvailability = async (): Promise<number> => {
     if (summary && (await applyLibraryStatus(item, summary))) {
       changed++;
     }
+
+    if (summary) {
+      changed += await completeVolumeRequests(item, summary);
+    }
   }
 
   return changed;
+};
+
+/**
+ * Completes the requests of some volumes of a series once Talearr has every
+ * volume they asked for. A request of the whole series completes with the
+ * series. Answers how many it completed.
+ */
+export const completeVolumeRequests = async (
+  media: Media,
+  summary: TalearrComicSeriesSummary
+): Promise<number> => {
+  const repository = getRepository(MediaRequest);
+  const requests = (
+    await repository.find({
+      where: {
+        media: { id: media.id },
+        type: MediaType.COMIC,
+        status: MediaRequestStatus.APPROVED,
+      },
+    })
+  ).filter((request) => !!request.comicVolumes?.length);
+
+  if (requests.length === 0) {
+    return 0;
+  }
+
+  const downloaded = new Set(
+    (await getLibraryVolumes(summary.series.id))
+      .filter((volume) => volume.state === 'downloaded')
+      .map((volume) => volume.number)
+  );
+  let completed = 0;
+
+  for (const request of requests) {
+    if (
+      (request.comicVolumes ?? []).every((number) => downloaded.has(number))
+    ) {
+      request.status = MediaRequestStatus.COMPLETED;
+      await repository.save(request);
+      completed++;
+    }
+  }
+
+  return completed;
 };
 
 const kindMatches = (folder: TalearrComicRootFolder, kind: ComicKind) =>
@@ -973,10 +1026,11 @@ export const getComicNotificationDetails = async (
 };
 
 /**
- * Adds a requested series to Talearr's comics library, monitoring every
- * volume, and has Talearr search for them. Talearr searches by itself when
- * its comics settings say so, so it is only asked to when they do not.
- * Answers Talearr's id of the series.
+ * Adds a requested series to Talearr's comics library and has Talearr
+ * search for its volumes: every volume, or only the volumes asked for.
+ * Talearr searches by itself when its comics settings say so, so it is only
+ * asked to when they do not. A series Talearr has already gets the volumes
+ * asked for, or every missing volume. Answers Talearr's id of the series.
  */
 export const sendComicToTalearr = async (
   server: ChaptarrSettings,
@@ -984,7 +1038,14 @@ export const sendComicToTalearr = async (
     comicId,
     kind,
     preferKids = false,
-  }: { comicId: string; kind: ComicKind; preferKids?: boolean }
+    volumes,
+  }: {
+    comicId: string;
+    kind: ComicKind;
+    preferKids?: boolean;
+    // The volume numbers asked for. None asks for the whole series.
+    volumes?: number[] | null;
+  }
 ): Promise<{ seriesId: number; alreadyInLibrary: boolean }> => {
   const ids = parseComicId(comicId);
 
@@ -998,14 +1059,40 @@ export const sendComicToTalearr = async (
     where: { comicId },
   });
   const existing = findLibrarySeries(library, comicId, metadata);
+  const someVolumes = volumes && volumes.length > 0 ? volumes : undefined;
 
-  // A series Talearr has already gets its missing volumes: every volume is
-  // monitored and searched for
   if (existing) {
     resetComicsLibraryCache();
-    await api.monitorMissingVolumes(existing.series.id);
-    await api.searchSeries(existing.series.id);
-    return { seriesId: existing.series.id, alreadyInLibrary: true };
+    const seriesId = existing.series.id;
+
+    // Only the volumes asked for are wanted and searched for
+    if (someVolumes) {
+      const answer = await api.wantVolumes(seriesId, someVolumes, {
+        search: true,
+      });
+
+      if (answer) {
+        if (answer.unknown.length > 0) {
+          logger.warn('Talearr does not know some requested volumes', {
+            label: 'Comics',
+            comicId,
+            seriesId,
+            unknown: answer.unknown,
+          });
+        }
+        return { seriesId, alreadyInLibrary: true };
+      }
+
+      logger.info(
+        'This Talearr cannot want single volumes, so every missing volume of the series is wanted',
+        { label: 'Comics', comicId, seriesId, volumes: someVolumes }
+      );
+    }
+
+    // Every volume is monitored and searched for
+    await api.monitorMissingVolumes(seriesId);
+    await api.searchSeries(seriesId);
+    return { seriesId, alreadyInLibrary: true };
   }
 
   const folder = pickComicRootFolder(await api.getRootFolders(), kind, {
@@ -1024,7 +1111,24 @@ export const sendComicToTalearr = async (
     kind,
     rootFolderId: folder.id,
     monitor: 'all',
+    ...(someVolumes ? { volumes: someVolumes } : {}),
   });
+
+  if (someVolumes) {
+    if (!Array.isArray(series.wanted)) {
+      logger.info(
+        'This Talearr cannot want single volumes, so it monitors every volume of the series',
+        { label: 'Comics', comicId, seriesId: series.id, volumes: someVolumes }
+      );
+    } else if (series.unknown && series.unknown.length > 0) {
+      logger.warn('Talearr does not know some requested volumes', {
+        label: 'Comics',
+        comicId,
+        seriesId: series.id,
+        unknown: series.unknown,
+      });
+    }
+  }
 
   if (!(await api.searchesOnAdd().catch(() => true))) {
     await api.searchSeries(series.id);
@@ -1032,3 +1136,35 @@ export const sendComicToTalearr = async (
 
   return { seriesId: series.id, alreadyInLibrary: false };
 };
+
+/**
+ * The volumes of a series as its page lists them: from Talearr's preview,
+ * marked with what Talearr's library has of each. Empty when neither the
+ * preview nor the library lists them.
+ */
+export const getComicVolumeList = async (
+  comicId: string,
+  metadata: MetadataComic,
+  kind?: ComicKind
+): Promise<ComicVolumeInfo[]> => {
+  const [preview, librarySeries] = await Promise.all([
+    getComicPreview(comicId, kind ?? metadata.kind),
+    getLibrarySeries(),
+  ]);
+  const summary =
+    findLibrarySeries(librarySeries, comicId, metadata) ??
+    (preview?.seriesId
+      ? librarySeries.find((series) => series.series.id === preview.seriesId)
+      : undefined);
+  const libraryVolumes = summary
+    ? await getLibraryVolumes(summary.series.id)
+    : [];
+
+  return buildComicVolumeList(preview?.volumes ?? [], libraryVolumes);
+};
+
+/**
+ * Whether Talearr has a volume or is fetching it, so it needs no request
+ */
+export const isVolumeInLibrary = (volume: ComicVolumeInfo): boolean =>
+  volume.state === 'downloaded' || volume.state === 'downloading';

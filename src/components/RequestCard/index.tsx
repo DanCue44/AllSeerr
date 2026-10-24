@@ -9,6 +9,7 @@ import Tooltip from '@app/components/Common/Tooltip';
 import DeclineRequestModal from '@app/components/DeclineRequestModal';
 import RequestModal from '@app/components/RequestModal';
 import RequestSeasonBadges from '@app/components/RequestSeasonBadges';
+import RequestedVolumes from '@app/components/RequestedVolumes';
 import StatusBadge from '@app/components/StatusBadge';
 import useBookLanguages from '@app/hooks/useBookLanguages';
 import useDeepLinks from '@app/hooks/useDeepLinks';
@@ -553,6 +554,14 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                 </div>
               </div>
             )}
+          {isComic(title) && !!request.comicVolumes?.length && (
+            <div className="my-0.5 flex items-center text-sm sm:my-1">
+              <RequestedVolumes
+                volumes={request.comicVolumes}
+                className="truncate font-bold"
+              />
+            </div>
+          )}
           <div className="mt-2 flex items-center text-sm sm:mt-1">
             <span className="mr-2 hidden font-bold sm:block">
               {intl.formatMessage(globalMessages.status)}

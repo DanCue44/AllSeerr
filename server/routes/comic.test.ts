@@ -10,6 +10,7 @@ import type {
   TalearrComicPreviewAnswer,
   TalearrComicRootFolder,
   TalearrComicSeriesSummary,
+  TalearrComicWantAnswer,
 } from '@server/api/servarr/talearrComics';
 import TalearrComicsAPI from '@server/api/servarr/talearrComics';
 import TheMovieDb from '@server/api/themoviedb';
@@ -30,6 +31,7 @@ import {
   resetComicsLibraryCache,
   resetComicsPreviewCache,
   resetComicsStatusCache,
+  syncComicAvailability,
 } from '@server/lib/comics';
 import { Permission } from '@server/lib/permissions';
 import type { ChaptarrSettings } from '@server/lib/settings';
@@ -43,6 +45,8 @@ import { settleTestBackgroundTasks, setupTestDb } from '@server/test/db';
 import type { Express } from 'express';
 import express from 'express';
 import session from 'express-session';
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 import request from 'supertest';
 
 const FRIEREN_ID = 'al-118586';
@@ -187,6 +191,24 @@ mock.method(
   async (seriesId: number) => {
     monitorCalls.push(seriesId);
     return 11;
+  }
+);
+// Talearr's want route: undefined plays an older Talearr without it
+let wantCalls: { seriesId: number; volumes: number[]; search?: boolean }[] = [];
+let wantImpl: (
+  seriesId: number,
+  volumes: number[]
+) => Promise<TalearrComicWantAnswer | undefined>;
+mock.method(
+  TalearrComicsAPI.prototype,
+  'wantVolumes',
+  async (
+    seriesId: number,
+    volumes: number[],
+    options?: { search?: boolean }
+  ) => {
+    wantCalls.push({ seriesId, volumes, search: options?.search });
+    return wantImpl(seriesId, volumes);
   }
 );
 mock.method(
@@ -387,6 +409,13 @@ beforeEach(async () => {
   addImpl = async () => ({ id: 41 });
   searchCalls = [];
   monitorCalls = [];
+  wantCalls = [];
+  wantImpl = async (seriesId, volumes) => ({
+    seriesId,
+    wanted: volumes,
+    unknown: [],
+    alreadyHave: [],
+  });
   searchesOnAdd = true;
   sendNotificationMock.resetCalls();
   resetComicsStatusCache();
@@ -1182,5 +1211,252 @@ describe('comic requests', () => {
         ).status === MediaRequestStatus.FAILED
     );
     assert.strictEqual(addCalls.length, 0);
+  });
+});
+
+describe('comic volume requests', () => {
+  const frierenSeries = (downloadedCount: number) =>
+    setLibrary([
+      {
+        series: {
+          id: 9,
+          kind: 'manga',
+          title: 'Frieren - Beyond Journey’s End',
+          monitored: true,
+        },
+        volumeCount: 3,
+        downloadedCount,
+        missingCount: 3 - downloadedCount,
+        downloadingCount: 0,
+      },
+    ]);
+  const volume = (
+    number: number,
+    state: TalearrComicLibraryVolume['state']
+  ): TalearrComicLibraryVolume => ({
+    number,
+    title: null,
+    releaseDate: null,
+    coverUrl: null,
+    state,
+  });
+  const requestVolumes = (
+    agent: Awaited<ReturnType<typeof loginAs>>,
+    volumes: unknown
+  ) =>
+    agent
+      .post('/request')
+      .send({ mediaType: MediaType.COMIC, mediaId: FRIEREN_ID, volumes });
+
+  it('adds a new series with only the volumes asked for', async () => {
+    await searchFirst();
+    previewImpl = async () => ({ found: true, preview: frierenPreview() });
+    addImpl = async (body) => ({
+      id: 41,
+      wanted: body.volumes ?? [],
+      unknown: [],
+    });
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await requestVolumes(agent, [3, 1, 1]);
+
+    assert.strictEqual(created.status, 201, created.body.message);
+    assert.deepStrictEqual(created.body.comicVolumes, [1, 3]);
+    assert.strictEqual(created.body.status, MediaRequestStatus.PENDING);
+
+    const admin = await loginAs('admin@seerr.dev');
+    await admin.post(`/request/${created.body.id}/approve`).expect(200);
+
+    await waitFor(
+      async () => (await findMedia(FRIEREN_ID)).externalServiceId === 41
+    );
+    assert.deepStrictEqual(addCalls, [
+      {
+        aniListId: 118586,
+        kind: 'manga',
+        rootFolderId: 2,
+        monitor: 'all',
+        volumes: [1, 3],
+      },
+    ]);
+    assert.deepStrictEqual(wantCalls, []);
+  });
+
+  it('keeps asking for the whole series without volumes', async () => {
+    await searchFirst();
+    await setRequester(Permission.REQUEST_BOOK | Permission.AUTO_APPROVE);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await requestVolumes(agent, []);
+
+    assert.strictEqual(created.status, 201, created.body.message);
+    assert.strictEqual(created.body.comicVolumes, null);
+    await waitFor(() => addCalls.length > 0);
+    assert.strictEqual(addCalls[0].volumes, undefined);
+  });
+
+  it('refuses volumes that are not volume numbers or not of the series', async () => {
+    await searchFirst();
+    previewImpl = async () => ({ found: true, preview: frierenPreview() });
+    const agent = await loginAs('demo@seerr.dev');
+
+    const notNumbers = await requestVolumes(agent, ['1']);
+    const negative = await requestVolumes(agent, [-2]);
+    const notListed = await requestVolumes(agent, [2, 9]);
+
+    assert.strictEqual(notNumbers.status, 400);
+    assert.strictEqual(negative.status, 400);
+    assert.strictEqual(notListed.status, 400);
+    assert.match(notListed.body.message, /Vol\. 9/);
+  });
+
+  it('takes any volume while the volumes of the series are not listed', async () => {
+    await searchFirst();
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await requestVolumes(agent, [9]);
+
+    assert.strictEqual(created.status, 201, created.body.message);
+    assert.deepStrictEqual(created.body.comicVolumes, [9]);
+  });
+
+  it('asks for more volumes later, but never the same volume twice', async () => {
+    await searchFirst();
+    previewImpl = async () => ({ found: true, preview: frierenPreview() });
+    const agent = await loginAs('demo@seerr.dev');
+
+    const first = await requestVolumes(agent, [1, 2]);
+    const overlapping = await requestVolumes(agent, [2, 3]);
+    const more = await requestVolumes(agent, [3]);
+    const whole = await requestVolumes(agent, undefined);
+
+    assert.strictEqual(first.status, 201, first.body.message);
+    assert.strictEqual(overlapping.status, 409);
+    assert.match(overlapping.body.message, /Vol\. 2/);
+    assert.strictEqual(more.status, 201, more.body.message);
+    assert.deepStrictEqual(more.body.comicVolumes, [3]);
+    // Volumes asked for already stand in the way of the whole series
+    assert.strictEqual(whole.status, 409);
+
+    // A declined request frees its volumes
+    const admin = await loginAs('admin@seerr.dev');
+    await admin.post(`/request/${first.body.id}/decline`).expect(200);
+    const again = await requestVolumes(agent, [2]);
+    assert.strictEqual(again.status, 201, again.body.message);
+
+    const media = await getRepository(Media).findOneOrFail({
+      where: { comicId: FRIEREN_ID },
+      relations: { requests: true },
+    });
+    assert.strictEqual(media.requests.length, 3);
+  });
+
+  it('refuses volumes after a request of the whole series', async () => {
+    await searchFirst();
+    const agent = await loginAs('demo@seerr.dev');
+
+    const whole = await requestVolumes(agent, undefined);
+    const volumes = await requestVolumes(agent, [1]);
+
+    assert.strictEqual(whole.status, 201, whole.body.message);
+    assert.strictEqual(volumes.status, 409);
+  });
+
+  it('refuses volumes Talearr has or is fetching', async () => {
+    await searchFirst();
+    frierenSeries(1);
+    libraryVolumes = [
+      volume(1, 'downloaded'),
+      volume(2, 'downloading'),
+      volume(3, 'missing'),
+    ];
+    const agent = await loginAs('demo@seerr.dev');
+
+    const have = await requestVolumes(agent, [1, 3]);
+    const fetching = await requestVolumes(agent, [2]);
+
+    assert.strictEqual(have.status, 409);
+    assert.match(have.body.message, /Vol\. 1 /);
+    assert.strictEqual(fetching.status, 409);
+  });
+
+  it('wants only the volumes asked for of a series Talearr has', async () => {
+    await searchFirst();
+    frierenSeries(1);
+    libraryVolumes = [volume(1, 'downloaded'), volume(2, 'missing')];
+    await setRequester(Permission.REQUEST_BOOK | Permission.AUTO_APPROVE);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await requestVolumes(agent, [2]);
+
+    assert.strictEqual(created.status, 201, created.body.message);
+    assert.strictEqual(created.body.status, MediaRequestStatus.APPROVED);
+    await waitFor(
+      async () => (await findMedia(FRIEREN_ID)).externalServiceId === 9
+    );
+    assert.deepStrictEqual(wantCalls, [
+      { seriesId: 9, volumes: [2], search: true },
+    ]);
+    // Talearr searches for the wanted volumes itself
+    assert.deepStrictEqual(monitorCalls, []);
+    assert.deepStrictEqual(searchCalls, []);
+    assert.strictEqual(addCalls.length, 0);
+  });
+
+  it('wants every missing volume on an older Talearr', async () => {
+    await searchFirst();
+    frierenSeries(1);
+    libraryVolumes = [volume(1, 'downloaded'), volume(2, 'missing')];
+    wantImpl = async () => undefined;
+    await setRequester(Permission.REQUEST_BOOK | Permission.AUTO_APPROVE);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await requestVolumes(agent, [2]);
+
+    assert.strictEqual(created.status, 201, created.body.message);
+    await waitFor(() => searchCalls.length > 0);
+    assert.strictEqual(wantCalls.length, 1);
+    assert.deepStrictEqual(monitorCalls, [9]);
+    assert.deepStrictEqual(searchCalls, [9]);
+  });
+
+  it('completes a volume request once Talearr has its volumes', async () => {
+    await searchFirst();
+    frierenSeries(1);
+    libraryVolumes = [volume(1, 'downloaded'), volume(2, 'missing')];
+    await setRequester(Permission.REQUEST_BOOK | Permission.AUTO_APPROVE);
+    const agent = await loginAs('demo@seerr.dev');
+
+    const created = await requestVolumes(agent, [2]);
+    assert.strictEqual(created.status, 201, created.body.message);
+    await waitFor(() => wantCalls.length > 0);
+
+    const statusOf = async () =>
+      (
+        await getRepository(MediaRequest).findOneOrFail({
+          where: { id: created.body.id },
+        })
+      ).status;
+
+    await syncComicAvailability();
+    assert.strictEqual(await statusOf(), MediaRequestStatus.APPROVED);
+
+    libraryVolumes = [volume(1, 'downloaded'), volume(2, 'downloaded')];
+    await syncComicAvailability();
+    assert.strictEqual(await statusOf(), MediaRequestStatus.COMPLETED);
+  });
+
+  it('has the volume column in the sqlite and postgres migrations', () => {
+    for (const db of ['sqlite', 'postgres']) {
+      const dir = path.join(__dirname, '../migration', db);
+      const file = readdirSync(dir).find((name) =>
+        name.endsWith('-AddComicVolumeRequests.ts')
+      );
+
+      assert.ok(file, `${db} migration is missing`);
+      const source = readFileSync(path.join(dir, file), 'utf8');
+      assert.match(source, /"media_request" ADD (COLUMN )?"comicVolumes" text/);
+      assert.match(source, /DROP COLUMN "comicVolumes"/);
+    }
   });
 });

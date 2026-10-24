@@ -103,6 +103,31 @@ export interface TalearrComicAddBody {
   rootFolderId: number;
   // all, future (only volumes released after adding) or none
   monitor: 'all' | 'future' | 'none';
+  // Only these volume numbers are monitored and searched for, when given.
+  // Older Talearr ignores it and monitors every volume.
+  volumes?: number[];
+}
+
+/**
+ * Talearr's answer to adding a series. `wanted` and `unknown` are only
+ * there when volumes were asked for and Talearr knows of volume requests.
+ */
+export type TalearrComicAddedSeries = TalearrComicSeries & {
+  wanted?: number[];
+  unknown?: number[];
+};
+
+/**
+ * Talearr's answer to wanting some volumes of a series in its library
+ */
+export interface TalearrComicWantAnswer {
+  seriesId: number;
+  // Monitored now, and searched for when asked
+  wanted: number[];
+  // Volume numbers the series does not have
+  unknown: number[];
+  // Volumes Talearr has files of already
+  alreadyHave: number[];
 }
 
 /**
@@ -512,7 +537,7 @@ class TalearrComicsAPI extends ExternalAPI {
 
   public async addSeries(
     body: TalearrComicAddBody
-  ): Promise<TalearrComicSeries> {
+  ): Promise<TalearrComicAddedSeries> {
     const response = await this.axios.post<unknown>(
       '/talearr/comics/series',
       body,
@@ -530,7 +555,60 @@ class TalearrComicsAPI extends ExternalAPI {
       );
     }
 
-    return response.data as TalearrComicSeries;
+    return response.data as TalearrComicAddedSeries;
+  }
+
+  /**
+   * Monitors some volumes of a series in the library and, unless asked not
+   * to, searches for them. Undefined when Talearr has no such route, as
+   * older Talearr does not.
+   */
+  public async wantVolumes(
+    seriesId: number,
+    volumes: number[],
+    { search = true }: { search?: boolean } = {}
+  ): Promise<TalearrComicWantAnswer | undefined> {
+    const response = await this.axios.post<unknown>(
+      `/talearr/comics/series/${seriesId}/want`,
+      { volumes, search },
+      {
+        timeout: ADD_TIMEOUT_MS,
+        validateStatus: (status) => status < 500 && status !== 401,
+      }
+    );
+
+    // Talearr's own 404 for a series it does not know carries a message.
+    // A route Talearr does not have answers without one, or with 405.
+    if (
+      response.status === 405 ||
+      (response.status === 404 &&
+        typeof (response.data as { message?: unknown } | undefined)?.message !==
+          'string')
+    ) {
+      return undefined;
+    }
+
+    if (response.status !== 200) {
+      throw new TalearrComicsError(
+        refusalMessage(
+          response.data,
+          'Talearr could not want the volumes of the series.'
+        )
+      );
+    }
+
+    const data = (response.data ?? {}) as Record<string, unknown>;
+    const numbers = (value: unknown) =>
+      Array.isArray(value)
+        ? value.filter((item): item is number => typeof item === 'number')
+        : [];
+
+    return {
+      seriesId: typeof data.seriesId === 'number' ? data.seriesId : seriesId,
+      wanted: numbers(data.wanted),
+      unknown: numbers(data.unknown),
+      alreadyHave: numbers(data.alreadyHave),
+    };
   }
 
   /**
