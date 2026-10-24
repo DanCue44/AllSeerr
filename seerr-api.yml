@@ -3324,6 +3324,13 @@ components:
           nullable: true
           enum: [unabridged, abridged, both, null]
           description: Audiobooks on Talearr only, with Audiobook Versions set to `requester`. The version the requester picked. Null on every other request, which follows the setting.
+        comicVolumes:
+          type: array
+          nullable: true
+          items:
+            type: number
+          example: [1, 2, 3, 7]
+          description: Comics only. The volume numbers asked for, sorted. Null for a request of the whole series. Once approved, Talearr adds a new series with only these volumes monitored, or wants them in a series it has; an older Talearr monitors every volume instead. The request is completed once Talearr has every volume it lists.
         monitorMode:
           type: string
           nullable: true
@@ -12294,6 +12301,15 @@ paths:
                   type: string
                   enum: [manga, comic]
                   description: Comics only. Files a series only Hardcover knows as manga or as a comic (see `kindKnown` in `GET /comic/{comicId}`). Ignored for a series AniList knows, which is manga, and once a series has been requested.
+                volumes:
+                  type: array
+                  nullable: true
+                  maxItems: 1000
+                  items:
+                    type: number
+                    minimum: 0
+                  example: [1, 2, 3, 7]
+                  description: Comics only. Requests only these volume numbers of the series (see `volumeList` in `GET /comic/{comicId}`) instead of the whole series. They are deduplicated and sorted. Without them, or with an empty list, the whole series is requested. Refused with 400 when a volume is not one the series lists (checked only once the volumes are listed), and with 409 when a volume is in the library, downloading, or asked for by a request that is not declined or completed, or when such a request asks for the whole series. More volumes of a series are requested later in a request of their own. Age limits, quotas and approval rules are the same as for a whole series.
                 serverId:
                   type: number
                 profileId:

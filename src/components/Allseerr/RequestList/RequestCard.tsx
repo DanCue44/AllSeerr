@@ -10,6 +10,7 @@ import DeclineRequestModal from '@app/components/DeclineRequestModal';
 import DownloadBlock from '@app/components/DownloadBlock';
 import RequestModal from '@app/components/RequestModal';
 import RequestSeasonBadges from '@app/components/RequestSeasonBadges';
+import RequestedVolumes from '@app/components/RequestedVolumes';
 import useClickOutside from '@app/hooks/useClickOutside';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useSettings from '@app/hooks/useSettings';
@@ -1009,6 +1010,12 @@ const RequestCard = ({
               variant="text"
               className=""
             />
+          </div>
+        )}
+
+        {requestData.type === 'comic' && !!requestData.comicVolumes?.length && (
+          <div className="text-sm text-as-ink-soft">
+            <RequestedVolumes volumes={requestData.comicVolumes} />
           </div>
         )}
 

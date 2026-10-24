@@ -37,12 +37,20 @@ import {
 } from '@server/lib/bookNotifications';
 import { getRequestStatusKey } from '@server/lib/bookRequests';
 import {
+  formatRequestedVolumes,
+  getRequestedComicVolumes,
+  holdsComicVolumes,
+  parseComicVolumes,
+} from '@server/lib/comicVolumes';
+import {
   findLibrarySeries,
   getComicNotificationDetails,
+  getComicVolumeList,
   getComicsServer,
   getLibrarySeries,
   hasEveryVolume,
   isComicId,
+  isVolumeInLibrary,
 } from '@server/lib/comics';
 import {
   MOVIE_RATINGS,
@@ -1117,6 +1125,9 @@ export class MediaRequest {
    * comics library. Comics are books to Allseerr's permissions, quotas and
    * approvals: they need the book request permission, count against the
    * book quota and wait for approval from a person with an age limit.
+   * A request asks for the whole series or for some of its volumes. More
+   * volumes of a series are asked for in a request of their own, so no
+   * volume is asked for twice.
    */
   private static async createComicRequest(
     requestBody: MediaRequestBody,
@@ -1153,6 +1164,14 @@ export class MediaRequest {
       throw new InvalidComicRequestError('Unknown comic kind.');
     }
 
+    const volumes = parseComicVolumes(requestBody.volumes);
+
+    if (volumes === undefined) {
+      throw new InvalidComicRequestError(
+        'Volumes are asked for as a list of volume numbers.'
+      );
+    }
+
     if (!getComicsServer()) {
       throw new InvalidComicRequestError(
         'Comics can only be requested from Talearr.'
@@ -1180,6 +1199,36 @@ export class MediaRequest {
       throw new DuplicateMediaRequestError(
         'Every volume of this series is in the library already.'
       );
+    }
+
+    // Volumes must be ones the series has, once its volumes are listed, and
+    // not ones Talearr has or is fetching
+    if (volumes) {
+      const volumeList = await getComicVolumeList(comicId, metadata);
+
+      if (volumeList.length > 0) {
+        const listed = new Map(
+          volumeList.map((volume) => [volume.number, volume])
+        );
+        const unknown = volumes.filter((number) => !listed.has(number));
+
+        if (unknown.length > 0) {
+          throw new InvalidComicRequestError(
+            `This series has no ${formatRequestedVolumes(unknown)}.`
+          );
+        }
+
+        const held = volumes.filter((number) => {
+          const volume = listed.get(number);
+          return !!volume && isVolumeInLibrary(volume);
+        });
+
+        if (held.length > 0) {
+          throw new DuplicateMediaRequestError(
+            `${formatRequestedVolumes(held)} of this series is in the library already.`
+          );
+        }
+      }
     }
 
     const ageLimit = await MediaRequest.getRequestAgeLimit(requestUser);
@@ -1234,21 +1283,32 @@ export class MediaRequest {
       media.comicKind = comicKind;
     }
 
-    const existing = (media.requests ?? []).find(
-      (request) =>
-        request.status !== MediaRequestStatus.DECLINED &&
-        request.status !== MediaRequestStatus.COMPLETED
+    // A request of the whole series stands in the way of any other. One of
+    // some volumes only in the way of those volumes.
+    const requested = getRequestedComicVolumes(media.requests ?? []);
+    const requestedAgain = volumes
+      ? volumes.filter((number) => requested.volumes.includes(number))
+      : [];
+    const hasStanding = (media.requests ?? []).some((request) =>
+      holdsComicVolumes(request.status)
     );
 
-    if (existing) {
+    if (
+      requested.wholeSeries ||
+      (!volumes && hasStanding) ||
+      requestedAgain.length > 0
+    ) {
       logger.warn('Duplicate request for media blocked', {
         comicId,
         mediaType: requestBody.mediaType,
+        volumes,
         label: 'Media Request',
       });
 
       throw new DuplicateMediaRequestError(
-        'Request for this media already exists.'
+        requestedAgain.length > 0 && !requested.wholeSeries
+          ? `${formatRequestedVolumes(requestedAgain)} of this series was requested already.`
+          : 'Request for this media already exists.'
       );
     }
 
@@ -1270,6 +1330,7 @@ export class MediaRequest {
         : MediaRequestStatus.PENDING,
       modifiedBy: hasAutoApprovePermission ? user : undefined,
       is4k: false,
+      comicVolumes: volumes,
       isAutoRequest: options.isAutoRequest ?? false,
       ignoreQuota,
       skipNotification: options.skipNotification,
@@ -1612,6 +1673,15 @@ export class MediaRequest {
   @Column({ type: 'varchar', nullable: true })
   public audiobookVersion?: AudiobookVersion | null;
 
+  // Comics only: the volume numbers asked for, sorted. Null for a request of
+  // the whole series, which Talearr monitors every volume of.
+  @Column({
+    type: 'text',
+    nullable: true,
+    transformer: episodeNumbersTransformer,
+  })
+  public comicVolumes?: number[] | null;
+
   // Not stored. Set on a request made as part of a bulk request, which
   // sends one summary notification instead of one per request.
   public skipNotification?: boolean;
@@ -1907,6 +1977,14 @@ export class MediaRequest {
           message: comic.message,
           image: comic.image,
           extra: [
+            ...(entity.comicVolumes?.length
+              ? [
+                  {
+                    name: 'Requested Volumes',
+                    value: formatRequestedVolumes(entity.comicVolumes),
+                  },
+                ]
+              : []),
             ...(comic.ageRating
               ? [{ name: 'Age Rating', value: comic.ageRating }]
               : []),

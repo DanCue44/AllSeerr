@@ -51,6 +51,9 @@ export type MediaRequestBody = {
   // Comics only: files a series as manga or as a comic, for a series only
   // Hardcover knows, whose kind the lookup could not tell
   comicKind?: ComicKind;
+  // Comics only: the volume numbers to ask for. None asks for the whole
+  // series.
+  volumes?: number[] | null;
   serverId?: number;
   profileId?: number;
   profileName?: string;

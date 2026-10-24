@@ -1996,6 +1996,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
             comicId,
             kind,
             preferKids: isRestricted(profile?.ageLimit),
+            volumes: entity.comicVolumes,
           })
         )
         // Writes back only once the request's transaction has ended

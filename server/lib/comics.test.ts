@@ -361,6 +361,54 @@ describe('TalearrComicsAPI', () => {
     });
   });
 
+  it('wants some volumes of a library series', async () => {
+    const calls: { method: string; url: string; data?: unknown }[] = [];
+    const api = stub(
+      {
+        'post /talearr/comics/series/9/want': {
+          status: 200,
+          data: { seriesId: 9, wanted: [2], unknown: [40], alreadyHave: [1] },
+        },
+      },
+      calls
+    );
+
+    assert.deepStrictEqual(await api.wantVolumes(9, [1, 2, 40]), {
+      seriesId: 9,
+      wanted: [2],
+      unknown: [40],
+      alreadyHave: [1],
+    });
+    assert.deepStrictEqual(calls[0].data, {
+      volumes: [1, 2, 40],
+      search: true,
+    });
+  });
+
+  it('tells a Talearr without the want route from an unknown series', async () => {
+    const older = stub({
+      'post /talearr/comics/series/9/want': { status: 404 },
+    });
+    const notAllowed = stub({
+      'post /talearr/comics/series/9/want': { status: 405 },
+    });
+    const unknown = stub({
+      'post /talearr/comics/series/9/want': {
+        status: 404,
+        data: { message: 'Series not found' },
+      },
+    });
+
+    assert.strictEqual(await older.wantVolumes(9, [1]), undefined);
+    assert.strictEqual(await notAllowed.wantVolumes(9, [1]), undefined);
+    await assert.rejects(
+      unknown.wantVolumes(9, [1]),
+      (error: unknown) =>
+        error instanceof TalearrComicsError &&
+        error.message === 'Series not found'
+    );
+  });
+
   it('throws while Talearr cannot reach its sources', async () => {
     const api = stub({
       'get /talearr/comics/preview': {
