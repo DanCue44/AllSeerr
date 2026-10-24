@@ -284,6 +284,21 @@ describe('GET /discover/comics/trending', () => {
     assert.strictEqual(discoverCalls.length, 1);
   });
 
+  it('asks again after ten minutes when Talearr says a list is incomplete', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    const agent = await loginAs('admin@seerr.dev');
+
+    await agent.get('/discover/comics/western');
+    t.mock.timers.tick(11 * 60_000);
+    const res = await agent.get('/discover/comics/western');
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.strictEqual(
+      discoverCalls.filter((call) => call.list === 'comics').length,
+      2
+    );
+  });
+
   it('answers no series from a Talearr without discover lists', async () => {
     discoverAnswers = {};
     const agent = await loginAs('admin@seerr.dev');

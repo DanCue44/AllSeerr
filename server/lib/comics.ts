@@ -621,8 +621,8 @@ export const searchComics = async ({
 // How long a discover list is kept: Talearr builds it from AniList and
 // Hardcover, whose lists change through the day at most
 const DISCOVER_TTL_MS = 60 * 60_000;
-// An empty list, as from a Talearr without discover lists, is asked again
-// sooner, so an updated Talearr shows its rows
+// An empty or incomplete list (a Talearr without discover lists, or one cut
+// short by a rate limit) is asked again sooner
 const DISCOVER_EMPTY_TTL_MS = 10 * 60_000;
 
 export interface ComicDiscoverPage {
@@ -673,7 +673,9 @@ export const discoverComics = async (
         dropHardcoverDuplicates(answer?.results ?? [])
       );
 
-      if (saved.length === 0) {
+      // An empty list, or one Talearr says is incomplete (a rate limit cut it
+      // short, say), is asked again sooner
+      if (saved.length === 0 || (answer?.notices ?? []).length > 0) {
         entry.until = Date.now() + DISCOVER_EMPTY_TTL_MS;
       }
 
