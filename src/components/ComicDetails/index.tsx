@@ -375,7 +375,8 @@ const ComicDetails = () => {
                 </DetailRow>
                 {data.format && (
                   <DetailRow label={intl.formatMessage(messages.format)}>
-                    {data.format}
+                    {data.format.charAt(0) +
+                      data.format.slice(1).toLowerCase().replace(/_/g, ' ')}
                   </DetailRow>
                 )}
                 {isRated(data.ageRating) && (

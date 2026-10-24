@@ -17,7 +17,11 @@ const messages = defineMessages('components.ComicDetails.ComicVolumes', {
   missing: 'Missing',
   unreleased: 'Unreleased',
   unmonitored: 'Not wanted',
+  notyetreleased: 'Not yet released',
 });
+
+// Hardcover dates volumes it has no date for in 2100
+const isPlaceholderDate = (date: string) => Number(date.slice(0, 4)) >= 2100;
 
 // A long running series starts with its first volumes only
 const FIRST_SHOWN = 24;
@@ -74,12 +78,14 @@ const VolumeCard = ({ volume }: { volume: ComicVolumeInfo }) => {
       )}
       {volume.releaseDate && (
         <span className="text-xs text-as-ink-faint">
-          {intl.formatDate(`${volume.releaseDate}T00:00:00Z`, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            timeZone: 'UTC',
-          })}
+          {isPlaceholderDate(volume.releaseDate)
+            ? intl.formatMessage(messages.notyetreleased)
+            : intl.formatDate(`${volume.releaseDate}T00:00:00Z`, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                timeZone: 'UTC',
+              })}
         </span>
       )}
     </li>
@@ -100,12 +106,18 @@ const ComicVolumes = ({
 }) => {
   const intl = useIntl();
   const [showAll, setShowAll] = useState(false);
-  const shown = showAll ? volumes : volumes.slice(0, FIRST_SHOWN);
+  // A "Vol. 0" next to a full numbered run is usually another edition of
+  // the first volume, so it is left out when the series count says so
+  const listed =
+    count && volumes.length === count + 1 && volumes[0]?.number === 0
+      ? volumes.slice(1)
+      : volumes;
+  const shown = showAll ? listed : listed.slice(0, FIRST_SHOWN);
 
   return (
     <Card
       title={intl.formatMessage(messages.volumes, {
-        count: intl.formatNumber(Math.max(count ?? 0, volumes.length)),
+        count: intl.formatNumber(Math.max(count ?? 0, listed.length)),
       })}
     >
       <ul className="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6">
@@ -113,7 +125,7 @@ const ComicVolumes = ({
           <VolumeCard key={`volume-${volume.number}`} volume={volume} />
         ))}
       </ul>
-      {volumes.length > FIRST_SHOWN && (
+      {listed.length > FIRST_SHOWN && (
         <button
           type="button"
           className="self-start text-sm font-semibold text-as-accent hover:text-as-accent-soft"
@@ -123,7 +135,7 @@ const ComicVolumes = ({
           {showAll
             ? intl.formatMessage(messages.showless)
             : intl.formatMessage(messages.showall, {
-                count: volumes.length,
+                count: listed.length,
               })}
         </button>
       )}

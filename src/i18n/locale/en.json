@@ -808,6 +808,7 @@
   "components.ComicDetails.ComicVolumes.downloaded": "In library",
   "components.ComicDetails.ComicVolumes.downloading": "Downloading",
   "components.ComicDetails.ComicVolumes.missing": "Missing",
+  "components.ComicDetails.ComicVolumes.notyetreleased": "Not yet released",
   "components.ComicDetails.ComicVolumes.showall": "Show all {count} volumes",
   "components.ComicDetails.ComicVolumes.showless": "Show fewer",
   "components.ComicDetails.ComicVolumes.unmonitored": "Not wanted",
