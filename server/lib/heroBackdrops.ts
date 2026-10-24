@@ -1,7 +1,8 @@
 import TheAudioDb from '@server/api/theaudiodb';
 import { getProxiedImageBuffer } from '@server/lib/imageProxies';
 import logger from '@server/logger';
-import type { AlbumResult, BookResult } from '@server/models/Search';
+import type { AlbumResult } from '@server/models/Search';
+import axios from 'axios';
 import { LRUCache } from 'lru-cache';
 import sharp from 'sharp';
 
@@ -178,6 +179,34 @@ const paletteCache = new LRUCache<string, string[]>({ max: 500 });
  * browser gets it from the disk cache too) and kept in memory afterwards.
  * Null when the cover cannot be loaded.
  */
+// Comic covers come straight from AniList and Hardcover, outside the image
+// proxies, so only these hosts are fetched directly
+const DIRECT_COVER_HOSTS = ['s4.anilist.co', 'assets.hardcover.app'];
+
+const getDirectCover = async (url: string): Promise<Buffer | null> => {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+
+  if (
+    parsed.protocol !== 'https:' ||
+    !DIRECT_COVER_HOSTS.includes(parsed.hostname)
+  ) {
+    return null;
+  }
+
+  const response = await axios.get<ArrayBuffer>(parsed.toString(), {
+    responseType: 'arraybuffer',
+    timeout: 8000,
+    maxContentLength: 8 * 1024 * 1024,
+  });
+
+  return Buffer.from(response.data);
+};
+
 export const getCoverPalette = async (
   url: string
 ): Promise<string[] | null> => {
@@ -187,7 +216,8 @@ export const getCoverPalette = async (
   }
 
   try {
-    const image = await getProxiedImageBuffer(url);
+    const image =
+      (await getProxiedImageBuffer(url)) ?? (await getDirectCover(url));
     if (!image) {
       return null;
     }
@@ -250,12 +280,15 @@ export const getAlbumHeroes = async (
 };
 
 /**
- * The books for the featured hero, the first few with a cover, each given the
- * palette of its cover, and the covers of the other books to lay behind them
+ * The books, or comic series, for the featured hero: the first few with a
+ * cover, each given the palette of its cover, and the covers of the others
+ * to lay behind them
  */
-export const getBookHeroes = async (
-  books: BookResult[]
-): Promise<{ results: BookResult[]; collage: string[] }> => {
+export const getBookHeroes = async <
+  T extends { posterPath?: string | null; palette?: string[] },
+>(
+  books: T[]
+): Promise<{ results: T[]; collage: string[] }> => {
   const withCovers = books.filter((book) => book.posterPath);
   const heroes = withCovers.slice(0, HERO_SLIDES);
   // A short list lends its slide covers to the collage as well
@@ -265,7 +298,7 @@ export const getBookHeroes = async (
     .map((book) => book.posterPath as string);
 
   const results = await Promise.all(
-    heroes.map(async (book): Promise<BookResult> => {
+    heroes.map(async (book): Promise<T> => {
       const palette = await getCoverPalette(book.posterPath as string);
       return palette ? { ...book, palette } : book;
     })

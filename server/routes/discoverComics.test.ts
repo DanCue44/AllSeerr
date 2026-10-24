@@ -26,6 +26,7 @@ import authRoutes from '@server/routes/auth';
 import comicRoutes from '@server/routes/comic';
 import discoverRoutes from '@server/routes/discover';
 import { setupTestDb } from '@server/test/db';
+import axios from 'axios';
 import type { Express } from 'express';
 import express from 'express';
 import session from 'express-session';
@@ -368,6 +369,36 @@ describe('the other comic lists', () => {
 
     assert.strictEqual(res.status, 200, res.body.message);
     assert.deepEqual(ids(res), ['hc-4521', 'hc-77']);
+  });
+});
+
+describe('GET /discover/comics/hero', () => {
+  it('gives the banner the series with covers, within the age limit', async (t) => {
+    // No cover is fetched for its colours, so the slides keep no palette
+    t.mock.method(axios, 'get', async () => {
+      throw new Error('offline');
+    });
+    await setAgeLimit('demo@seerr.dev');
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get('/discover/comics/hero');
+
+    assert.strictEqual(res.status, 200, res.body.message);
+    assert.deepEqual(ids(res), ['al-118586', 'al-30013']);
+    assert.strictEqual(res.body.results[0].palette, undefined);
+    assert.deepEqual(res.body.collage, [
+      'https://s4.anilist.co/file/118586.jpg',
+      'https://s4.anilist.co/file/30013.jpg',
+    ]);
+  });
+
+  it('is not found while comics are off', async () => {
+    statusAnswer = { available: false };
+    const agent = await loginAs('admin@seerr.dev');
+
+    const res = await agent.get('/discover/comics/hero');
+
+    assert.strictEqual(res.status, 404);
   });
 });
 

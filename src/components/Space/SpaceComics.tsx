@@ -1,3 +1,4 @@
+import FeaturedHero from '@app/components/Allseerr/FeaturedHero';
 import {
   PillTabs,
   ambientGrid,
@@ -184,7 +185,15 @@ const SpaceComics = () => {
   }
 
   return (
-    <SpaceLayout space="books" section="comics">
+    <SpaceLayout
+      space="books"
+      section="comics"
+      hero={
+        ambient && comicsEnabled && !query ? (
+          <FeaturedHero mediaFilter="comic" />
+        ) : undefined
+      }
+    >
       {comicsEnabled && (
         <div className="mb-6 flex flex-col gap-3">
           <form

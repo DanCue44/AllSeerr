@@ -250,6 +250,7 @@
   "components.Allseerr.FeaturedHero.featured": "Featured",
   "components.Allseerr.FeaturedHero.popular": "Popular Now",
   "components.Allseerr.FeaturedHero.trending": "Trending Now",
+  "components.Allseerr.FeaturedHero.volumes": "{count, plural, one {# volume} other {# volumes}}",
   "components.Allseerr.InviteAccept.accept": "Accept as {name}",
   "components.Allseerr.InviteAccept.accepting": "Setting up your accounts…",
   "components.Allseerr.InviteAccept.continue": "Continue to {applicationTitle}",

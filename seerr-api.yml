@@ -2290,6 +2290,12 @@ components:
         posterPath:
           type: string
           nullable: true
+        palette:
+          type: array
+          description: Dominant colours of the cover as hex, most prominent first, toned dark enough for a backdrop. Only set on the featured hero items.
+          items:
+            type: string
+            example: '#1d3557'
         mediaInfo:
           $ref: '#/components/schemas/MediaInfo'
         library:
@@ -11426,6 +11432,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ComicDiscoverPage'
+  /discover/comics/hero:
+    get:
+      summary: Comics and manga for the featured hero banner
+      description: Returns the first few trending manga and popular Western comics that have a cover, each with the colours of its cover as palette, and the covers of the others to lay behind them. Series rated above the user's age limit are left out. Answers 404 while comics are off.
+      tags:
+        - comics
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ComicResult'
+                  collage:
+                    type: array
+                    items:
+                      type: string
+                      example: https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx30002.jpg
   /discover/comics/trending:
     get:
       summary: Discover trending manga

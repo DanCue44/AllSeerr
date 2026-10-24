@@ -150,6 +150,8 @@ export interface ComicResult {
   ageRating?: string;
   isAdult: boolean;
   posterPath: string | null;
+  /** Dominant cover colours as hex, only on the featured hero series */
+  palette?: string[];
   mediaInfo?: Media;
   // Set when the series is in Talearr's library already
   library?: ComicLibraryInfo;

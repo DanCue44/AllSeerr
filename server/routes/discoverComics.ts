@@ -7,6 +7,7 @@ import {
   interleaveComics,
   mapComicResults,
 } from '@server/lib/comics';
+import { getBookHeroes } from '@server/lib/heroBackdrops';
 import { canRequestComic } from '@server/lib/userAccess/ageLimits';
 import logger from '@server/logger';
 import type { RequestHandler } from 'express';
@@ -65,6 +66,19 @@ const discoverHandler =
     }
   };
 
+// Trending manga and popular Western comics, taking turns
+const loadMixed = async (page: number): Promise<ComicDiscoverPage> => {
+  const [manga, comics] = await Promise.all([
+    discoverComics('trending', page),
+    discoverComics('comics', page),
+  ]);
+
+  return {
+    results: interleaveComics([manga.results, comics.results]),
+    notices: [...new Set([...manga.notices, ...comics.notices])],
+  };
+};
+
 const listHandler = (list: TalearrComicDiscoverList, description: string) =>
   discoverHandler((page) => discoverComics(list, page), description);
 
@@ -72,20 +86,40 @@ const listHandler = (list: TalearrComicDiscoverList, description: string) =>
  * Trending manga and popular Western comics, taking turns, for the mixed
  * row on the For You home
  */
-discoverComicsRoutes.get(
-  '/',
-  discoverHandler(async (page) => {
-    const [manga, comics] = await Promise.all([
-      discoverComics('trending', page),
-      discoverComics('comics', page),
-    ]);
+discoverComicsRoutes.get('/', discoverHandler(loadMixed, 'trending comics'));
 
-    return {
-      results: interleaveComics([manga.results, comics.results]),
-      notices: [...new Set([...manga.notices, ...comics.notices])],
-    };
-  }, 'trending comics')
-);
+/**
+ * The few trending series shown in the featured hero banner of the Comics &
+ * Manga page, with the colours of their covers, and the covers of the others
+ * to lay behind them
+ */
+discoverComicsRoutes.get('/hero', async (req, res, next) => {
+  try {
+    const status = await getComicsStatus();
+
+    if (!status.enabled) {
+      return next({ status: 404, message: 'Comics are not turned on.' });
+    }
+
+    const { results } = await loadMixed(1);
+    const ageLimit = req.user
+      ? await MediaRequest.getRequestAgeLimit(req.user)
+      : null;
+    const allowed = results.filter((row) => canRequestComic(ageLimit, row));
+    const mapped = await mapComicResults(allowed, (m) => m.filter(req.user));
+
+    return res.status(200).json(await getBookHeroes(mapped));
+  } catch (e) {
+    logger.debug('Something went wrong retrieving the comics hero', {
+      label: 'API',
+      errorMessage: e instanceof Error ? e.message : String(e),
+    });
+    return next({
+      status: 500,
+      message: 'Unable to retrieve trending comics.',
+    });
+  }
+});
 
 /**
  * Manga trending on AniList now

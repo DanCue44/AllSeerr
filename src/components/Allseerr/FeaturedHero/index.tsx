@@ -7,6 +7,7 @@ import type { MediaStatus } from '@server/constants/media';
 import type {
   AlbumResult,
   BookResult,
+  ComicResult,
   MovieResult,
   PersonResult,
   TvResult,
@@ -29,6 +30,7 @@ const messages = defineMessages('components.Allseerr.FeaturedHero', {
   popular: 'Popular Now',
   details: 'View Details',
   featured: 'Featured',
+  volumes: '{count, plural, one {# volume} other {# volumes}}',
 });
 
 const ROTATE_MS = 8000;
@@ -51,7 +53,14 @@ const useBrowserLayoutEffect =
   typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 interface HeroResponse {
-  results: (MovieResult | TvResult | PersonResult | AlbumResult | BookResult)[];
+  results: (
+    | MovieResult
+    | TvResult
+    | PersonResult
+    | AlbumResult
+    | BookResult
+    | ComicResult
+  )[];
   /** Other trending book covers, laid behind the book slides */
   collage?: string[];
 }
@@ -74,12 +83,16 @@ interface HeroSlide {
   cover?: { src: string; type: 'music' | 'book' };
 }
 
-const HERO_SOURCES: Record<DiscoverMediaFilter, string> = {
+// Comics and manga have a banner of their own on the Comics & Manga page
+type HeroFilter = DiscoverMediaFilter | 'comic';
+
+const HERO_SOURCES: Record<HeroFilter, string> = {
   all: '/api/v1/discover/trending?page=1',
   movie: '/api/v1/discover/trending?page=1&mediaType=movie',
   tv: '/api/v1/discover/trending?page=1&mediaType=tv',
   music: '/api/v1/discover/music/hero',
   book: '/api/v1/discover/books/hero',
+  comic: '/api/v1/discover/comics/hero',
 };
 
 /**
@@ -102,7 +115,7 @@ interface FeaturedHeroProps {
    * The media type of the space the banner tops, or all on the For You
    * home; null shows the placeholder
    */
-  mediaFilter?: DiscoverMediaFilter | null;
+  mediaFilter?: HeroFilter | null;
 }
 
 /**
@@ -201,6 +214,35 @@ const FeaturedHero = ({ mediaFilter = 'all' }: FeaturedHeroProps) => {
                     .filter(Boolean)
                     .join(' · '),
                   overview: item.subtitle,
+                  status: item.mediaInfo?.status,
+                  palette: item.palette,
+                  cover: { src: item.posterPath, type: 'book' },
+                },
+              ]
+            : [];
+        case 'comic':
+          return item.posterPath
+            ? [
+                {
+                  key: `hero-comic-${item.id}`,
+                  title: item.title,
+                  href: `/comic/${item.id}`,
+                  meta: [
+                    intl.formatMessage(
+                      item.kind === 'manga'
+                        ? globalMessages.manga
+                        : globalMessages.comic
+                    ),
+                    item.authors,
+                    item.year,
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                  overview: item.volumes
+                    ? intl.formatMessage(messages.volumes, {
+                        count: item.volumes,
+                      })
+                    : undefined,
                   status: item.mediaInfo?.status,
                   palette: item.palette,
                   cover: { src: item.posterPath, type: 'book' },
