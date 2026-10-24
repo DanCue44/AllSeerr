@@ -39,6 +39,9 @@ export interface ComicVolumeInfo {
   // yyyy-MM-dd
   releaseDate?: string;
   coverUrl?: string;
+  pages?: number;
+  description?: string;
+  hardcoverUrl?: string;
   // Only set for a series in Talearr's library
   state?: ComicVolumeState;
 }

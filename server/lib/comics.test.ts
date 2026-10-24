@@ -321,6 +321,12 @@ describe('TalearrComicsAPI', () => {
             genres: ['Adventure', 'Drama'],
             volumes: [
               { number: 1, title: null, releaseDate: '2021-11-09' },
+              {
+                number: 2,
+                pages: 192,
+                description: 'Frieren heads north.',
+                hardcoverUrl: 'https://hardcover.app/books/frieren-2',
+              },
               { title: 'no number' },
             ],
           },
@@ -337,7 +343,24 @@ describe('TalearrComicsAPI', () => {
     ]);
     assert.strictEqual(answer.preview.volumeCount, 13);
     assert.deepStrictEqual(answer.preview.volumes, [
-      { number: 1, title: null, releaseDate: '2021-11-09', coverUrl: null },
+      {
+        number: 1,
+        title: null,
+        releaseDate: '2021-11-09',
+        coverUrl: null,
+        pages: null,
+        description: null,
+        hardcoverUrl: null,
+      },
+      {
+        number: 2,
+        title: null,
+        releaseDate: null,
+        coverUrl: null,
+        pages: 192,
+        description: 'Frieren heads north.',
+        hardcoverUrl: 'https://hardcover.app/books/frieren-2',
+      },
     ]);
     assert.strictEqual(answer.preview.bannerUrl, null);
   });

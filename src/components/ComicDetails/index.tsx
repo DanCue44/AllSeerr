@@ -239,7 +239,8 @@ const ComicDetails = () => {
       ]
     : [];
 
-  const request = async () => {
+  // Requests the volumes given, or else what the request button says
+  const request = async (volumes = requestVolumes): Promise<boolean> => {
     setIsRequesting(true);
 
     try {
@@ -247,7 +248,7 @@ const ComicDetails = () => {
         mediaType: 'comic',
         mediaId: data.id,
         ...(data.kindKnown ? {} : { comicKind: kind }),
-        ...(requestVolumes ? { volumes: requestVolumes } : {}),
+        ...(volumes ? { volumes } : {}),
       });
       setSelectedVolumes([]);
       await mutate();
@@ -259,6 +260,7 @@ const ComicDetails = () => {
         { appearance: 'success', autoDismiss: true }
       );
       promptReadingApp();
+      return true;
     } catch (e) {
       addToast(
         axios.isAxiosError(e) && e.response?.data?.message
@@ -266,6 +268,7 @@ const ComicDetails = () => {
           : intl.formatMessage(messages.requesterror),
         { appearance: 'error', autoDismiss: true }
       );
+      return false;
     } finally {
       setIsRequesting(false);
     }
@@ -274,7 +277,11 @@ const ComicDetails = () => {
   const overview = data.overview ? plainText(data.overview) : '';
 
   const requestButton = (
-    <Button className={pillPrimary} onClick={request} disabled={isRequesting}>
+    <Button
+      className={pillPrimary}
+      onClick={() => request()}
+      disabled={isRequesting}
+    >
       <ArrowDownTrayIcon />
       <span>
         {intl.formatMessage(
@@ -286,7 +293,7 @@ const ComicDetails = () => {
   );
 
   return (
-    <>
+    <div className="relative -mx-4 -mt-20 pb-10 lg:-mt-28">
       <PageTitle title={data.title} />
       <TitleHero
         imageType="book"
@@ -399,6 +406,8 @@ const ComicDetails = () => {
                         requested: requested.volumes,
                         selected,
                         onChange: setSelectedVolumes,
+                        onRequest: request,
+                        requesting: isRequesting,
                         requestBar: (
                           <>
                             <span
@@ -491,7 +500,7 @@ const ComicDetails = () => {
           </div>
         </section>
       </div>
-    </>
+    </div>
   );
 };
 

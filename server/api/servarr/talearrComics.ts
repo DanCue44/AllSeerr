@@ -139,6 +139,10 @@ export interface TalearrComicPreviewVolume {
   // yyyy-MM-dd
   releaseDate: string | null;
   coverUrl: string | null;
+  pages?: number | null;
+  description?: string | null;
+  // The volume's page on Hardcover
+  hardcoverUrl?: string | null;
 }
 
 /**
@@ -303,6 +307,29 @@ const parseVolume = (
   };
 };
 
+// A preview's volume also says what Hardcover knows of it
+const parsePreviewVolume = (
+  value: unknown
+): TalearrComicPreviewVolume | undefined => {
+  const volume = parseVolume(value);
+
+  if (!volume) {
+    return undefined;
+  }
+
+  const extra = value as Record<string, unknown>;
+
+  return {
+    number: volume.number,
+    title: volume.title,
+    releaseDate: volume.releaseDate,
+    coverUrl: volume.coverUrl,
+    pages: asNumber(extra.pages),
+    description: asString(extra.description),
+    hardcoverUrl: asString(extra.hardcoverUrl),
+  };
+};
+
 /**
  * Reads a preview, or undefined when it names no series
  */
@@ -343,14 +370,8 @@ export const parseComicPreview = (
     volumeCount:
       volumeCount !== null && volumeCount >= 0 ? Math.floor(volumeCount) : null,
     volumes: (Array.isArray(preview.volumes) ? preview.volumes : [])
-      .map(parseVolume)
-      .filter((volume): volume is NonNullable<typeof volume> => !!volume)
-      .map(({ number, title, releaseDate, coverUrl }) => ({
-        number,
-        title,
-        releaseDate,
-        coverUrl,
-      })),
+      .map(parsePreviewVolume)
+      .filter((volume): volume is TalearrComicPreviewVolume => !!volume),
     seriesId: asNumber(preview.seriesId),
     notices: asStrings(preview.notices),
   };

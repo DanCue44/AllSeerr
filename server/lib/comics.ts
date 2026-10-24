@@ -972,6 +972,13 @@ export const buildComicVolumeList = (
         title: volume.title ?? inLibrary?.title ?? undefined,
         releaseDate: volume.releaseDate ?? inLibrary?.releaseDate ?? undefined,
         coverUrl: volume.coverUrl ?? inLibrary?.coverUrl ?? undefined,
+        ...('pages' in volume
+          ? {
+              pages: volume.pages ?? undefined,
+              description: volume.description ?? undefined,
+              hardcoverUrl: volume.hardcoverUrl ?? undefined,
+            }
+          : {}),
         state: asVolumeState(inLibrary?.state),
       };
     })
